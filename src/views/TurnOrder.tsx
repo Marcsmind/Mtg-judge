@@ -1,0 +1,536 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Shuffle, Sparkles, RefreshCw, Trophy, Users, AlertTriangle } from "lucide-react";
+import { useAppStore } from "../store/useAppStore";
+import { STORAGE_KEYS } from "../constants/storageKeys";
+
+// ── Colors (match LifeCounter palette) ───────────────────────────────────────
+
+const LC_COLORS = {
+  white:  "#d6ad60",
+  blue:   "#38bdf8",
+  black:  "#a855f7",
+  red:    "#ef4444",
+  green:  "#10b981",
+  purple: "#ec4899",
+} as const;
+type LCColorKey = keyof typeof LC_COLORS;
+
+interface RollOffResult {
+  name: string;
+  roll: number;
+}
+
+export const TurnOrder: React.FC = () => {
+  // ── Refs ──────────────────────────────────────────────────────────────────
+  const spinTimeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rollAnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (spinTimeoutRef.current    !== null) clearTimeout(spinTimeoutRef.current);
+      if (rollAnimIntervalRef.current !== null) clearInterval(rollAnimIntervalRef.current);
+    };
+  }, []);
+
+  // ── Zustand ───────────────────────────────────────────────────────────────
+  const storePlayerNames = useAppStore(s => s.playerNames);
+
+  // ── Player roster ─────────────────────────────────────────────────────────
+  const [players, setPlayers] = useState<string[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TURN_PLAYERS);
+    if (saved) return JSON.parse(saved);
+    if (storePlayerNames && storePlayerNames.length > 0) return storePlayerNames;
+    return ["Player 1", "Player 2", "Player 3", "Player 4"];
+  });
+
+  const [newPlayerName, setNewPlayerName] = useState("");
+
+  // Per-player color assignments — persisted to localStorage and read by LifeCounter sync
+  const [playerColors, setPlayerColors] = useState<Record<string, LCColorKey>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.TURN_COLORS);
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  // Which player's color picker is open (by name)
+  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
+
+  // ── Roulette ──────────────────────────────────────────────────────────────
+  const [spinning, setSpinning] = useState(false);
+  const [winner,   setWinner]   = useState<string | null>(() => localStorage.getItem(STORAGE_KEYS.TURN_WINNER));
+  const [currentIndex, setCurrentIndex] = useState<number | null>(() => {
+    const s = localStorage.getItem(STORAGE_KEYS.TURN_INDEX);
+    return s ? parseInt(s, 10) : null;
+  });
+
+  // ── Roll-off ──────────────────────────────────────────────────────────────
+  const [rollOffResults, setRollOffResults] = useState<RollOffResult[]>(() => {
+    const s = localStorage.getItem(STORAGE_KEYS.TURN_ROLLOFFS);
+    return s ? JSON.parse(s) : [];
+  });
+  const [rollingOff,    setRollingOff]    = useState(false);
+  const [tiedPlayers,   setTiedPlayers]   = useState<string[]>([]);
+
+  // Numbers cycling during the animation phase
+  const [animatingRolls, setAnimatingRolls] = useState<Record<string, number>>({});
+  // Pool currently being rolled (for animation display)
+  const [activeRollPool, setActiveRollPool] = useState<string[]>([]);
+
+  // ── Persistence ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TURN_PLAYERS,  JSON.stringify(players));
+    localStorage.setItem(STORAGE_KEYS.TURN_COLORS,   JSON.stringify(playerColors));
+    if (winner) localStorage.setItem(STORAGE_KEYS.TURN_WINNER, winner);
+    else        localStorage.removeItem(STORAGE_KEYS.TURN_WINNER);
+    if (currentIndex !== null) localStorage.setItem(STORAGE_KEYS.TURN_INDEX, currentIndex.toString());
+    else                       localStorage.removeItem(STORAGE_KEYS.TURN_INDEX);
+    localStorage.setItem(STORAGE_KEYS.TURN_ROLLOFFS, JSON.stringify(rollOffResults));
+  }, [players, playerColors, winner, currentIndex, rollOffResults]);
+
+  // Auto-sync roster from LifeCounter when nothing custom is saved
+  useEffect(() => {
+    if (storePlayerNames.length > 0) {
+      const saved = localStorage.getItem(STORAGE_KEYS.TURN_PLAYERS);
+      if (!saved) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPlayers(storePlayerNames);
+      }
+    }
+  }, [storePlayerNames]);
+
+  // Close color picker on click outside
+  useEffect(() => {
+    if (!colorPickerFor) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest("[data-color-picker]")) setColorPickerFor(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [colorPickerFor]);
+
+  // ── Roster actions ────────────────────────────────────────────────────────
+  const handleAddPlayer = (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (newPlayerName.trim()) {
+      setPlayers(prev => [...prev, newPlayerName.trim()]);
+      setNewPlayerName("");
+    }
+  };
+
+  const handleRemovePlayer = (idx: number) => {
+    setPlayers(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleResetPlayers = () => {
+    setPlayers(storePlayerNames.length > 0 ? storePlayerNames : ["Player 1", "Player 2", "Player 3", "Player 4"]);
+    setPlayerColors({});
+    setWinner(null);
+    setCurrentIndex(null);
+    setRollOffResults([]);
+    setTiedPlayers([]);
+    localStorage.removeItem(STORAGE_KEYS.TURN_PLAYERS);
+  };
+
+  const setColor = (name: string, color: LCColorKey) => {
+    setPlayerColors(prev => ({ ...prev, [name]: color }));
+    setColorPickerFor(null);
+  };
+
+  // ── Roulette spin ─────────────────────────────────────────────────────────
+  const triggerRouletteSpin = () => {
+    if (spinning || players.length === 0) return;
+    setSpinning(true);
+    setWinner(null);
+    setRollOffResults([]);
+    setTiedPlayers([]);
+
+    const duration = 3000;
+    let speed = 60;
+    let elapsed = 0;
+
+    const run = () => {
+      setCurrentIndex(prev => (prev === null ? 0 : (prev + 1) % players.length));
+      elapsed += speed;
+      if (elapsed >= duration) {
+        setSpinning(false);
+        const finalIdx = Math.floor(Math.random() * players.length);
+        setCurrentIndex(finalIdx);
+        setWinner(players[finalIdx]);
+      } else {
+        if      (elapsed > duration * 0.7) speed += 40;
+        else if (elapsed > duration * 0.4) speed += 20;
+        spinTimeoutRef.current = setTimeout(run, speed);
+      }
+    };
+    spinTimeoutRef.current = setTimeout(run, speed);
+  };
+
+  // ── Roll-off ──────────────────────────────────────────────────────────────
+  const checkForTies = (results: RollOffResult[]): string[] => {
+    if (results.length < 2) return [];
+    const topRoll = results[0].roll;
+    const tied = results.filter(r => r.roll === topRoll);
+    return tied.length > 1 ? tied.map(r => r.name) : [];
+  };
+
+  const triggerRollOff = (subset?: string[]) => {
+    const pool = subset ?? players;
+    if (rollingOff || pool.length === 0) return;
+
+    setRollingOff(true);
+    setWinner(null);
+    setTiedPlayers([]);
+    setRollOffResults([]);
+    setActiveRollPool(pool);
+
+    // Pre-compute final results immediately (fair — happens before animation)
+    const finalResults: RollOffResult[] = pool.map(name => ({
+      name,
+      roll: Math.floor(Math.random() * 20) + 1,
+    }));
+
+    // Seed the first frame of the animation
+    setAnimatingRolls(
+      Object.fromEntries(pool.map(n => [n, Math.floor(Math.random() * 20) + 1]))
+    );
+
+    // Spin for ~1.5 s (15 ticks × 100 ms), then settle on the pre-computed final rolls
+    let ticks = 0;
+    const TOTAL_TICKS = 15;
+
+    rollAnimIntervalRef.current = setInterval(() => {
+      ticks++;
+      if (ticks < TOTAL_TICKS) {
+        // Keep numbers rolling
+        setAnimatingRolls(
+          Object.fromEntries(pool.map(n => [n, Math.floor(Math.random() * 20) + 1]))
+        );
+      } else {
+        // Settle — reveal real results
+        clearInterval(rollAnimIntervalRef.current!);
+        rollAnimIntervalRef.current = null;
+        setAnimatingRolls({});
+        setActiveRollPool([]);
+
+        finalResults.sort((a, b) => b.roll - a.roll);
+        setRollOffResults(finalResults);
+        setRollingOff(false);
+
+        const ties = checkForTies(finalResults);
+        if (ties.length > 0) setTiedPlayers(ties);
+      }
+    }, 100);
+  };
+
+  const triggerTieReroll = () => {
+    if (tiedPlayers.length > 0) triggerRollOff(tiedPlayers);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px", maxWidth: "800px", margin: "0 auto", width: "100%", padding: "12px" }}>
+
+      {/* Page Title */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <Shuffle size={28} color="var(--accent-purple)" />
+          <div>
+            <h2 style={{ fontSize: "1.8rem", fontWeight: 700 }}>Choose Who Goes First</h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+              Roulette or d20 roll-off. Pick a color to sync with the Life Counter.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleResetPlayers}
+          className="glass-button"
+          style={{ padding: "8px 12px", fontSize: "0.8rem", background: "rgba(255,255,255,0.02)" }}
+        >
+          <RefreshCw size={14} />
+          <span>Sync from Life Counter</span>
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "24px" }}>
+
+        {/* ── Left: Player Roster ── */}
+        <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px", background: "rgba(22,19,32,0.4)", maxHeight: "500px" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <Users size={16} color="var(--accent-cyan)" />
+            Active Roster ({players.length})
+          </h3>
+
+          <form onSubmit={handleAddPlayer} style={{ display: "flex", gap: "8px" }}>
+            <input
+              type="text"
+              className="glass-input"
+              placeholder="Add player..."
+              value={newPlayerName}
+              onChange={e => setNewPlayerName(e.target.value)}
+              style={{ flex: 1, padding: "8px 12px", fontSize: "0.85rem" }}
+            />
+            <button
+              type="submit"
+              className="glass-button"
+              style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", padding: "8px 12px", fontSize: "0.8rem" }}
+            >
+              Add
+            </button>
+          </form>
+
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+            {players.length === 0 ? (
+              <p style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "0.8rem", textAlign: "center", marginTop: "24px" }}>
+                Roster is empty. Add names above!
+              </p>
+            ) : (
+              players.map((p, idx) => {
+                const colorKey = playerColors[p] as LCColorKey | undefined;
+                const dotColor = colorKey ? LC_COLORS[colorKey] : "rgba(255,255,255,0.2)";
+                const isPickerOpen = colorPickerFor === p;
+
+                return (
+                  <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    {/* Main row */}
+                    <div
+                      style={{
+                        display: "flex", alignItems: "center", gap: "8px",
+                        padding: "8px 10px", borderRadius: "8px",
+                        background: currentIndex === idx ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
+                        border: currentIndex === idx ? "1.5px solid var(--accent-purple)" : "1px solid rgba(255,255,255,0.04)",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {/* Color dot — click to open picker */}
+                      <button
+                        data-color-picker
+                        onClick={() => setColorPickerFor(isPickerOpen ? null : p)}
+                        title="Pick a color (syncs to Life Counter)"
+                        aria-label={`Color for ${p}`}
+                        style={{
+                          width: "16px", height: "16px", borderRadius: "50%",
+                          background: dotColor,
+                          border: isPickerOpen ? "2px solid #fff" : "2px solid rgba(255,255,255,0.3)",
+                          cursor: "pointer", flexShrink: 0,
+                          transition: "transform 0.15s ease, border-color 0.15s ease",
+                          boxShadow: colorKey ? `0 0 6px ${dotColor}80` : "none",
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.25)"}
+                        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                      />
+
+                      <span style={{ flex: 1, fontSize: "0.9rem", fontWeight: currentIndex === idx ? 700 : 500 }}>{p}</span>
+
+                      <button
+                        onClick={() => handleRemovePlayer(idx)}
+                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
+                        onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
+                        onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    {/* Inline color picker — expands below the row */}
+                    {isPickerOpen && (
+                      <div
+                        data-color-picker
+                        style={{
+                          display: "flex", gap: "8px", alignItems: "center",
+                          padding: "8px 12px", borderRadius: "8px",
+                          background: "rgba(0,0,0,0.3)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, marginRight: "2px" }}>COLOR:</span>
+                        {(Object.entries(LC_COLORS) as [LCColorKey, string][]).map(([key, hex]) => (
+                          <button
+                            key={key}
+                            onClick={() => setColor(p, key)}
+                            title={key}
+                            style={{
+                              width: "22px", height: "22px", borderRadius: "50%",
+                              background: hex,
+                              border: colorKey === key ? "2.5px solid #fff" : "2px solid transparent",
+                              cursor: "pointer",
+                              boxShadow: colorKey === key ? `0 0 8px ${hex}` : "none",
+                              transition: "transform 0.12s ease",
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"}
+                            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                          />
+                        ))}
+                        {colorKey && (
+                          <button
+                            onClick={() => { setPlayerColors(prev => { const n = { ...prev }; delete n[p]; return n; }); setColorPickerFor(null); }}
+                            style={{ fontSize: "0.68rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", marginLeft: "2px" }}
+                            onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
+                            onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* ── Right: Picker modules ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+          {/* Module 1: Roulette Spinner */}
+          <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", alignItems: "center", gap: "16px", background: "rgba(22,19,32,0.4)" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, alignSelf: "flex-start", width: "100%", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Sparkles size={16} color="var(--accent-gold)" />
+              Roulette Spin
+            </h3>
+
+            <div style={{ height: "100px", width: "100%", background: "rgba(0,0,0,0.2)", borderRadius: "12px", border: "1px solid var(--border-color)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+              {currentIndex !== null ? (
+                <div style={{ fontSize: "2rem", fontWeight: 800, color: winner ? "var(--accent-gold)" : "#ffffff", animation: winner ? "pulse-glow 1.5s infinite" : "none", fontFamily: "'Outfit', sans-serif" }}>
+                  {players[currentIndex]}
+                </div>
+              ) : (
+                <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Ready to Spin</span>
+              )}
+            </div>
+
+            <button
+              onClick={triggerRouletteSpin}
+              className="glass-button"
+              disabled={spinning || players.length === 0}
+              style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", width: "100%", justifyContent: "center" }}
+            >
+              <span>{spinning ? "Selecting..." : "Spin the Wheel"}</span>
+            </button>
+
+            {winner && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.95rem", color: "#ffffff", background: "rgba(234,179,8,0.1)", border: "1.5px solid rgba(234,179,8,0.3)", padding: "10px 16px", borderRadius: "8px", width: "100%", justifyContent: "center" }}>
+                <Trophy size={16} color="var(--accent-gold)" />
+                <span><strong>{winner}</strong> goes first!</span>
+              </div>
+            )}
+          </div>
+
+          {/* Module 2: Simultaneous Roll-Off */}
+          <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px", background: "rgba(22,19,32,0.4)" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Shuffle size={16} color="var(--accent-purple)" />
+              Simultaneous Roll-Off
+            </h3>
+
+            <button
+              onClick={() => triggerRollOff()}
+              className="glass-button"
+              disabled={rollingOff || players.length === 0}
+              style={{ background: "rgba(255,255,255,0.04)", width: "100%", justifyContent: "center" }}
+            >
+              <span>{rollingOff ? "Rolling D20s..." : "Roll D20 for All"}</span>
+            </button>
+
+            {/* ── Dice animation — numbers cycling before reveal ── */}
+            {rollingOff && activeRollPool.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                {activeRollPool.map(name => (
+                  <div
+                    key={name}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "8px 12px", borderRadius: "8px",
+                      background: "rgba(139,92,246,0.05)",
+                      border: "1px solid rgba(139,92,246,0.18)",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-secondary)" }}>{name}</span>
+                    {/* key forces React to remount the span on every tick, retriggering the CSS fade */}
+                    <span
+                      key={animatingRolls[name]}
+                      style={{
+                        fontSize: "0.9rem", fontWeight: 800,
+                        color: "var(--accent-purple)",
+                        background: "rgba(139,92,246,0.18)",
+                        padding: "2px 10px", borderRadius: "5px",
+                        minWidth: "58px", textAlign: "center",
+                        display: "inline-block",
+                        animation: "roll-tick 0.08s ease-out",
+                      }}
+                    >
+                      🎲 {animatingRolls[name] ?? "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tie banner */}
+            {tiedPlayers.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "10px 14px", borderRadius: "8px", background: "rgba(234,179,8,0.08)", border: "1.5px solid rgba(234,179,8,0.35)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <AlertTriangle size={15} color="var(--accent-gold)" />
+                  <span style={{ fontSize: "0.82rem", color: "var(--accent-gold)", fontWeight: 600 }}>
+                    TIE — Re-roll between: {tiedPlayers.join(", ")}
+                  </span>
+                </div>
+                <button
+                  onClick={triggerTieReroll}
+                  disabled={rollingOff}
+                  className="glass-button"
+                  style={{ padding: "5px 10px", fontSize: "0.75rem", background: "rgba(234,179,8,0.12)", borderColor: "rgba(234,179,8,0.3)", color: "var(--accent-gold)", flexShrink: 0 }}
+                >
+                  Re-Roll
+                </button>
+              </div>
+            )}
+
+            {/* Final sorted results */}
+            {rollOffResults.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                {rollOffResults.map((res, rank) => {
+                  const isTied = tiedPlayers.includes(res.name);
+                  const isTop  = rank === 0 && tiedPlayers.length === 0;
+                  return (
+                    <div
+                      key={res.name}
+                      style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "8px 12px", borderRadius: "8px",
+                        background: isTop ? "rgba(16,185,129,0.08)" : isTied ? "rgba(234,179,8,0.06)" : "rgba(255,255,255,0.01)",
+                        border: isTop ? "1px solid rgba(16,185,129,0.25)" : isTied ? "1px solid rgba(234,179,8,0.25)" : "1px solid rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: isTop ? "var(--accent-emerald)" : isTied ? "var(--accent-gold)" : "var(--text-muted)", width: "20px" }}>
+                          #{rank + 1}
+                        </span>
+                        <span style={{ fontSize: "0.85rem", fontWeight: (isTop || isTied) ? 700 : 500 }}>{res.name}</span>
+                      </div>
+                      <span style={{ fontSize: "0.85rem", fontWeight: 800, color: isTop ? "var(--accent-emerald)" : isTied ? "var(--accent-gold)" : "var(--text-primary)", background: "rgba(0,0,0,0.2)", padding: "2px 8px", borderRadius: "4px" }}>
+                        D20: {res.roll}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+
+      {/* Keyframe for roll tick animation */}
+      <style>{`
+        @keyframes roll-tick {
+          0%   { opacity: 0.4; transform: translateY(-4px) scaleY(0.85); }
+          100% { opacity: 1;   transform: translateY(0)    scaleY(1); }
+        }
+      `}</style>
+    </div>
+  );
+};

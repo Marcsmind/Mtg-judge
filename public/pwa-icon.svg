@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Dark background, rounded for iOS home screen -->
+  <rect width="512" height="512" rx="96" fill="#0a0810"/>
+  <defs>
+    <!-- Subtle radial glow behind the logo -->
+    <radialGradient id="bg-glow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#7e14ff" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#0a0810" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Logo fill: light purple → brand purple → cyan accent at tip -->
+    <linearGradient id="logo-fill" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%"   stop-color="#c4b5fd"/>
+      <stop offset="55%"  stop-color="#863bff"/>
+      <stop offset="100%" stop-color="#47bfff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg-glow)"/>
+  <!-- Original logo viewBox 0 0 48 46 → scale 8.333 → 400×383, centred at (56, 65) -->
+  <g transform="translate(56, 65) scale(8.333333)">
+    <path fill="url(#logo-fill)"
+      d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937
+         a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788
+         l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237
+         c-.92 0-1.456-1.04-.92-1.788L10.013.474
+         c.214-.297.556-.474.92-.474h28.894
+         c.92 0 1.456 1.04.92 1.788l-7.48 10.471
+         c-1.07 1.498 0 3.579 1.842 3.579h11.377
+         c.943 0 1.473 1.088.89 1.83L25.947 44.94z"/>
+  </g>
+</svg>
