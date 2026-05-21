@@ -14,7 +14,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
   const [saved, setSaved] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState(
-    () => localStorage.getItem("nexus_judge_gemini_model") || "gemini-1.5-flash"
+    () => localStorage.getItem("nexus_judge_gemini_model") || "gemini-2.5-flash"
   );
   const [testingModels, setTestingModels] = useState(false);
 
@@ -216,9 +216,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                 {availableModels.length === 0 ? (
                   <>
                     <option value={selectedModel}>{selectedModel} (Saved)</option>
-                    {selectedModel !== "gemini-1.5-flash" && <option value="gemini-1.5-flash">gemini-1.5-flash</option>}
-                    {selectedModel !== "gemini-1.5-pro" && <option value="gemini-1.5-pro">gemini-1.5-pro</option>}
-                    {selectedModel !== "gemini-pro" && <option value="gemini-pro">gemini-pro (Legacy)</option>}
+                    {selectedModel !== "gemini-2.5-flash"   && <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended)</option>}
+                    {selectedModel !== "gemini-2.5-pro"     && <option value="gemini-2.5-pro">gemini-2.5-pro</option>}
+                    {selectedModel !== "gemini-1.5-flash"   && <option value="gemini-1.5-flash">gemini-1.5-flash</option>}
+                    {selectedModel !== "gemini-1.5-pro"     && <option value="gemini-1.5-pro">gemini-1.5-pro</option>}
                   </>
                 ) : (
                   availableModels.map(m => (
@@ -236,7 +237,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
             <button
               type="submit"
               className="glass-button"
-              disabled={!keyInput.trim() || (keyInput.trim() === apiKey && selectedModel === (localStorage.getItem("nexus_judge_gemini_model") || "gemini-1.5-flash"))}
+              disabled={!keyInput.trim() || (keyInput.trim() === apiKey && selectedModel === (localStorage.getItem("nexus_judge_gemini_model") || "gemini-2.5-flash"))}
               style={{
                 background: saved ? "var(--accent-emerald)" : "var(--accent-purple)",
                 borderColor: saved ? "var(--accent-emerald)" : "var(--accent-purple)",

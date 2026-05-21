@@ -20,7 +20,7 @@ function App() {
     () => localStorage.getItem(STORAGE_KEYS.GEMINI_KEY) || ""
   );
   const [geminiModel, setGeminiModel] = useState<string>(
-    () => localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || "gemini-1.5-flash"
+    () => localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || "gemini-2.5-flash"
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
     () => localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === "true"
@@ -50,7 +50,7 @@ function App() {
   // Re-read gemini model when leaving the settings tab so changes are picked up
   useEffect(() => {
     if (activeTab === "settings") return;
-    const savedModel = localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || "gemini-1.5-flash";
+    const savedModel = localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || "gemini-2.5-flash";
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setGeminiModel(savedModel);
   }, [activeTab]);
@@ -58,7 +58,7 @@ function App() {
   const handleSetApiKey = (key: string) => {
     setApiKey(key);
     // Also re-read model in case it was updated at the same time
-    const savedModel = localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || "gemini-1.5-flash";
+    const savedModel = localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || "gemini-2.5-flash";
     setGeminiModel(savedModel);
   };
 
