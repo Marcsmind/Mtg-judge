@@ -57,14 +57,18 @@ export const CardCodex: React.FC<CardCodexProps> = ({
 
       const card = await searchCardFuzzy(cardName);
       if (card) {
+        // Show the card immediately — don't wait for rulings to arrive
         setSelectedCard(card);
+        setLoading(false);
         addToCardHistory(card);
-        const list = await fetchCardRulings(card.id);
-        setRulings(list);
+        // Rulings load in the background; card is already visible to the user.
+        // fetchCardRulings now caches results in localStorage so repeat
+        // lookups are instant.
+        fetchCardRulings(card.id).then(list => setRulings(list));
       } else {
         setError("Card details not found. Please try another name.");
+        setLoading(false);
       }
-      setLoading(false);
     },
     [addToCardHistory]
   );

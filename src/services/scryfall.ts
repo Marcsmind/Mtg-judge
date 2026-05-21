@@ -41,12 +41,14 @@ export interface ScryfallRuling {
   source: string;
 }
 
-// ── Card cache helpers ────────────────────────────────────────────────────────
+// ── Card + rulings cache helpers ──────────────────────────────────────────────
 
-const CACHE_PREFIX = "nexus_sf_";
+const CACHE_PREFIX         = "nexus_sf_";
+const RULINGS_CACHE_PREFIX = "nexus_sf_rulings_";
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-interface CardCache { card: ScryfallCard; ts: number; }
+interface CardCache    { card: ScryfallCard;        ts: number; }
+interface RulingsCache { rulings: ScryfallRuling[]; ts: number; }
 
 function getCachedCard(name: string): ScryfallCard | null {
   try {
@@ -65,6 +67,25 @@ function setCachedCard(card: ScryfallCard) {
   try {
     const key = CACHE_PREFIX + card.name.toLowerCase().trim();
     localStorage.setItem(key, JSON.stringify({ card, ts: Date.now() } satisfies CardCache));
+  } catch { /* localStorage full — silently skip */ }
+}
+
+function getCachedRulings(cardId: string): ScryfallRuling[] | null {
+  try {
+    const raw = localStorage.getItem(RULINGS_CACHE_PREFIX + cardId);
+    if (!raw) return null;
+    const c: RulingsCache = JSON.parse(raw);
+    if (Date.now() - c.ts > CACHE_TTL) {
+      localStorage.removeItem(RULINGS_CACHE_PREFIX + cardId);
+      return null;
+    }
+    return c.rulings;
+  } catch { return null; }
+}
+
+function setCachedRulings(cardId: string, rulings: ScryfallRuling[]) {
+  try {
+    localStorage.setItem(RULINGS_CACHE_PREFIX + cardId, JSON.stringify({ rulings, ts: Date.now() } satisfies RulingsCache));
   } catch { /* localStorage full — silently skip */ }
 }
 
@@ -108,14 +129,21 @@ export async function searchCardFuzzy(query: string): Promise<ScryfallCard | nul
   }
 }
 
-// Fetches official WotC rulings for a card
+// Fetches official WotC rulings for a card — results cached 7 days in localStorage
 export async function fetchCardRulings(cardId: string): Promise<ScryfallRuling[]> {
   if (!cardId) return [];
+
+  // Return cached rulings immediately — no network call needed
+  const cached = getCachedRulings(cardId);
+  if (cached) return cached;
+
   try {
     const res = await fetch(`https://api.scryfall.com/cards/${cardId}/rulings`);
     if (!res.ok) return [];
     const data = await res.json();
-    return data.data || [];
+    const rulings: ScryfallRuling[] = data.data || [];
+    setCachedRulings(cardId, rulings);
+    return rulings;
   } catch (err) {
     console.error("Scryfall rulings fetch failed:", err);
     return [];
