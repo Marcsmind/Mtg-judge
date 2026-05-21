@@ -262,6 +262,13 @@ export const LifeCounter: React.FC = () => {
   const broadcastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stable ref for handleRemoteUpdate — avoids stale closure in Supabase callbacks
   const handleRemoteUpdateRef = useRef<(s: SyncState) => void>(() => undefined);
+  // Stable ref for buildSyncState — the timer in scheduleBroadcast fires 150ms after
+  // the action, by which time React has re-rendered with the NEW state values.
+  // Without this ref the timer closes over the OLD players snapshot and broadcasts it.
+  const buildSyncStateRef = useRef<() => SyncState>(() => ({
+    players: [], activeCounters: {} as ActiveCounters,
+    dayNightState: "none", updatedAt: 0, updatedBy: "",
+  }));
 
   // ── Persistence ──
   const setPlayerNames = useAppStore(s => s.setPlayerNames);
@@ -304,17 +311,24 @@ export const LifeCounter: React.FC = () => {
     updatedAt: Date.now(),
     updatedBy: players[0]?.name ?? "Unknown",
   });
+  // Keep the ref pointing at the latest version every render.
+  // The setTimeout in scheduleBroadcast fires ~150ms after an action, AFTER React
+  // has already re-rendered with the new state — so .current() returns the
+  // updated values rather than the stale closure captured at call time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { buildSyncStateRef.current = buildSyncState; });
 
   /**
    * Debounced broadcast — batches rapid taps into one message (150ms).
-   * Also stamps `lastLocalChangeAt` so handleRemoteUpdate knows a local change just happened.
+   * Uses buildSyncStateRef so the timer always reads the POST-render state,
+   * not the stale pre-setPlayers snapshot that the direct closure would capture.
    */
   const scheduleBroadcast = () => {
     if (!roomConnected || !roomCode) return;
     lastLocalChangeAt.current = Date.now();
     if (broadcastTimerRef.current) clearTimeout(broadcastTimerRef.current);
     broadcastTimerRef.current = setTimeout(() => {
-      broadcastState(roomCode, buildSyncState());
+      broadcastState(roomCode, buildSyncStateRef.current());
     }, 150);
   };
 
