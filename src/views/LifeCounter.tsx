@@ -254,6 +254,7 @@ export const LifeCounter: React.FC = () => {
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [roomLoading, setRoomLoading] = useState(false);
   const [roomCopied, setRoomCopied] = useState(false);
+  const [roomError, setRoomError] = useState<string | null>(null);
   const lastAppliedAt = useRef<number>(0);
   // Local-priority: tracks when the local user last made a game action
   const lastLocalChangeAt = useRef<number>(0);
@@ -399,20 +400,31 @@ export const LifeCounter: React.FC = () => {
   const handleCreateRoom = async () => {
     if (!isSupabaseConfigured) return;
     setRoomLoading(true);
+    setRoomError(null);
     const code = generateRoomCode();
-    await createRoom(code, (s) => handleRemoteUpdateRef.current(s));
-    setRoomCode(code);
-    setRoomConnected(true);
-    setRoomRole("host");
-    localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-    localStorage.setItem("nexus_judge_room_role", "host");
-    setRoomLoading(false);
+    try {
+      const ok = await createRoom(code, (s) => handleRemoteUpdateRef.current(s));
+      if (ok) {
+        setRoomCode(code);
+        setRoomConnected(true);
+        setRoomRole("host");
+        localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
+        localStorage.setItem("nexus_judge_room_role", "host");
+      } else {
+        setRoomError("Could not connect. Check your internet and try again.");
+      }
+    } catch {
+      setRoomError("Could not connect. Check your internet and try again.");
+    } finally {
+      setRoomLoading(false);
+    }
   };
 
   const handleJoinRoom = async (overrideCode?: string) => {
     const code = (overrideCode ?? joinCodeInput).trim().toUpperCase();
     if (!code || !isSupabaseConfigured) return;
     setRoomLoading(true);
+    setRoomError(null);
     const ok = await joinSyncRoom(code, (s) => handleRemoteUpdateRef.current(s));
     if (ok) {
       const role = overrideCode
@@ -423,6 +435,9 @@ export const LifeCounter: React.FC = () => {
       setRoomRole(role);
       localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
       localStorage.setItem("nexus_judge_room_role", role);
+    } else if (!overrideCode) {
+      // Only show error for manual joins — silent failure is fine for auto-rejoin
+      setRoomError("Room not found or connection failed. Check the code and try again.");
     }
     setRoomLoading(false);
     if (!overrideCode) setJoinCodeInput("");
@@ -433,6 +448,7 @@ export const LifeCounter: React.FC = () => {
     setRoomCode(null);
     setRoomConnected(false);
     setRoomRole(null);
+    setRoomError(null);
     lastAppliedAt.current = 0;
     lastLocalChangeAt.current = 0;
     localStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
@@ -1043,6 +1059,12 @@ export const LifeCounter: React.FC = () => {
               <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", flexShrink: 0 }}>
                 Multiplayer:
               </span>
+
+              {roomError && (
+                <span style={{ fontSize: "0.75rem", color: "var(--accent-rose)", fontWeight: 600 }}>
+                  ⚠️ {roomError}
+                </span>
+              )}
 
               {!isSupabaseConfigured ? (
                 <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontStyle: "italic" }}>

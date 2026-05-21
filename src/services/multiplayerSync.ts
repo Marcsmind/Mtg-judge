@@ -46,14 +46,18 @@ export function generateRoomCode(): string {
 
 /**
  * Creates (or re-joins) a room channel and subscribes to incoming state updates.
- * Returns the room code.
+ * Returns true on success, false on any failure (mirrors joinRoom API).
  */
 export async function createRoom(
   roomCode: string,
   onUpdate: (state: SyncState) => void
-): Promise<string> {
-  await _subscribeToRoom(roomCode, onUpdate);
-  return roomCode;
+): Promise<boolean> {
+  try {
+    await _subscribeToRoom(roomCode, onUpdate);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ── Join room ────────────────────────────────────────────────────────────────
@@ -132,9 +136,22 @@ async function _subscribeToRoom(
   );
 
   await new Promise<void>((resolve, reject) => {
+    // 10-second hard timeout — prevents the UI from hanging forever if
+    // Supabase never calls the callback (network drop, config issue, etc.)
+    const timeout = setTimeout(
+      () => reject(new Error("Connection timed out after 10 seconds")),
+      10_000
+    );
+
     channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") resolve();
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") reject(new Error(status));
+      if (status === "SUBSCRIBED") {
+        clearTimeout(timeout);
+        resolve();
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        clearTimeout(timeout);
+        reject(new Error(status));
+      }
     });
   });
 
