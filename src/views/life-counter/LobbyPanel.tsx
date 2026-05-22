@@ -7,8 +7,14 @@
  * "All in → Start" button once all players are ready.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Check, Users, Crown, LogOut, ChevronRight, Loader2 } from "lucide-react";
+import { Check, Users, Crown, LogOut, ChevronRight, Loader2, X } from "lucide-react";
 import type { LobbyPlayer } from "../../types/game";
+import {
+  autocompleteCard,
+  searchCardFuzzy,
+  getCardImage,
+} from "../../services/scryfall";
+import type { ScryfallCard } from "../../services/scryfall";
 
 // ── Color palette (matches LifeCounter / TurnOrder) ───────────────────────────
 const COLOR_OPTIONS: { key: LobbyPlayer["colorName"]; label: string; accent: string }[] = [
@@ -31,32 +37,31 @@ interface LobbyPanelProps {
   onLeave: () => void;
 }
 
-// ── Commander autocomplete ─────────────────────────────────────────────────────
+// ── Commander autocomplete (uses the shared Scryfall service with AbortController) ──
 function useCommanderSuggestions(query: string) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loading, setLoading]         = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef  = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    abortRef.current?.abort();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (query.length < 2) { setSuggestions([]); return; }
 
     timerRef.current = setTimeout(async () => {
       setLoading(true);
-      try {
-        const res = await fetch(
-          `https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(query)}&include_extras=false`
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        setSuggestions((data.data as string[] | undefined ?? []).slice(0, 8));
-      } catch { /* ignore network errors */ } finally {
-        setLoading(false);
-      }
+      abortRef.current = new AbortController();
+      const results = await autocompleteCard(query, abortRef.current.signal);
+      setSuggestions(results.slice(0, 8));
+      setLoading(false);
     }, 300);
 
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      abortRef.current?.abort();
+    };
   }, [query]);
 
   return { suggestions, loading };
@@ -72,12 +77,27 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
   onStart,
   onLeave,
 }) => {
-  const [nameInput, setNameInput]           = useState(selfPlayer.playerName);
-  const [cmdInput, setCmdInput]             = useState(selfPlayer.commanderName);
+  const [nameInput, setNameInput]             = useState(selfPlayer.playerName);
+  const [cmdInput, setCmdInput]               = useState(selfPlayer.commanderName);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const cmdRef = useRef<HTMLDivElement>(null);
+  // Card data for the currently confirmed commander (shows art thumbnail below input)
+  const [confirmedCard, setConfirmedCard]     = useState<ScryfallCard | null>(null);
+  // Card data shown while hovering a suggestion (preview image inside dropdown)
+  const [previewCard, setPreviewCard]         = useState<ScryfallCard | null>(null);
+  const cmdRef      = useRef<HTMLDivElement>(null);
+  const hoverAbort  = useRef<AbortController | null>(null);
 
   const { suggestions, loading: cmdLoading } = useCommanderSuggestions(cmdInput);
+
+  // On mount, if a commander name is already set, preload its card data so the
+  // confirmed thumbnail appears immediately without needing to re-select.
+  useEffect(() => {
+    if (selfPlayer.commanderName) {
+      searchCardFuzzy(selfPlayer.commanderName).then(card => {
+        if (card) setConfirmedCard(card);
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync name back to parent after a short debounce
   const nameDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,23 +112,50 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
     const handler = (e: MouseEvent) => {
       if (cmdRef.current && !cmdRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
+        setPreviewCard(null);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleSelectSuggestion = useCallback((name: string) => {
+  /** Hover a suggestion → fetch card data and show preview image inside the dropdown. */
+  const handleSuggestionHover = useCallback(async (name: string) => {
+    hoverAbort.current?.abort();
+    hoverAbort.current = new AbortController();
+    const card = await searchCardFuzzy(name); // cached after first load
+    if (card) setPreviewCard(card);
+  }, []);
+
+  /** Select a suggestion → commit name + fetch confirmed card art. */
+  const handleSelectSuggestion = useCallback(async (name: string) => {
     setCmdInput(name);
     setShowSuggestions(false);
+    setPreviewCard(null);
     onUpdateSelf({ commanderName: name });
+    const card = await searchCardFuzzy(name);
+    if (card) setConfirmedCard(card);
   }, [onUpdateSelf]);
 
+  /** Clear the chosen commander. */
+  const handleClearCommander = () => {
+    setCmdInput("");
+    setConfirmedCard(null);
+    setPreviewCard(null);
+    onUpdateSelf({ commanderName: "" });
+  };
+
   const handleCmdBlur = () => {
-    // Commit whatever is typed on blur
+    // Commit whatever is typed on blur (covers manual free-text entry)
     setTimeout(() => {
-      onUpdateSelf({ commanderName: cmdInput.trim() });
+      const trimmed = cmdInput.trim();
+      onUpdateSelf({ commanderName: trimmed });
       setShowSuggestions(false);
+      setPreviewCard(null);
+      // If they typed a name but didn't pick from the dropdown, try to load the card
+      if (trimmed && !confirmedCard) {
+        searchCardFuzzy(trimmed).then(card => { if (card) setConfirmedCard(card); });
+      }
     }, 150); // slight delay so suggestion click fires first
   };
 
@@ -215,54 +262,152 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
           <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>
             Commander <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(optional)</span>
           </label>
-          <div style={{ position: "relative" }}>
-            <input
-              type="text"
-              value={cmdInput}
-              onChange={e => { setCmdInput(e.target.value); setShowSuggestions(true); }}
-              onFocus={() => { if (cmdInput.length >= 2) setShowSuggestions(true); }}
-              onBlur={handleCmdBlur}
-              placeholder="e.g. Atraxa, Praetors' Voice"
-              aria-label="Your commander's name"
-              aria-autocomplete="list"
-              style={{
-                width: "100%", padding: "8px 10px", borderRadius: "8px",
-                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-                color: "var(--text-primary)", fontSize: "0.88rem",
-                outline: "none", boxSizing: "border-box",
-              }}
-              onFocusCapture={e => (e.target as HTMLInputElement).style.borderColor = "var(--accent-purple)"}
-              onBlurCapture={e => (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.1)"}
-            />
-            {cmdLoading && (
-              <Loader2 size={14} color="var(--text-muted)"
-                style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", animation: "spin 1s linear infinite" }} />
-            )}
-          </div>
-          {/* Autocomplete dropdown */}
-          {showSuggestions && suggestions.length > 0 && (
+
+          {/* ── Confirmed selection — shows card art thumbnail ── */}
+          {confirmedCard && !showSuggestions ? (
             <div style={{
-              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
-              background: "var(--bg-dark)", border: "1px solid var(--border-color)",
-              borderRadius: "10px", overflow: "hidden",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              display: "flex", alignItems: "center", gap: "10px",
+              padding: "8px 10px", borderRadius: "10px",
+              background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)",
             }}>
-              {suggestions.map((name, i) => (
-                <button
-                  key={i}
-                  onMouseDown={() => handleSelectSuggestion(name)}
+              {/* Card art thumbnail */}
+              <img
+                src={getCardImage(confirmedCard)}
+                alt={confirmedCard.name}
+                style={{
+                  width: "48px", height: "34px", borderRadius: "5px",
+                  objectFit: "cover", objectPosition: "center 15%",
+                  flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                }}
+              />
+              {/* Name + type */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {confirmedCard.name}
+                </p>
+                {confirmedCard.type_line && (
+                  <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {confirmedCard.type_line}
+                  </p>
+                )}
+              </div>
+              {/* Clear button */}
+              <button
+                onClick={handleClearCommander}
+                aria-label="Remove commander"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", flexShrink: 0, display: "flex", padding: "2px" }}
+                onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
+                onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            /* ── Text input + dropdown ── */
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                value={cmdInput}
+                onChange={e => { setCmdInput(e.target.value); setShowSuggestions(true); if (!e.target.value) { setConfirmedCard(null); } }}
+                onFocus={() => { if (cmdInput.length >= 2) setShowSuggestions(true); }}
+                onBlur={handleCmdBlur}
+                placeholder="e.g. Atraxa, Praetors' Voice"
+                aria-label="Your commander's name"
+                aria-autocomplete="list"
+                style={{
+                  width: "100%", padding: "8px 32px 8px 10px", borderRadius: "8px",
+                  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                  color: "var(--text-primary)", fontSize: "0.88rem",
+                  outline: "none", boxSizing: "border-box",
+                }}
+                onFocusCapture={e => (e.target as HTMLInputElement).style.borderColor = "var(--accent-purple)"}
+                onBlurCapture={e => (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.1)"}
+              />
+              {cmdLoading && (
+                <Loader2 size={14} color="var(--text-muted)"
+                  style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", animation: "spin 1s linear infinite" }} />
+              )}
+
+              {/* ── Autocomplete dropdown with hover-preview ── */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div
+                  onMouseLeave={() => setPreviewCard(null)}
                   style={{
-                    display: "block", width: "100%", padding: "8px 12px",
-                    background: "transparent", border: "none",
-                    color: "var(--text-primary)", fontSize: "0.88rem", textAlign: "left",
-                    cursor: "pointer", transition: "background 0.1s",
+                    position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
+                    background: "var(--bg-dark)", border: "1px solid var(--border-color)",
+                    borderRadius: "10px", overflow: "hidden",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(139,92,246,0.1)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                 >
-                  {name}
-                </button>
-              ))}
+                  {/* Suggestion list */}
+                  {suggestions.map((name, i) => (
+                    <button
+                      key={i}
+                      onMouseDown={() => handleSelectSuggestion(name)}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = "rgba(139,92,246,0.12)";
+                        handleSuggestionHover(name);
+                      }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                      style={{
+                        display: "block", width: "100%", padding: "8px 12px",
+                        background: "transparent", border: "none",
+                        color: "var(--text-primary)", fontSize: "0.88rem", textAlign: "left",
+                        cursor: "pointer", transition: "background 0.1s",
+                        borderBottom: i < suggestions.length - 1 || previewCard
+                          ? "1px solid rgba(255,255,255,0.04)" : "none",
+                      }}
+                    >
+                      {name}
+                    </button>
+                  ))}
+
+                  {/* ── Card preview — appears when hovering a suggestion ── */}
+                  {previewCard && (
+                    <div style={{
+                      display: "flex", gap: "10px", alignItems: "flex-start",
+                      padding: "10px 12px",
+                      background: "rgba(139,92,246,0.06)",
+                      borderTop: "1px solid rgba(139,92,246,0.2)",
+                    }}>
+                      {/* Card image */}
+                      <img
+                        src={getCardImage(previewCard)}
+                        alt={previewCard.name}
+                        style={{
+                          width: "68px", borderRadius: "7px",
+                          flexShrink: 0, boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+                        }}
+                      />
+                      {/* Card text details */}
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)", marginBottom: "2px" }}>
+                          {previewCard.name}
+                        </p>
+                        {previewCard.mana_cost && (
+                          <p style={{ fontSize: "0.72rem", color: "var(--accent-gold)", marginBottom: "2px" }}>
+                            {previewCard.mana_cost}
+                          </p>
+                        )}
+                        {previewCard.type_line && (
+                          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: "4px" }}>
+                            {previewCard.type_line}
+                          </p>
+                        )}
+                        {(previewCard.oracle_text || previewCard.card_faces?.[0]?.oracle_text) && (
+                          <p style={{
+                            fontSize: "0.68rem", color: "var(--text-secondary)", lineHeight: 1.4,
+                            display: "-webkit-box", WebkitLineClamp: 3,
+                            WebkitBoxOrient: "vertical", overflow: "hidden",
+                          }}>
+                            {previewCard.oracle_text ?? previewCard.card_faces![0].oracle_text}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
