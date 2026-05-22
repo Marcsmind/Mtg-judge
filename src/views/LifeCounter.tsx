@@ -16,7 +16,7 @@ import {
   leaveRoom,
   SYNC_SCHEMA_VERSION,
 } from "../services/multiplayerSync";
-import type { SyncState } from "../services/multiplayerSync";
+import type { SyncState, ConnectionStatus } from "../services/multiplayerSync";
 import type { Player, ActiveCounters, DayNightState, TokenKey } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { GameHistoryLedger } from "./life-counter/GameHistoryLedger";
@@ -26,6 +26,7 @@ import type { GameSnapshot } from "./life-counter/SaveGameModal";
 import { GameSummaryModal } from "./life-counter/GameSummaryModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { parseSavedPlayer } from "../utils/playerUtils";
 import { useToast } from "../components/Toast";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -58,34 +59,8 @@ const MECHANICS_CONFIG: { key: keyof ActiveCounters; label: string; Icon: React.
   // "tokens" removed — tokens are now per-player toggles, not a global mechanic
 ];
 
-// ── Helper: safe-parse a saved player with all new fields defaulted ───────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseSavedPlayer(raw: any, fallbackLife: number): Player {
-  return {
-    id:             raw.id,
-    name:           raw.name ?? `Player ${raw.id}`,
-    avatar:         raw.avatar ?? "",
-    life:           typeof raw.life === "number" ? raw.life : fallbackLife,
-    tax:            raw.tax ?? 0,
-    taxPartner:     raw.taxPartner ?? 0,
-    partnerMode:    raw.partnerMode ?? false,
-    colorName:      raw.colorName ?? "purple",
-    commanderDamage: raw.commanderDamage ?? {},
-    isMonarch:      raw.isMonarch ?? false,
-    hasInitiative:  raw.hasInitiative ?? false,
-    cityBlessing:   raw.cityBlessing ?? false,
-    poison:         typeof raw.poison === "number" ? raw.poison : 0,
-    rad:            typeof raw.rad   === "number" ? raw.rad   : 0,
-    tokens: {
-      treasure: raw.tokens?.treasure ?? 0,
-      food:     raw.tokens?.food     ?? 0,
-      clue:     raw.tokens?.clue     ?? 0,
-      blood:    raw.tokens?.blood    ?? 0,
-    },
-    enabledTokens: Array.isArray(raw.enabledTokens) ? raw.enabledTokens : [],
-    tokensOpen:    raw.tokensOpen ?? false,
-  };
-}
+// parseSavedPlayer is imported from src/utils/playerUtils.ts so it can be
+// unit-tested independently without pulling in the full React component tree.
 
 function createPlayer(index: number, life: number): Player {
   return {
@@ -226,6 +201,7 @@ export const LifeCounter: React.FC = () => {
   const [roomLoading, setRoomLoading] = useState(false);
   const [roomCopied, setRoomCopied] = useState(false);
   const [roomError, setRoomError] = useState<string | null>(null);
+  const [roomReconnecting, setRoomReconnecting] = useState(false);
   const lastAppliedAt = useRef<number>(0);
   // Local-priority: tracks when the local user last made a game action
   const lastLocalChangeAt = useRef<number>(0);
@@ -233,6 +209,20 @@ export const LifeCounter: React.FC = () => {
   const broadcastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stable ref for handleRemoteUpdate — avoids stale closure in Supabase callbacks
   const handleRemoteUpdateRef = useRef<(s: SyncState) => void>(() => undefined);
+  // Stable ref for the connection-status callback — wired into subscribeWithRetry
+  const handleConnectionStatusRef = useRef<(status: ConnectionStatus) => void>((status) => {
+    if (status === "reconnecting") {
+      setRoomReconnecting(true);
+      setRoomError(null);
+    } else if (status === "connected") {
+      setRoomReconnecting(false);
+      setRoomError(null);
+    } else if (status === "failed") {
+      setRoomReconnecting(false);
+      setRoomConnected(false);
+      setRoomError("Connection lost. Tap to reconnect.");
+    }
+  });
   // Stable ref for buildSyncState — the timer in scheduleBroadcast fires 150ms after
   // the action, by which time React has re-rendered with the NEW state values.
   // Without this ref the timer closes over the OLD players snapshot and broadcasts it.
@@ -385,9 +375,24 @@ export const LifeCounter: React.FC = () => {
     setDayNightState(state.dayNightState);
     if (state.roomName !== undefined) setRoomName(state.roomName);
   };
-  // Keep the ref fresh every render so async Supabase callbacks always call the latest version
+  // Keep refs fresh every render so async Supabase callbacks always call the latest version
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { handleRemoteUpdateRef.current = handleRemoteUpdate; });
+  useEffect(() => {
+    handleRemoteUpdateRef.current = handleRemoteUpdate;
+    handleConnectionStatusRef.current = (status: ConnectionStatus) => {
+      if (status === "reconnecting") {
+        setRoomReconnecting(true);
+        setRoomError(null);
+      } else if (status === "connected") {
+        setRoomReconnecting(false);
+        setRoomError(null);
+      } else if (status === "failed") {
+        setRoomReconnecting(false);
+        setRoomConnected(false);
+        setRoomError("Connection lost. Tap to reconnect.");
+      }
+    };
+  });
 
   const handleCreateRoom = async () => {
     if (!isSupabaseConfigured) return;
@@ -395,7 +400,11 @@ export const LifeCounter: React.FC = () => {
     setRoomError(null);
     const code = generateRoomCode();
     try {
-      const ok = await createRoom(code, (s) => handleRemoteUpdateRef.current(s));
+      const ok = await createRoom(
+        code,
+        (s) => handleRemoteUpdateRef.current(s),
+        (status) => handleConnectionStatusRef.current(status),
+      );
       if (ok) {
         setRoomCode(code);
         setRoomConnected(true);
@@ -417,7 +426,11 @@ export const LifeCounter: React.FC = () => {
     if (!code || !isSupabaseConfigured) return;
     setRoomLoading(true);
     setRoomError(null);
-    const ok = await joinSyncRoom(code, (s) => handleRemoteUpdateRef.current(s));
+    const ok = await joinSyncRoom(
+      code,
+      (s) => handleRemoteUpdateRef.current(s),
+      (status) => handleConnectionStatusRef.current(status),
+    );
     if (ok) {
       const role = overrideCode
         ? (localStorage.getItem("nexus_judge_room_role") as "host" | "guest" | null ?? "guest")
@@ -441,6 +454,7 @@ export const LifeCounter: React.FC = () => {
     setRoomConnected(false);
     setRoomRole(null);
     setRoomError(null);
+    setRoomReconnecting(false);
     lastAppliedAt.current = 0;
     lastLocalChangeAt.current = 0;
     localStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
@@ -782,16 +796,25 @@ export const LifeCounter: React.FC = () => {
             </div>
           </div>
 
-          {/* Live badge — shown when multiplayer is active */}
+          {/* Live / Reconnecting badge — shown when multiplayer is active */}
           {roomConnected && roomCode && (
             <div style={{
               display: "flex", alignItems: "center", gap: "4px",
-              background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)",
+              background: roomReconnecting ? "rgba(234,179,8,0.1)" : "rgba(16,185,129,0.1)",
+              border: `1px solid ${roomReconnecting ? "rgba(234,179,8,0.3)" : "rgba(16,185,129,0.25)"}`,
               borderRadius: "20px", padding: "3px 8px", flexShrink: 0,
+              transition: "all 0.3s ease",
             }}>
-              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
-              <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--accent-emerald)", letterSpacing: "0.5px" }}>
-                {roomCode}
+              <div style={{
+                width: "6px", height: "6px", borderRadius: "50%",
+                background: roomReconnecting ? "var(--accent-gold)" : "var(--accent-emerald)",
+                animation: "pulse-glow 1.5s infinite",
+              }} />
+              <span style={{
+                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.5px",
+                color: roomReconnecting ? "var(--accent-gold)" : "var(--accent-emerald)",
+              }}>
+                {roomReconnecting ? "Reconnecting…" : roomCode}
               </span>
             </div>
           )}

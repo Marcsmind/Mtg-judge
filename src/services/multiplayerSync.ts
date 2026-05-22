@@ -5,6 +5,18 @@
  * Channel name: `game-${roomCode}`
  * Event:        `state_update`
  * Conflict:     last-write-wins (incoming `updatedAt > local updatedAt`)
+ *
+ * Reconnection strategy
+ * ─────────────────────
+ * subscribeWithRetry() is the main entry point for callers. On any failure it
+ * retries up to MAX_RECONNECT_ATTEMPTS times with exponential backoff:
+ *   attempt 1 — wait 1 s  → attempt 2
+ *   attempt 2 — wait 2 s  → attempt 3
+ *   attempt 3 — wait 4 s  → give up, return false / fire onStatusChange("failed")
+ *
+ * Mid-session drops (CHANNEL_ERROR after initially being SUBSCRIBED) are also
+ * caught inside _subscribeToRoom and fed back through the same retry cycle,
+ * so brief network interruptions heal automatically without user action.
  */
 
 import { supabase } from "./supabase";
@@ -28,9 +40,19 @@ export interface SyncState {
   updatedBy:      string;   // player name or device fingerprint
 }
 
-// ── Active channel registry ───────────────────────────────────────────────────
+// ── Connection status type (forwarded to the UI layer) ───────────────────────
+export type ConnectionStatus = "reconnecting" | "connected" | "failed";
 
+// ── Reconnection config ───────────────────────────────────────────────────────
+/** Milliseconds to wait before each successive retry attempt. */
+const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000] as const;
+const MAX_RECONNECT_ATTEMPTS = RECONNECT_DELAYS_MS.length;
+
+// ── Active channel registry ───────────────────────────────────────────────────
 const channels: Map<string, RealtimeChannel> = new Map();
+
+/** Rooms that currently have a retry loop in progress — prevents parallel storms. */
+const reconnecting: Set<string> = new Set();
 
 // ── Room code generator ───────────────────────────────────────────────────────
 
@@ -45,40 +67,84 @@ export function generateRoomCode(): string {
   return code;
 }
 
+// ── Subscribe with exponential backoff ───────────────────────────────────────
+
+/**
+ * Connects to a room channel and subscribes to incoming state updates.
+ * Retries up to MAX_RECONNECT_ATTEMPTS times with exponential backoff before
+ * giving up.
+ *
+ * @param roomCode        - 4-character room identifier
+ * @param onUpdate        - called for every incoming SyncState broadcast
+ * @param onStatusChange  - optional UI callback: "reconnecting" | "connected" | "failed"
+ * @returns true on success, false after all retry attempts are exhausted
+ */
+export async function subscribeWithRetry(
+  roomCode: string,
+  onUpdate: (state: SyncState) => void,
+  onStatusChange?: (status: ConnectionStatus) => void,
+): Promise<boolean> {
+  // Bail out if a retry loop for this room is already running
+  if (reconnecting.has(roomCode)) return false;
+  reconnecting.add(roomCode);
+
+  for (let attempt = 0; attempt < MAX_RECONNECT_ATTEMPTS; attempt++) {
+    // Wait before every attempt after the first
+    if (attempt > 0) {
+      onStatusChange?.("reconnecting");
+      await new Promise<void>(r =>
+        setTimeout(r, RECONNECT_DELAYS_MS[attempt - 1])
+      );
+      // Abort if the room was explicitly closed while we were sleeping
+      if (!reconnecting.has(roomCode)) return false;
+    }
+
+    try {
+      await _subscribeToRoom(roomCode, onUpdate, () => {
+        // Mid-session drop — kick off a fresh retry cycle (fire-and-forget)
+        reconnecting.delete(roomCode);
+        subscribeWithRetry(roomCode, onUpdate, onStatusChange);
+      });
+      reconnecting.delete(roomCode);
+      onStatusChange?.("connected");
+      return true;
+    } catch {
+      // Swallow and try next attempt
+    }
+  }
+
+  // All attempts exhausted
+  reconnecting.delete(roomCode);
+  onStatusChange?.("failed");
+  return false;
+}
+
 // ── Create room ───────────────────────────────────────────────────────────────
 
 /**
- * Creates (or re-joins) a room channel and subscribes to incoming state updates.
- * Returns true on success, false on any failure (mirrors joinRoom API).
+ * Creates (or re-joins) a room channel. Delegates to subscribeWithRetry.
+ * Returns true on success, false after all retries fail.
  */
 export async function createRoom(
   roomCode: string,
-  onUpdate: (state: SyncState) => void
+  onUpdate: (state: SyncState) => void,
+  onStatusChange?: (status: ConnectionStatus) => void,
 ): Promise<boolean> {
-  try {
-    await _subscribeToRoom(roomCode, onUpdate);
-    return true;
-  } catch {
-    return false;
-  }
+  return subscribeWithRetry(roomCode, onUpdate, onStatusChange);
 }
 
 // ── Join room ────────────────────────────────────────────────────────────────
 
 /**
- * Joins an existing room. Returns `true` on success, `false` if the channel
- * could not be established (e.g., no Supabase config).
+ * Joins an existing room. Delegates to subscribeWithRetry.
+ * Returns true on success, false after all retries fail.
  */
 export async function joinRoom(
   code: string,
-  onUpdate: (state: SyncState) => void
+  onUpdate: (state: SyncState) => void,
+  onStatusChange?: (status: ConnectionStatus) => void,
 ): Promise<boolean> {
-  try {
-    await _subscribeToRoom(code, onUpdate);
-    return true;
-  } catch {
-    return false;
-  }
+  return subscribeWithRetry(code, onUpdate, onStatusChange);
 }
 
 // ── Broadcast state ──────────────────────────────────────────────────────────
@@ -96,8 +162,14 @@ export function broadcastState(roomCode: string, state: SyncState): void {
 
 // ── Leave room ───────────────────────────────────────────────────────────────
 
-/** Unsubscribes from the channel and removes it from the registry. */
+/**
+ * Unsubscribes from the channel, removes it from the registry, and cancels
+ * any in-progress retry loop for this room.
+ */
 export function leaveRoom(roomCode: string): void {
+  // Cancel any pending retry loop first so it doesn't revive the channel
+  reconnecting.delete(roomCode);
+
   const channel = channels.get(roomCode);
   if (channel) {
     supabase.removeChannel(channel);
@@ -119,12 +191,25 @@ export function getChannelStatus(roomCode: string): string | null {
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Low-level: creates and subscribes to a single Supabase Realtime channel.
+ * Does NOT retry on failure — callers should use subscribeWithRetry for that.
+ *
+ * @param onDropped - called if the channel fires CHANNEL_ERROR *after* being
+ *   successfully SUBSCRIBED (i.e. a mid-session drop, not an initial failure).
+ *   The caller can use this to trigger a reconnect cycle.
+ */
 async function _subscribeToRoom(
   roomCode: string,
-  onUpdate: (state: SyncState) => void
+  onUpdate: (state: SyncState) => void,
+  onDropped?: () => void,
 ): Promise<void> {
   // Clean up any existing subscription for this room
-  leaveRoom(roomCode);
+  const existing = channels.get(roomCode);
+  if (existing) {
+    supabase.removeChannel(existing);
+    channels.delete(roomCode);
+  }
 
   const channel = supabase.channel(`game-${roomCode}`, {
     config: { broadcast: { self: false } }, // don't echo our own sends back
@@ -138,6 +223,8 @@ async function _subscribeToRoom(
     }
   );
 
+  let wasSubscribed = false;
+
   await new Promise<void>((resolve, reject) => {
     // 10-second hard timeout — prevents the UI from hanging forever if
     // Supabase never calls the callback (network drop, config issue, etc.)
@@ -149,11 +236,21 @@ async function _subscribeToRoom(
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
         clearTimeout(timeout);
+        wasSubscribed = true;
         resolve();
       }
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        clearTimeout(timeout);
-        reject(new Error(status));
+        if (!wasSubscribed) {
+          // Failed during initial handshake — reject so the retry loop can handle it
+          clearTimeout(timeout);
+          reject(new Error(status));
+        } else {
+          // Mid-session drop — channel was healthy before, now it's gone
+          // Only fire onDropped if this room is still the active one (not manually closed)
+          if (channels.has(roomCode)) {
+            onDropped?.();
+          }
+        }
       }
     });
   });

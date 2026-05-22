@@ -41,7 +41,7 @@ function parseDecklist(raw: string): string[] {
 }
 
 /** Build a mana-curve histogram: groups 0–5 and "6+" */
-function buildManaCurve(cards: (ScryfallCard | null)[]): Record<string, number> {
+export function buildManaCurve(cards: (ScryfallCard | null)[]): Record<string, number> {
   const curve: Record<string, number> = { "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6+": 0 };
   for (const card of cards) {
     if (!card) continue;
