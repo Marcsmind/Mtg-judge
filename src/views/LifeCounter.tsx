@@ -24,7 +24,9 @@ import { CommanderDamageModal } from "./life-counter/CommanderDamageModal";
 import { SaveGameModal, MAX_SLOTS } from "./life-counter/SaveGameModal";
 import type { GameSnapshot } from "./life-counter/SaveGameModal";
 import { GameSummaryModal } from "./life-counter/GameSummaryModal";
+import { EndGameModal } from "./life-counter/EndGameModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
+import { recordGame } from "../services/leaderboard";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { parseSavedPlayer } from "../utils/playerUtils";
 import { useToast } from "../components/Toast";
@@ -86,7 +88,11 @@ function createPlayer(index: number, life: number): Player {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export const LifeCounter: React.FC = () => {
+interface LifeCounterProps {
+  userId?: string; // current auth user — passed from App.tsx
+}
+
+export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
   const { showToast } = useToast();
 
   // ── State ──
@@ -166,6 +172,7 @@ export const LifeCounter: React.FC = () => {
   // ── Save-game modal + slots ──
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [showEndGame, setShowEndGame] = useState(false);
   const [savedGames, setSavedGames] = useState<(GameSnapshot | null)[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SAVED_GAMES);
@@ -583,6 +590,48 @@ export const LifeCounter: React.FC = () => {
       })));
       setHistory([`Game reset! All life set to ${startingLife}.`]);
     }
+  };
+
+  /** Shared reset logic used by both "End & Record" confirm and "Skip & Reset". */
+  const doReset = (recorded: boolean) => {
+    scheduleBroadcast();
+    setPlayers(prev => prev.map(p => ({
+      ...p, life: startingLife, tax: 0, taxPartner: 0,
+      commanderDamage: {}, isMonarch: false, hasInitiative: false,
+      cityBlessing: false, poison: 0, rad: 0,
+      tokens: { treasure: 0, food: 0, clue: 0, blood: 0 },
+    })));
+    setHistory([`Game reset! ${recorded ? "(recorded to leaderboard) " : ""}All life set to ${startingLife}.`]);
+  };
+
+  /** Record the game to Supabase and then reset the board. */
+  const handleEndGameConfirm = async (selectedPlayerId: number | null) => {
+    // Determine winner: sole survivor, or player with highest life
+    const notDefeated = (p: Player) => {
+      const cmdTaken = Object.values(p.commanderDamage).reduce((s, v) => s + v, 0);
+      return p.life > 0 && (p.poison ?? 0) < 10 && cmdTaken < 21;
+    };
+    const alive = players.filter(notDefeated);
+    const winner = alive.length === 1 ? alive[0] : [...players].sort((a, b) => b.life - a.life)[0];
+
+    if (isSupabaseConfigured && userId) {
+      await recordGame({
+        roomCode:        roomCode ?? undefined,
+        playerCount:     players.length,
+        startingLife,
+        durationSeconds: timerSeconds,
+        players: players.map(p => ({
+          userId:     p.id === selectedPlayerId ? userId : undefined,
+          playerName: p.name,
+          finalLife:  p.life,
+          isWinner:   p.id === winner?.id && notDefeated(winner),
+        })),
+      });
+      showToast("Game recorded to leaderboard! 🏆", "success");
+    }
+
+    setShowEndGame(false);
+    doReset(Boolean(isSupabaseConfigured && userId));
   };
 
   // ── NOTE: all action functions call addLog BEFORE setPlayers (never inside
@@ -1059,6 +1108,17 @@ export const LifeCounter: React.FC = () => {
                 <span>Summary</span>
               </button>
 
+              {/* End & Record — opens EndGameModal */}
+              <button
+                onClick={() => setShowEndGame(true)}
+                className="glass-button"
+                title="Record this game to the leaderboard, then reset"
+                style={{ padding: "7px 13px", fontSize: "0.82rem", background: "rgba(139,92,246,0.08)", borderColor: "rgba(139,92,246,0.25)" }}
+              >
+                <Trophy size={14} color="var(--accent-purple)" />
+                <span>End &amp; Record</span>
+              </button>
+
               {/* Reset */}
               <button onClick={resetGame} className="glass-button" style={{ padding: "7px 13px", fontSize: "0.82rem", background: "rgba(255,255,255,0.02)" }}>
                 <RefreshCw size={14} />
@@ -1269,6 +1329,19 @@ export const LifeCounter: React.FC = () => {
       {/* ── Game Summary Modal ── */}
       {showSummary && (
         <GameSummaryModal players={players} onClose={() => setShowSummary(false)} />
+      )}
+
+      {/* ── End Game & Record Modal ── */}
+      {showEndGame && (
+        <EndGameModal
+          players={players}
+          startingLife={startingLife}
+          timerSeconds={timerSeconds}
+          isSupabaseConfigured={isSupabaseConfigured}
+          onConfirm={handleEndGameConfirm}
+          onSkip={() => { setShowEndGame(false); doReset(false); }}
+          onCancel={() => setShowEndGame(false)}
+        />
       )}
 
     </div>

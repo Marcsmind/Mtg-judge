@@ -1,5 +1,5 @@
 import React from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2 } from "lucide-react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 
 interface SidebarProps {
@@ -12,12 +12,13 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openCodex, collapsed, onToggleCollapsed }) => {
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
-    { id: "judge", label: "AI Judge",      icon: Scale     },
-    { id: "life",  label: "Life Counter",  icon: Heart     },
-    { id: "dice",  label: "Dice & Coins",  icon: Dices     },
-    { id: "turns", label: "Turn Order",    icon: Shuffle   },
-    { id: "rules", label: "Quick Rules",   icon: BookOpen  },
-    { id: "deck",  label: "Deck Builder",  icon: Wand2     },
+    { id: "judge",       label: "AI Judge",      icon: Scale     },
+    { id: "life",        label: "Life Counter",  icon: Heart     },
+    { id: "dice",        label: "Dice & Coins",  icon: Dices     },
+    { id: "turns",       label: "Turn Order",    icon: Shuffle   },
+    { id: "rules",       label: "Quick Rules",   icon: BookOpen  },
+    { id: "deck",        label: "Deck Builder",  icon: Wand2     },
+    { id: "leaderboard", label: "Leaderboard",   icon: Trophy    },
   ];
 
   return (

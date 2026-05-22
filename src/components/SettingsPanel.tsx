@@ -1,18 +1,42 @@
 import React, { useState, useEffect } from "react";
-import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock } from "lucide-react";
+import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2 } from "lucide-react";
 import { THEMES } from "../constants/themes";
 import type { ThemeId } from "../constants/themes";
+import { upsertProfile, getDisplayName } from "../services/auth";
+import type { AuthUser } from "../services/auth";
+import { isSupabaseConfigured } from "../services/supabase";
 
 interface SettingsPanelProps {
   apiKey: string;
   setApiKey: (key: string) => void;
   theme?: ThemeId;
   setTheme?: (t: ThemeId) => void;
+  authUser?: AuthUser | null;
+  onLinkGoogle?: () => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, onLinkGoogle }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
+
+  // ── Account / leaderboard display name ──
+  const [displayName, setDisplayName]       = useState("");
+  const [displayNameSaved, setDisplayNameSaved] = useState(false);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    getDisplayName(authUser.id).then(name => {
+      setDisplayName(name === "Player" ? "" : name);
+    });
+  }, [authUser?.id]);
+
+  const handleSaveDisplayName = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!authUser?.id) return;
+    await upsertProfile(authUser.id, displayName.trim() || "Player");
+    setDisplayNameSaved(true);
+    setTimeout(() => setDisplayNameSaved(false), 3000);
+  };
   const [saved, setSaved] = useState(false);
   const [accessCodeInput, setAccessCodeInput] = useState(
     () => localStorage.getItem("nexus_judge_access_code") || ""
@@ -323,6 +347,84 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
         </div>
 
       </div>
+
+      {/* ── Account Panel ── */}
+      {isSupabaseConfigured && authUser && (
+        <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
+            <User2 size={22} color="var(--accent-purple)" />
+            <div>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Account &amp; Leaderboard</h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+                Set your leaderboard display name and link a Google account to sync stats across devices.
+              </p>
+            </div>
+          </div>
+
+          {/* Status badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {authUser.isAnonymous ? (
+              <>
+                <span style={{ fontSize: "0.78rem", background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.25)", borderRadius: "20px", padding: "3px 10px", color: "var(--accent-gold)", fontWeight: 700 }}>
+                  🎮 Anonymous — stats saved to this browser
+                </span>
+                {onLinkGoogle && (
+                  <button
+                    onClick={onLinkGoogle}
+                    className="glass-button"
+                    style={{ padding: "6px 14px", fontSize: "0.82rem", background: "rgba(66,133,244,0.1)", borderColor: "rgba(66,133,244,0.3)", color: "#4285F4" }}
+                  >
+                    <Link2 size={14} />
+                    <span>Link Google Account</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <span style={{ fontSize: "0.78rem", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "20px", padding: "3px 10px", color: "var(--accent-emerald)", fontWeight: 700 }}>
+                ✅ Linked with Google{authUser.email ? ` — ${authUser.email}` : ""}
+              </span>
+            )}
+          </div>
+
+          {authUser.isAnonymous && (
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
+              Linking with Google keeps your win/loss history portable — if you switch browsers or devices, your stats follow you. Your anonymous history is merged automatically; nothing is lost.
+            </p>
+          )}
+
+          {/* Display name form */}
+          <form onSubmit={handleSaveDisplayName} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Leaderboard display name</label>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <input
+                type="text"
+                className="glass-input"
+                placeholder="Player"
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value.slice(0, 24))}
+                maxLength={24}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="submit"
+                className="glass-button"
+                disabled={!displayName.trim()}
+                style={{
+                  background: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.15)",
+                  borderColor: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.4)",
+                  color: "#fff",
+                }}
+              >
+                {displayNameSaved ? <Check size={14} /> : null}
+                <span>{displayNameSaved ? "Saved!" : "Save"}</span>
+              </button>
+            </div>
+            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+              This name appears on the global leaderboard. Max 24 characters.
+            </p>
+          </form>
+        </div>
+      )}
 
       {/* ── Server Access Code Panel ── */}
       <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "20px" }}>

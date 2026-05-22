@@ -8,13 +8,17 @@ import { DiceAndCoins } from "./views/DiceAndCoins";
 import { TurnOrder } from "./views/TurnOrder";
 import { QuickRules } from "./views/QuickRules";
 import { DeckBuilder } from "./views/DeckBuilder";
+import { Leaderboard } from "./views/Leaderboard";
 import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
+import { initAuth, onAuthStateChange, linkGoogleAccount } from "./services/auth";
+import type { AuthUser } from "./services/auth";
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>("judge");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [codexOpen, setCodexOpen] = useState<boolean>(false);
   const [codexSearch, setCodexSearch] = useState<string>("");
   // Initialize from localStorage directly — avoids setState-in-effect lint warnings
@@ -43,6 +47,13 @@ function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  // ── Auth — sign in anonymously on first load ──
+  useEffect(() => {
+    initAuth().then(user => { if (user) setAuthUser(user); });
+    const { unsubscribe } = onAuthStateChange(user => setAuthUser(user));
+    return unsubscribe;
+  }, []);
   const setTheme = (t: ThemeId) => {
     setThemeState(t);
     localStorage.setItem(STORAGE_KEYS.THEME, t);
@@ -77,7 +88,7 @@ function App() {
           />
         );
       case "life":
-        return <LifeCounter />;
+        return <LifeCounter userId={authUser?.id} />;
       case "dice":
         return <DiceAndCoins />;
       case "turns":
@@ -92,8 +103,25 @@ function App() {
             openCodexWith={(term: string) => { setCodexSearch(term); setCodexOpen(true); }}
           />
         );
+      case "leaderboard":
+        return (
+          <Leaderboard
+            authUser={authUser}
+            onLinkGoogle={linkGoogleAccount}
+            onGoToSettings={() => setActiveTab("settings")}
+          />
+        );
       case "settings":
-        return <SettingsPanel apiKey={apiKey} setApiKey={handleSetApiKey} theme={theme} setTheme={setTheme} />;
+        return (
+          <SettingsPanel
+            apiKey={apiKey}
+            setApiKey={handleSetApiKey}
+            theme={theme}
+            setTheme={setTheme}
+            authUser={authUser}
+            onLinkGoogle={linkGoogleAccount}
+          />
+        );
       default:
         return (
           <AIJudge
