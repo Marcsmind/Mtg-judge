@@ -1,5 +1,6 @@
 import React from "react";
 import { X, Trophy, Skull, Swords, Shield, Crown } from "lucide-react";
+import { BottomSheet } from "../../components/BottomSheet";
 import type { Player } from "../../types/game";
 
 interface GameSummaryModalProps {
@@ -42,28 +43,8 @@ export const GameSummaryModal: React.FC<GameSummaryModalProps> = ({ players, onC
   const survivor = sorted[0]; // highest life
 
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0,
-        background: "rgba(0,0,0,0.75)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        zIndex: 200,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "20px",
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="glass-panel"
-        style={{
-          width: "100%", maxWidth: "560px",
-          maxHeight: "85vh", overflowY: "auto",
-          padding: "24px",
-          display: "flex", flexDirection: "column", gap: "20px",
-          animation: "fadeIn 0.2s ease",
-        }}
-      >
+    <BottomSheet onClose={onClose} zIndex={200} maxWidth="560px">
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -180,7 +161,6 @@ export const GameSummaryModal: React.FC<GameSummaryModalProps> = ({ players, onC
           })}
         </div>
       </div>
-      <style>{`@keyframes fadeIn { from { opacity:0; transform: scale(0.96); } to { opacity:1; transform: scale(1); } }`}</style>
-    </div>
+    </BottomSheet>
   );
 };

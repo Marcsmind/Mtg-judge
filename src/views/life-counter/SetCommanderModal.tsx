@@ -7,6 +7,7 @@
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { X, Loader2, Check } from "lucide-react";
+import { BottomSheet } from "../../components/BottomSheet";
 import {
   autocompleteCard,
   searchCardFuzzy,
@@ -154,25 +155,8 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
   };
 
   return (
-    /* Backdrop */
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 1000,
-        background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "16px",
-      }}
-    >
-      {/* Modal panel */}
-      <div
-        onClick={e => e.stopPropagation()}
-        className="glass-panel"
-        style={{
-          width: "100%", maxWidth: "420px",
-          padding: "20px", display: "flex", flexDirection: "column", gap: "16px",
-        }}
-      >
+    <BottomSheet onClose={onClose} zIndex={1000} maxWidth="420px" padding="20px">
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -421,6 +405,6 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </BottomSheet>
   );
 };

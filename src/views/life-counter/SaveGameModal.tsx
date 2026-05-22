@@ -1,5 +1,6 @@
 import React from "react";
 import { Save, FolderOpen, Trash2, X, Calendar, Users } from "lucide-react";
+import { BottomSheet } from "../../components/BottomSheet";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,35 +54,8 @@ export const SaveGameModal: React.FC<SaveGameModalProps> = ({
   onClose,
 }) => {
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed", inset: 0,
-          background: "rgba(0,0,0,0.6)",
-          backdropFilter: "blur(4px)",
-          zIndex: 200,
-        }}
-      />
-
-      {/* Modal panel */}
-      <div
-        style={{
-          position: "fixed",
-          top: "50%", left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: "min(520px, 92vw)",
-          background: "rgba(12,10,20,0.98)",
-          border: "1px solid rgba(139,92,246,0.25)",
-          borderRadius: "16px",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.8)",
-          zIndex: 201,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
+    <BottomSheet onClose={onClose} zIndex={200} padding="0" maxWidth="520px">
+      <div style={{ display: "flex", flexDirection: "column" }}>
         {/* Header */}
         <div style={{
           display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -155,7 +129,7 @@ export const SaveGameModal: React.FC<SaveGameModalProps> = ({
           })}
         </div>
       </div>
-    </>
+    </BottomSheet>
   );
 };
 

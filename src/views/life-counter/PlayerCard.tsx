@@ -59,6 +59,7 @@ interface PlayerCardProps {
   onSetCommander?:      (id: number, name: string, deckId?: string) => void;
   onClearCommander?:    (id: number) => void;
   savedDecks?:          SavedDeck[];
+  isActiveTurn?:        boolean;  // turn tracker — highlights the active player
 }
 
 export const PlayerCard: React.FC<PlayerCardProps> = ({
@@ -90,6 +91,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   onSetCommander,
   onClearCommander,
   savedDecks = [],
+  isActiveTurn = false,
 }) => {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
@@ -134,13 +136,15 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     <div
       style={{
         background: playerTheme.bg, borderRadius: "14px",
-        border: `1.5px solid ${p.isMonarch ? "#eab308" : isDefeated ? "rgba(239,68,68,0.6)" : playerTheme.border}`,
+        border: `1.5px solid ${p.isMonarch ? "#eab308" : isDefeated ? "rgba(239,68,68,0.6)" : isActiveTurn ? "var(--accent-purple)" : playerTheme.border}`,
         padding: "12px 14px", display: "flex", flexDirection: "column", gap: "4px",
         boxShadow: p.isMonarch
           ? "0 0 24px rgba(234,179,8,0.18), 0 4px 20px rgba(0,0,0,0.3)"
           : isDefeated
             ? "0 0 20px rgba(239,68,68,0.2) inset, 0 4px 20px rgba(0,0,0,0.3)"
-            : "0 4px 20px rgba(0,0,0,0.3)",
+            : isActiveTurn
+              ? "0 0 0 2px var(--accent-purple-glow), 0 0 18px rgba(139,92,246,0.25), 0 4px 20px rgba(0,0,0,0.3)"
+              : "0 4px 20px rgba(0,0,0,0.3)",
         position: "relative", overflow: "hidden",
         transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)",
       }}
@@ -162,6 +166,26 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           }}
         >
           <Star size={10} fill="#eab308" color="#eab308" /> Goes First
+        </div>
+      )}
+
+      {/* ── Active Turn Badge ── */}
+      {isActiveTurn && (
+        <div
+          aria-label="This player's turn"
+          style={{
+            position: "absolute", top: "8px", left: "50%", transform: "translateX(-50%)",
+            background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.5)",
+            borderRadius: "20px", padding: "3px 10px",
+            display: showFirstBadge ? "none" : "flex",
+            alignItems: "center", gap: "5px",
+            fontSize: "0.68rem", fontWeight: 700, color: "var(--accent-purple)",
+            zIndex: 20, whiteSpace: "nowrap",
+            boxShadow: "0 0 14px rgba(139,92,246,0.35)",
+            pointerEvents: "none",
+          }}
+        >
+          ▶ Active
         </div>
       )}
 
@@ -314,6 +338,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           onClick={() => setSetCmdOpen(true)}
           aria-label={commanderName ? `Change ${p.name}'s commander: ${commanderName}` : `Set commander for ${p.name}`}
           title={commanderName ? `Commander: ${commanderName}` : "Set commander"}
+          className="touch-icon-btn"
           style={{
             background: commanderName ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)",
             border: `1px solid ${commanderName ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)"}`,
@@ -338,6 +363,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         <button
           onClick={() => cycleColor(p.id)}
           aria-label={`Cycle color for ${p.name}`}
+          className="touch-icon-btn"
           style={{
             width: "18px", height: "18px", borderRadius: "50%", background: playerTheme.accent,
             border: "2px solid #fff", cursor: "pointer", flexShrink: 0,

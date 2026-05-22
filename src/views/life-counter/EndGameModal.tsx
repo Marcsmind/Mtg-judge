@@ -11,6 +11,7 @@
 
 import React, { useState } from "react";
 import { X, Trophy, Crown, Skull, Check, Loader2 } from "lucide-react";
+import { BottomSheet } from "../../components/BottomSheet";
 import type { Player } from "../../types/game";
 
 interface EndGameModalProps {
@@ -77,28 +78,8 @@ export const EndGameModal: React.FC<EndGameModalProps> = ({
   };
 
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0,
-        background: "rgba(0,0,0,0.8)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        zIndex: 300,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "20px",
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div
-        className="glass-panel"
-        style={{
-          width: "100%", maxWidth: "480px",
-          maxHeight: "90vh", overflowY: "auto",
-          padding: "24px",
-          display: "flex", flexDirection: "column", gap: "20px",
-          animation: "fadeIn 0.2s ease",
-        }}
-      >
+    <BottomSheet onClose={onCancel} zIndex={300} maxWidth="480px">
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -248,11 +229,6 @@ export const EndGameModal: React.FC<EndGameModalProps> = ({
           </button>
         </div>
       </div>
-
-      <style>{`
-        @keyframes fadeIn { from { opacity:0; transform: scale(0.96); } to { opacity:1; transform: scale(1); } }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-    </div>
+    </BottomSheet>
   );
 };

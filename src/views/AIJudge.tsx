@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Scale, Send, Trash2, AlertCircle, BookmarkCheck, X } from "lucide-react";
+import { useMobile } from "../hooks/useMobile";
 import {
   autocompleteCard,
   searchCardFuzzy,
@@ -33,6 +34,12 @@ const INITIAL_MESSAGE: Message = {
   content: `Greetings, Commander! 🛡️ I am your **Nexus Judge**. \n\nI have encyclopedic knowledge of the Magic Comprehensive Rules (CR) and Magic Tournament Rules (MTR). I am optimized specifically for the **Commander (EDH) format**.\n\n**How to get the most accurate rulings:**\n1. Use the search bar below to search and **tag cards** relevant to your question. This pulls their exact printing details and WotC rulings, injecting them as context so I never hallucinate.\n2. Ask your question in the box below (e.g. *"If my commander is phased out, does it still deal commander damage?"*).\n\nHow can I assist your pod today?`,
 };
 
+/** Compact greeting for mobile — includes scenario topics inline since the chip row is hidden. */
+const MOBILE_INITIAL_MESSAGE: Message = {
+  role: "model",
+  content: `Greetings, Commander! 🛡️ I'm your **Nexus Judge** — an AI rules advisor for Magic: The Gathering Commander.\n\nTag cards using the search bar, then ask me anything. Common starting points:\n\n• **Commander Tax** — recasting from the command zone\n• **Commander Damage** — tracking the 21-damage threshold\n• **Phased Out** — attachments and combat with phasing\n\nWhat ruling can I help you with?`,
+};
+
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface AIJudgeProps {
@@ -52,16 +59,17 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
   openCodexWith,
   goToSettings,
 }) => {
+  const isMobile = useMobile(768);
   const [query, setQuery] = useState("");
 
   // ── Safely parse persisted state — corrupt JSON falls back to defaults ──
   const [chatHistory, setChatHistory] = useState<Message[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.AI_CHAT);
-      return saved ? JSON.parse(saved) : [INITIAL_MESSAGE];
-    } catch {
-      return [INITIAL_MESSAGE];
-    }
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    // Use compact mobile greeting when on a narrow screen (check directly at init time)
+    return [window.innerWidth <= 768 ? MOBILE_INITIAL_MESSAGE : INITIAL_MESSAGE];
   });
 
   const [cardSearch, setCardSearch] = useState("");
@@ -531,8 +539,8 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           dropdownRef={dropdownRef}
         />
 
-        {/* Sample prompt shortcuts — only shown when chat is fresh */}
-        {!query && chatHistory.length <= 1 && (
+        {/* Sample prompt shortcuts — only shown on desktop when chat is fresh */}
+        {!isMobile && !query && chatHistory.length <= 1 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <span
               style={{

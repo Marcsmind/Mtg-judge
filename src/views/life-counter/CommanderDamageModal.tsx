@@ -1,6 +1,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import type { Player } from "../../types/game";
+import { BottomSheet } from "../../components/BottomSheet";
 
 type ColorName = "white" | "blue" | "black" | "red" | "green" | "purple";
 
@@ -25,36 +26,15 @@ export const CommanderDamageModal: React.FC<CommanderDamageModalProps> = ({
   onAdjust,
   onClose,
 }) => {
-  const tTheme = colors[targetPlayer.colorName] || colors.purple;
-
   return (
-    <div
+    <BottomSheet
+      onClose={onClose}
+      zIndex={80}
+      maxWidth="500px"
       role="dialog"
-      aria-modal="true"
+      aria-modal={true}
       aria-label={`Commander Damage for ${targetPlayer.name}`}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(5,4,8,0.88)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 80,
-      }}
     >
-      <div
-        className="glass-panel"
-        style={{
-          width: "500px",
-          maxWidth: "92vw",
-          padding: "24px",
-          border: `1.5px solid ${tTheme.accent}`,
-          background: "rgba(14,11,22,0.99)",
-          boxShadow: "0 24px 48px rgba(0,0,0,0.7)",
-        }}
-      >
         {/* Header */}
         <div
           style={{
@@ -248,7 +228,6 @@ export const CommanderDamageModal: React.FC<CommanderDamageModalProps> = ({
             Save &amp; Close
           </button>
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };

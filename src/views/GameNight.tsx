@@ -405,6 +405,10 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
               <div style={{ display: "flex", gap: "8px" }}>
                 <input
                   type="text"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  autoComplete="off"
+                  spellCheck={false}
                   className="glass-input"
                   placeholder="ABCD"
                   value={joinCodeInput}

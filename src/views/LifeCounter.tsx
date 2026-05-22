@@ -11,15 +11,7 @@ import { loadDecks, recordDeckResult } from "../services/decks";
 import type { SavedDeck } from "../types/deck";
 import { useAppStore } from "../store/useAppStore";
 import { hapticHeavy } from "../utils/haptics";
-import {
-  generateRoomCode,
-  createRoom,
-  joinRoom as joinSyncRoom,
-  broadcastState,
-  leaveRoom,
-  SYNC_SCHEMA_VERSION,
-} from "../services/multiplayerSync";
-import type { SyncState, ConnectionStatus } from "../services/multiplayerSync";
+import { useMultiplayer } from "../hooks/useMultiplayer";
 import type { Player, ActiveCounters, DayNightState, TokenKey, LobbyPlayer } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { GameHistoryLedger } from "./life-counter/GameHistoryLedger";
@@ -233,46 +225,31 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const [timerMode, setTimerMode] = useState<"up" | "down">("up");
   const COUNTDOWN_FROM = 2700; // 45 minutes
 
-  // ── Multiplayer ──
-  const [roomCode, setRoomCode] = useState<string | null>(null);
-  const [roomConnected, setRoomConnected] = useState(false);
-  const [roomRole, setRoomRole] = useState<"host" | "guest" | null>(null);
-  const [roomName, setRoomName] = useState("");          // Optional host-set display name
-  const [joinCodeInput, setJoinCodeInput] = useState("");
-  const [firstPlayerName] = useState<string | null>(() => mpInitFirstPlayer ?? null);
-  const [roomLoading, setRoomLoading] = useState(false);
-  const [roomCopied, setRoomCopied] = useState(false);
-  const [roomError, setRoomError] = useState<string | null>(null);
-  const [roomReconnecting, setRoomReconnecting] = useState(false);
-  const lastAppliedAt = useRef<number>(0);
-  // Local-priority: tracks when the local user last made a game action
-  const lastLocalChangeAt = useRef<number>(0);
-  // Debounce timer for broadcasting state changes
-  const broadcastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Stable ref for handleRemoteUpdate — avoids stale closure in Supabase callbacks
-  const handleRemoteUpdateRef = useRef<(s: SyncState) => void>(() => undefined);
-  // Stable ref for the connection-status callback — wired into subscribeWithRetry
-  const handleConnectionStatusRef = useRef<(status: ConnectionStatus) => void>((status) => {
-    if (status === "reconnecting") {
-      setRoomReconnecting(true);
-      setRoomError(null);
-    } else if (status === "connected") {
-      setRoomReconnecting(false);
-      setRoomError(null);
-    } else if (status === "failed") {
-      setRoomReconnecting(false);
-      setRoomConnected(false);
-      setRoomError("Connection lost. Tap to reconnect.");
+  // ── firstPlayerName (lobby spin winner — read-only echo of mpInitFirstPlayer) ──
+  const firstPlayerName: string | null = mpInitFirstPlayer ?? null;
+
+  // ── Turn tracker ──
+  const [activePlayerIndex, setActivePlayerIndex] = useState<number>(() => {
+    if (mpInitFirstPlayer && players.length > 0) {
+      const idx = players.findIndex(p => p.name === mpInitFirstPlayer);
+      return idx >= 0 ? idx : 0;
     }
+    return 0;
   });
-  // Stable ref for buildSyncState — the timer in scheduleBroadcast fires 150ms after
-  // the action, by which time React has re-rendered with the NEW state values.
-  // Without this ref the timer closes over the OLD players snapshot and broadcasts it.
-  const buildSyncStateRef = useRef<() => SyncState>(() => ({
-    schemaVersion: SYNC_SCHEMA_VERSION,
-    players: [], activeCounters: {} as ActiveCounters,
-    dayNightState: "none", updatedAt: 0, updatedBy: "",
-  }));
+  const [turnNumber, setTurnNumber] = useState<number>(1);
+
+  // ── Multiplayer (extracted into useMultiplayer hook) ──
+  const {
+    roomCode, roomConnected, roomRole, roomName, setRoomName,
+    joinCodeInput, setJoinCodeInput, roomLoading, roomCopied,
+    roomError, roomReconnecting,
+    scheduleBroadcast, handleCreateRoom, handleJoinRoom, handleLeaveRoom, copyRoomCode,
+  } = useMultiplayer({
+    players, activeCounters, dayNightState, startingLife,
+    onRemotePlayers:  setPlayers,
+    onRemoteCounters: setActiveCounters,
+    onRemoteDayNight: setDayNightState,
+  });
 
   // ── Persistence ──
   const setPlayerNames = useAppStore(s => s.setPlayerNames);
@@ -305,36 +282,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const addLog = (msg: string) => {
     const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     setHistory(prev => [`[${t}] ${msg}`, ...prev.slice(0, 49)]);
-  };
-
-  /** Build the current game state snapshot for broadcasting */
-  const buildSyncState = (): SyncState => ({
-    schemaVersion: SYNC_SCHEMA_VERSION,
-    players,
-    activeCounters,
-    dayNightState,
-    roomName: roomName || undefined,
-    updatedAt: Date.now(),
-    updatedBy: players[0]?.name ?? "Unknown",
-  });
-  // Keep the ref pointing at the latest version every render.
-  // The setTimeout in scheduleBroadcast fires ~150ms after an action, AFTER React
-  // has already re-rendered with the new state — so .current() returns the
-  // updated values rather than the stale closure captured at call time.
-  useEffect(() => { buildSyncStateRef.current = buildSyncState; });
-
-  /**
-   * Debounced broadcast — batches rapid taps into one message (150ms).
-   * Uses buildSyncStateRef so the timer always reads the POST-render state,
-   * not the stale pre-setPlayers snapshot that the direct closure would capture.
-   */
-  const scheduleBroadcast = () => {
-    if (!roomConnected || !roomCode) return;
-    lastLocalChangeAt.current = Date.now();
-    if (broadcastTimerRef.current) clearTimeout(broadcastTimerRef.current);
-    broadcastTimerRef.current = setTimeout(() => {
-      broadcastState(roomCode, buildSyncStateRef.current());
-    }, 150);
   };
 
   // ── Undo handler (declared after addLog + scheduleBroadcast so it can call both) ──
@@ -398,147 +345,20 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     : "var(--text-primary)"
     : "var(--text-primary)";
 
-  // ── Multiplayer helpers ──
+  // ── Turn tracker handlers ──
 
-  /**
-   * Apply received remote state — last-write-wins via updatedAt.
-   * Handles both lobby phase (player list sync) and game phase (life counter sync).
-   * Local-priority window: if the local player made a change in the last 500ms,
-   * ignore incoming game-state updates to prevent their change from reverting.
-   */
-  const handleRemoteUpdate = (state: SyncState) => {
-    // Discard payloads from a different schema version — prevents silent data
-    // corruption when the Player shape changes in a future deploy.
-    if (state.schemaVersion !== SYNC_SCHEMA_VERSION) return;
-    if (state.updatedAt <= lastAppliedAt.current) return;
-    lastAppliedAt.current = state.updatedAt;
-
-    // Ignore pre-game lobby/turn-select broadcasts from GameNight — those are
-    // handled by the GameNight and TurnOrder views, not the life counter.
-    if (state.phase === "lobby" || state.phase === "turn-select") return;
-
-    // ── Standard game-state sync ──────────────────────────────────────────────
-    if (Date.now() - lastLocalChangeAt.current < 500) return;
-    if (state.players && state.players.length > 0) setPlayers(state.players);
-    setActiveCounters(state.activeCounters);
-    setDayNightState(state.dayNightState);
-    if (state.roomName !== undefined) setRoomName(state.roomName);
-  };
-  // Keep refs fresh every render so async Supabase callbacks always call the latest version
-  useEffect(() => {
-    handleRemoteUpdateRef.current = handleRemoteUpdate;
-    handleConnectionStatusRef.current = (status: ConnectionStatus) => {
-      if (status === "reconnecting") {
-        setRoomReconnecting(true);
-        setRoomError(null);
-      } else if (status === "connected") {
-        setRoomReconnecting(false);
-        setRoomError(null);
-      } else if (status === "failed") {
-        setRoomReconnecting(false);
-        setRoomConnected(false);
-        setRoomError("Connection lost. Tap to reconnect.");
-      }
-    };
-  });
-
-  const handleCreateRoom = async () => {
-    if (!isSupabaseConfigured) return;
-    setRoomLoading(true);
-    setRoomError(null);
-    const code = generateRoomCode();
-    try {
-      const ok = await createRoom(
-        code,
-        (s) => handleRemoteUpdateRef.current(s),
-        (status) => handleConnectionStatusRef.current(status),
-      );
-      if (ok) {
-        setRoomCode(code);
-        setRoomConnected(true);
-        setRoomRole("host");
-        showToast(`Room ${code} created — life totals will sync in real time!`, "success");
-        localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-        localStorage.setItem("nexus_judge_room_role", "host");
-      } else {
-        setRoomError("Could not connect. Check your internet and try again.");
-      }
-    } catch {
-      setRoomError("Could not connect. Check your internet and try again.");
-    } finally {
-      setRoomLoading(false);
-    }
+  const goNextTurn = () => {
+    const nextIdx = (activePlayerIndex + 1) % players.length;
+    const nextTurn = turnNumber + 1;
+    setActivePlayerIndex(nextIdx);
+    setTurnNumber(nextTurn);
+    addLog(`Turn ${nextTurn} — ${players[nextIdx]?.name ?? "?"}`);
+    scheduleBroadcast();
   };
 
-  const handleJoinRoom = async (overrideCode?: string) => {
-    const code = (overrideCode ?? joinCodeInput).trim().toUpperCase();
-    if (!code || !isSupabaseConfigured) return;
-    setRoomLoading(true);
-    setRoomError(null);
-    const ok = await joinSyncRoom(
-      code,
-      (s) => handleRemoteUpdateRef.current(s),
-      (status) => handleConnectionStatusRef.current(status),
-    );
-    if (ok) {
-      const role = overrideCode
-        ? (localStorage.getItem("nexus_judge_room_role") as "host" | "guest" | null ?? "guest")
-        : "guest";
-      setRoomCode(code);
-      setRoomConnected(true);
-      setRoomRole(role);
-      localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-      localStorage.setItem("nexus_judge_room_role", role);
-    } else if (!overrideCode) {
-      // Only show error for manual joins — silent failure is fine for auto-rejoin
-      setRoomError("Room not found or connection failed. Check the code and try again.");
-    }
-    setRoomLoading(false);
-    if (!overrideCode) setJoinCodeInput("");
+  const goPrevTurn = () => {
+    setActivePlayerIndex(prev => (prev - 1 + players.length) % players.length);
   };
-
-  const handleLeaveRoom = () => {
-    if (roomCode) leaveRoom(roomCode);
-    setRoomCode(null);
-    setRoomConnected(false);
-    setRoomRole(null);
-    setRoomError(null);
-    setRoomReconnecting(false);
-    lastAppliedAt.current = 0;
-    lastLocalChangeAt.current = 0;
-    localStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
-    localStorage.removeItem("nexus_judge_room_role");
-  };
-
-  const copyRoomCode = () => {
-    if (!roomCode) return;
-    navigator.clipboard.writeText(roomCode).catch(() => undefined);
-    setRoomCopied(true);
-    showToast(`Room code ${roomCode} copied!`, "success");
-    setTimeout(() => setRoomCopied(false), 2000);
-  };
-
-  // ── Auto-rejoin on mount (app reopened after close) ──
-  useEffect(() => {
-    const savedCode = localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
-    if (!savedCode || !isSupabaseConfigured) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    handleJoinRoom(savedCode);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // runs once on mount only
-
-  // ── Auto-rejoin on visibility change (phone screen on / tab refocus) ──
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState !== "visible") return;
-      const savedCode = localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
-      if (!savedCode || !isSupabaseConfigured || roomConnected) return;
-      handleJoinRoom(savedCode);
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomConnected]);
 
   // ── Save-game helpers ─────────────────────────────────────────────────────
 
@@ -899,6 +719,17 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   return (
     <div style={{ display: "flex", gap: "16px", height: "calc(100dvh - 48px)", overflow: "hidden" }}>
 
+      {/* ── Screen-reader announcements for room status changes (aria-live) ── */}
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap" }}
+      >
+        {roomReconnecting ? "Reconnecting to room…"
+          : roomConnected && roomCode ? `Connected to room ${roomCode}`
+          : ""}
+      </div>
+
       {/* ── Main Column ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflow: "hidden", minWidth: 0 }}>
 
@@ -1001,6 +832,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             disabled={undoStack.length === 0}
             aria-label="Undo last action"
             title={undoStack.length > 0 ? `Undo last action (Ctrl+Z) — ${undoStack.length} step${undoStack.length > 1 ? "s" : ""} available` : "Nothing to undo"}
+            className="touch-icon-btn"
             style={{
               display: "flex", alignItems: "center", gap: "5px",
               background: "rgba(255,255,255,0.04)",
@@ -1024,6 +856,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               aria-pressed={historyVisible}
               aria-label={historyVisible ? "Hide game history" : "Show game history"}
               title={historyVisible ? "Hide history" : "Show history"}
+              className="touch-icon-btn"
               style={{
                 display: "flex", alignItems: "center", gap: "6px",
                 background: historyVisible ? "rgba(6,182,212,0.12)" : "rgba(255,255,255,0.04)",
@@ -1044,6 +877,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             onClick={toggleControls}
             aria-label={controlsCollapsed ? "Show game controls" : "Hide game controls"}
             title={controlsCollapsed ? "Show controls" : "Hide controls"}
+            className="touch-icon-btn"
             style={{
               display: "flex", alignItems: "center", gap: "6px",
               background: controlsCollapsed ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.04)",
@@ -1216,6 +1050,25 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               </button>
             </div>
 
+            {/* ── Turn Tracker ── */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0", borderTop: "1px solid var(--border-color)" }}>
+              <button
+                onClick={goPrevTurn}
+                className="glass-button touch-icon-btn"
+                style={{ padding: "6px 12px", minWidth: "44px", fontSize: "0.82rem" }}
+                aria-label="Previous player's turn"
+              >‹ Prev</button>
+              <span style={{ flex: 1, textAlign: "center", fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                Turn {turnNumber} · {players[activePlayerIndex]?.name ?? "—"}
+              </span>
+              <button
+                onClick={goNextTurn}
+                className="glass-button touch-icon-btn"
+                style={{ padding: "6px 12px", minWidth: "44px", fontSize: "0.82rem" }}
+                aria-label="Next player's turn"
+              >Next ›</button>
+            </div>
+
             {/* ── Multiplayer Section ── */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
               <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", flexShrink: 0 }}>
@@ -1351,7 +1204,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
         {/* ── Player Grid ── */}
         <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
-          {players.map(p => {
+          {players.map((p, idx) => {
             const playerTheme = colors[p.colorName] || colors.purple;
             return (
               <PlayerCard
@@ -1380,6 +1233,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 setActiveDamageEditor={setActiveDamageEditor}
                 revivePlayer={revivePlayer}
                 isFirst={firstPlayerName !== null && p.name === firstPlayerName}
+                isActiveTurn={idx === activePlayerIndex}
                 commanderName={p.commanderName}
                 onSetCommander={setPlayerCommander}
                 onClearCommander={clearPlayerCommander}

@@ -1,16 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { CardCodex } from "./components/CardCodex";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { AIJudge } from "./views/AIJudge";
+// Eagerly loaded — landing view or lightweight
 import { LifeCounter } from "./views/LifeCounter";
 import { DiceAndCoins } from "./views/DiceAndCoins";
 import { TurnOrder } from "./views/TurnOrder";
 import { QuickRules } from "./views/QuickRules";
-import { DeckBuilder } from "./views/DeckBuilder";
 import { Leaderboard } from "./views/Leaderboard";
-import { GameNight } from "./views/GameNight";
-import { AppGuide } from "./views/AppGuide";
+// Lazily loaded — heavy views split into separate chunks
+const AIJudge    = lazy(() => import("./views/AIJudge").then(m => ({ default: m.AIJudge })));
+const DeckBuilder = lazy(() => import("./views/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
+const GameNight  = lazy(() => import("./views/GameNight").then(m => ({ default: m.GameNight })));
+const AppGuide   = lazy(() => import("./views/AppGuide").then(m => ({ default: m.AppGuide })));
 import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
@@ -219,7 +221,13 @@ function App() {
 
       {/* Main Feature View */}
       <main className="main-content">
-        {renderActiveView()}
+        <Suspense fallback={
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+            Loading…
+          </div>
+        }>
+          {renderActiveView()}
+        </Suspense>
       </main>
 
       {/* Slide-out Search Codex Overlay */}

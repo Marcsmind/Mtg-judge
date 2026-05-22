@@ -156,6 +156,15 @@ body {
   box-shadow: none;
 }
 
+/* Touch target minimum — ensures 44×44 dp tap area on icon-only buttons */
+.touch-icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Premium Navigation Active Bar */
 .sidebar-link {
   position: relative;
@@ -442,15 +451,16 @@ h1, h2, h3, h4, h5 {
     flex-direction: column;
   }
 
-  /* Sidebar → fixed bottom tab bar */
+  /* Sidebar → fixed bottom tab bar, scrollable for 9+ items */
   .app-container > aside {
     width: 100% !important;
     height: 64px !important;
     margin: 0 !important;
     border-radius: 0 !important;
     flex-direction: row !important;
-    padding: 0 8px !important;
-    justify-content: space-around !important;
+    padding: 0 4px !important;
+    justify-content: flex-start !important;
+    gap: 2px !important;
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
@@ -458,25 +468,35 @@ h1, h2, h3, h4, h5 {
     border-top: 1px solid var(--border-color) !important;
     border-left: none !important;
     border-right: none !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none !important;
+  }
+
+  .app-container > aside::-webkit-scrollbar {
+    display: none !important;
   }
 
   /* Nav items: column layout (icon on top, hidden label below) */
   .app-container > aside nav,
   .app-container > aside .sidebar-footer {
     flex-direction: row !important;
-    gap: 0 !important;
+    gap: 2px !important;
     align-items: center;
     display: flex !important;
+    flex-shrink: 0 !important;
   }
 
   .app-container > aside nav button,
   .app-container > aside .sidebar-footer button {
     flex-direction: column !important;
     gap: 2px !important;
-    padding: 6px 10px !important;
+    padding: 6px 8px !important;
     border-radius: 6px !important;
     font-size: 0.6rem !important;
-    min-width: 44px;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    flex-shrink: 0 !important;
   }
 
   /* Main content: add padding so last content isn't hidden behind tab bar */

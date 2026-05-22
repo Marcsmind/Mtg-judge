@@ -93,6 +93,9 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   const [fetchProgress, setFetchProgress] = useState<{ done: number; total: number } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [urlFetching, setUrlFetching] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   // ── My Decks state ──
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>(() => loadDecks());
@@ -243,6 +246,23 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   // ── Import mode ──
 
   /** Fetch cards with max 5 concurrent requests */
+  const handleFetchFromUrl = async () => {
+    if (!importUrl.trim()) return;
+    setUrlFetching(true);
+    setUrlError(null);
+    try {
+      const res = await fetch(importUrl.trim());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      setRawDecklist(text.trim());
+      setImportUrl("");
+    } catch {
+      setUrlError("Couldn't fetch that URL — CORS may be blocking it. Paste the decklist manually instead.");
+    } finally {
+      setUrlFetching(false);
+    }
+  };
+
   const handleParseDecklist = useCallback(async () => {
     const names = parseDecklist(rawDecklist);
     if (names.length === 0) return;
@@ -516,6 +536,33 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
               <label style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase" }}>
                 Paste Decklist (MTGO / Moxfield format)
               </label>
+
+              {/* URL import row */}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="url"
+                  className="glass-input"
+                  placeholder="Paste deck export URL (Moxfield, Archidekt, Pastebin…)"
+                  value={importUrl}
+                  onChange={e => setImportUrl(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleFetchFromUrl()}
+                  style={{ flex: 1, padding: "8px 12px", fontSize: "0.85rem" }}
+                />
+                <button
+                  onClick={handleFetchFromUrl}
+                  disabled={!importUrl.trim() || urlFetching}
+                  className="glass-button"
+                  style={{ padding: "8px 16px", fontSize: "0.82rem", flexShrink: 0 }}
+                >
+                  {urlFetching ? "Fetching…" : "Fetch"}
+                </button>
+              </div>
+              {urlError && (
+                <p style={{ fontSize: "0.75rem", color: "var(--accent-rose)", marginTop: "-4px" }}>
+                  {urlError}
+                </p>
+              )}
+
               <textarea
                 className="glass-input"
                 placeholder={"1 Sol Ring\n1 Command Tower\n1 Atraxa, Praetors' Voice\n..."}
@@ -898,7 +945,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                     {deck.notes && <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{deck.notes}</p>}
                   </div>
                   {/* Stats */}
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ textAlign: "right", flexShrink: 0, minWidth: "60px" }}>
                     {winRate !== null ? (
                       <>
                         <span style={{
@@ -906,6 +953,16 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                           color: winRate >= 50 ? "#10b981" : winRate >= 33 ? "#f59e0b" : "#ef4444",
                         }}>{winRate}%</span>
                         <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{deck.wins}W / {deck.gamesPlayed - deck.wins}L</p>
+                        {/* Win-rate progress bar */}
+                        <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", marginTop: "5px", overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%",
+                            width: `${winRate}%`,
+                            background: winRate >= 50 ? "var(--accent-emerald)" : winRate >= 33 ? "#f59e0b" : "var(--accent-rose)",
+                            borderRadius: "2px",
+                            transition: "width 0.4s ease",
+                          }} />
+                        </div>
                       </>
                     ) : (
                       <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>No games</span>
@@ -929,6 +986,9 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                 <BookMarked size={32} style={{ margin: "0 auto 12px", display: "block", opacity: 0.3 }} />
                 <p style={{ fontSize: "0.88rem" }}>No decks saved yet.</p>
                 <p style={{ fontSize: "0.78rem", marginTop: "4px" }}>Add your first deck to track win rates and fill in your commander quickly during Game Night.</p>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "8px" }}>
+                  Win tracking starts automatically when you link a deck to a player in Game Night or Life Counter.
+                </p>
               </div>
             )}
           </>
