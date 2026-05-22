@@ -66,6 +66,13 @@ create policy "game_participants: public read"
 create policy "game_participants: authenticated insert"
   on public.game_participants for insert with check (auth.uid() is not null);
 
+-- ── 4. Multiplayer — Commander Name ─────────────────────────
+-- Adds the commander_name column to existing game_participants rows.
+-- Safe to run multiple times (IF NOT EXISTS guard).
+
+ALTER TABLE public.game_participants
+  ADD COLUMN IF NOT EXISTS commander_name text;
+
 -- ── Done ─────────────────────────────────────────────────────
 -- Next steps in Supabase Dashboard:
 --   Authentication → Providers → Enable "Anonymous Sign-ins"

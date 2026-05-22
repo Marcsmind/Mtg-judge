@@ -17,7 +17,7 @@ import {
   SYNC_SCHEMA_VERSION,
 } from "../services/multiplayerSync";
 import type { SyncState, ConnectionStatus } from "../services/multiplayerSync";
-import type { Player, ActiveCounters, DayNightState, TokenKey } from "../types/game";
+import type { Player, ActiveCounters, DayNightState, TokenKey, LobbyPlayer } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { GameHistoryLedger } from "./life-counter/GameHistoryLedger";
 import { CommanderDamageModal } from "./life-counter/CommanderDamageModal";
@@ -89,10 +89,19 @@ function createPlayer(index: number, life: number): Player {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface LifeCounterProps {
-  userId?: string; // current auth user — passed from App.tsx
+  userId?: string;                   // current auth user — passed from App.tsx
+  /** When starting a Game Night session, App.tsx sets this to the lobby player
+   *  list so LifeCounter can initialize the grid from it. The component key is
+   *  bumped alongside this prop so the lazy useState initializer runs fresh. */
+  mpInitLobbyPlayers?: LobbyPlayer[];
+  mpInitFirstPlayer?:  string;       // spin winner — shown with the ⭐ badge briefly
 }
 
-export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
+export const LifeCounter: React.FC<LifeCounterProps> = ({
+  userId,
+  mpInitLobbyPlayers,
+  mpInitFirstPlayer,
+}) => {
   const { showToast } = useToast();
 
   // ── State ──
@@ -102,6 +111,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
   });
 
   const [playerCount, setPlayerCount] = useState<number>(() => {
+    if (mpInitLobbyPlayers && mpInitLobbyPlayers.length > 0) return mpInitLobbyPlayers.length;
     const s = localStorage.getItem("nexus_judge_player_count");
     return s ? parseInt(s, 10) : 4;
   });
@@ -125,6 +135,17 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
 
   const [players, setPlayers] = useState<Player[]>(() => {
     const sl = parseInt(localStorage.getItem("nexus_judge_starting_life") || String(DEFAULT_LIFE), 10);
+    // ── Multiplayer lobby init ────────────────────────────────────────────────
+    if (mpInitLobbyPlayers && mpInitLobbyPlayers.length > 0) {
+      const sorted = [...mpInitLobbyPlayers].sort((a, b) => a.colorName.localeCompare(b.colorName));
+      return sorted.map((lp, i) => ({
+        ...createPlayer(i, sl),
+        name: lp.playerName,
+        colorName: lp.colorName,
+        commanderName: lp.commanderName || undefined,
+      }));
+    }
+    // ── Standard localStorage init ────────────────────────────────────────────
     const s = localStorage.getItem("nexus_judge_players");
     if (s) {
       try {
@@ -205,6 +226,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
   const [roomRole, setRoomRole] = useState<"host" | "guest" | null>(null);
   const [roomName, setRoomName] = useState("");          // Optional host-set display name
   const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [firstPlayerName] = useState<string | null>(() => mpInitFirstPlayer ?? null);
   const [roomLoading, setRoomLoading] = useState(false);
   const [roomCopied, setRoomCopied] = useState(false);
   const [roomError, setRoomError] = useState<string | null>(null);
@@ -367,17 +389,24 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
 
   /**
    * Apply received remote state — last-write-wins via updatedAt.
+   * Handles both lobby phase (player list sync) and game phase (life counter sync).
    * Local-priority window: if the local player made a change in the last 500ms,
-   * ignore incoming remote state to prevent their change from reverting.
+   * ignore incoming game-state updates to prevent their change from reverting.
    */
   const handleRemoteUpdate = (state: SyncState) => {
     // Discard payloads from a different schema version — prevents silent data
     // corruption when the Player shape changes in a future deploy.
     if (state.schemaVersion !== SYNC_SCHEMA_VERSION) return;
     if (state.updatedAt <= lastAppliedAt.current) return;
-    if (Date.now() - lastLocalChangeAt.current < 500) return;
     lastAppliedAt.current = state.updatedAt;
-    setPlayers(state.players);
+
+    // Ignore pre-game lobby/turn-select broadcasts from GameNight — those are
+    // handled by the GameNight and TurnOrder views, not the life counter.
+    if (state.phase === "lobby" || state.phase === "turn-select") return;
+
+    // ── Standard game-state sync ──────────────────────────────────────────────
+    if (Date.now() - lastLocalChangeAt.current < 500) return;
+    if (state.players && state.players.length > 0) setPlayers(state.players);
     setActiveCounters(state.activeCounters);
     setDayNightState(state.dayNightState);
     if (state.roomName !== undefined) setRoomName(state.roomName);
@@ -415,6 +444,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
         setRoomCode(code);
         setRoomConnected(true);
         setRoomRole("host");
+        showToast(`Room ${code} created — life totals will sync in real time!`, "success");
         localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
         localStorage.setItem("nexus_judge_room_role", "host");
       } else {
@@ -621,10 +651,11 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
         startingLife,
         durationSeconds: timerSeconds,
         players: players.map(p => ({
-          userId:     p.id === selectedPlayerId ? userId : undefined,
-          playerName: p.name,
-          finalLife:  p.life,
-          isWinner:   p.id === winner?.id && notDefeated(winner),
+          userId:        p.id === selectedPlayerId ? userId : undefined,
+          playerName:    p.name,
+          finalLife:     p.life,
+          isWinner:      p.id === winner?.id && notDefeated(winner),
+          commanderName: p.commanderName,
         })),
       });
       showToast("Game recorded to leaderboard! 🏆", "success");
@@ -1259,7 +1290,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
           </div>
         )}
 
-        {/* Player Grid */}
+        {/* ── Player Grid ── */}
         <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
           {players.map(p => {
             const playerTheme = colors[p.colorName] || colors.purple;
@@ -1289,6 +1320,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({ userId }) => {
                 togglePlayerTokensPanel={togglePlayerTokensPanel}
                 setActiveDamageEditor={setActiveDamageEditor}
                 revivePlayer={revivePlayer}
+                isFirst={firstPlayerName !== null && p.name === firstPlayerName}
+                commanderName={p.commanderName}
               />
             );
           })}

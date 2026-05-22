@@ -35,8 +35,8 @@ describe("generateRoomCode", () => {
 // ── SYNC_SCHEMA_VERSION ───────────────────────────────────────────────────────
 
 describe("SYNC_SCHEMA_VERSION", () => {
-  it("is 1", () => {
-    expect(SYNC_SCHEMA_VERSION).toBe(1);
+  it("is 2 (bumped for multiplayer lobby support)", () => {
+    expect(SYNC_SCHEMA_VERSION).toBe(2);
   });
 });
 

@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Shuffle, Sparkles, RefreshCw, Trophy, Users, AlertTriangle, ChevronRight } from "lucide-react";
+import { Shuffle, Sparkles, RefreshCw, Trophy, Users, AlertTriangle, ChevronRight, Play } from "lucide-react";
 import { useAppStore } from "../store/useAppStore";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import {
+  subscribeWithRetry,
+  broadcastState,
+  leaveRoom,
+  SYNC_SCHEMA_VERSION,
+} from "../services/multiplayerSync";
+import type { SyncState } from "../services/multiplayerSync";
+import type { LobbyPlayer } from "../types/game";
 
 // ── Colors (match LifeCounter palette) ───────────────────────────────────────
 
@@ -20,23 +28,85 @@ interface RollOffResult {
   roll: number;
 }
 
-export const TurnOrder: React.FC = () => {
+// ── Props ──────────────────────────────────────────────────────────────────────
+interface TurnOrderProps {
+  /** Set by App.tsx when this view was reached via the multiplayer lobby flow. */
+  mpRoomCode?:      string | null;
+  mpRole?:          "host" | "guest" | null;
+  mpLobbyPlayers?:  LobbyPlayer[];
+  /** Called when this view needs to signal App.tsx to switch tabs.
+   *  `spinWinner` is the name of the player who won the spin. */
+  onMpPhaseChange?: (phase: "game", spinWinner?: string) => void;
+}
+
+// ── Spin duration ──────────────────────────────────────────────────────────────
+/** Fixed animation length used on ALL devices for the synchronized spin. */
+const MP_SPIN_DURATION_MS = 3_500;
+
+export const TurnOrder: React.FC<TurnOrderProps> = ({
+  mpRoomCode,
+  mpRole,
+  mpLobbyPlayers,
+  onMpPhaseChange,
+}) => {
   // ── Refs ──────────────────────────────────────────────────────────────────
   const spinTimeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rollAnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mpBroadcastDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
-      if (spinTimeoutRef.current    !== null) clearTimeout(spinTimeoutRef.current);
-      if (rollAnimIntervalRef.current !== null) clearInterval(rollAnimIntervalRef.current);
+      if (spinTimeoutRef.current        !== null) clearTimeout(spinTimeoutRef.current);
+      if (rollAnimIntervalRef.current   !== null) clearInterval(rollAnimIntervalRef.current);
+      if (mpBroadcastDelayRef.current   !== null) clearTimeout(mpBroadcastDelayRef.current);
     };
   }, []);
+
+  // ── Multiplayer state ─────────────────────────────────────────────────────
+  const isMultiplayer = Boolean(mpRoomCode && mpLobbyPlayers && mpLobbyPlayers.length > 0);
+  const [mpSpinWinner,  setMpSpinWinner]  = useState<string | null>(null);
+  const [showBeginGame, setShowBeginGame] = useState(false);
+  // Stable refs — avoids stale closures in Supabase callbacks; updated every render below
+  const handleMpUpdateRef      = useRef<(s: SyncState) => void>(() => undefined);
+  const runMpSpinAnimationRef  = useRef<(name: string) => void>(() => undefined);
+
+  // Subscribe to room when in multiplayer mode
+  useEffect(() => {
+    if (!isMultiplayer || !mpRoomCode) return;
+    let alive = true;
+    subscribeWithRetry(mpRoomCode, s => { if (alive) handleMpUpdateRef.current(s); });
+    return () => {
+      alive = false;
+      leaveRoom(mpRoomCode);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mpRoomCode]); // only re-run if room code changes
+
+  // Keep handleMpUpdateRef fresh every render (calls runMpSpinAnimationRef so no forward-ref issue)
+  useEffect(() => {
+    handleMpUpdateRef.current = (state: SyncState) => {
+      if (state.schemaVersion !== SYNC_SCHEMA_VERSION) return;
+      // Phase: "game" → host pressed "Begin Game", all devices transition
+      if (state.phase === "game") {
+        onMpPhaseChange?.("game", state.mpSpinWinner ?? undefined);
+        return;
+      }
+      // Receive the spin winner (computed by host)
+      if (state.mpSpinWinner && !mpSpinWinner) {
+        runMpSpinAnimationRef.current(state.mpSpinWinner);
+      }
+    };
+  });
 
   // ── Zustand ───────────────────────────────────────────────────────────────
   const storePlayerNames = useAppStore(s => s.playerNames);
 
   // ── Player roster ─────────────────────────────────────────────────────────
   const [players, setPlayers] = useState<string[]>(() => {
+    // In multiplayer mode, roster comes from the lobby (locked — no add/remove)
+    if (mpLobbyPlayers && mpLobbyPlayers.length > 0) {
+      return mpLobbyPlayers.map(p => p.playerName);
+    }
     const saved = localStorage.getItem(STORAGE_KEYS.TURN_PLAYERS);
     if (saved) return JSON.parse(saved);
     if (storePlayerNames && storePlayerNames.length > 0) return storePlayerNames;
@@ -148,8 +218,66 @@ export const TurnOrder: React.FC = () => {
   };
 
   // ── Roulette spin ─────────────────────────────────────────────────────────
+
+  /** Run the roulette animation to a predetermined winner (used by guests + host mp mode). */
+  const runMpSpinAnimation = (targetName: string) => {
+    if (!isMultiplayer || !mpLobbyPlayers) return;
+    const names = mpLobbyPlayers.map(p => p.playerName);
+    const targetIdx = names.indexOf(targetName);
+    if (targetIdx === -1) return;
+
+    setSpinning(true);
+    setWinner(null);
+    setMpSpinWinner(null);
+
+    const duration = MP_SPIN_DURATION_MS;
+    let speed = 60;
+    let elapsed = 0;
+
+    const run = () => {
+      setCurrentIndex(prev => (prev === null ? 0 : (prev + 1) % names.length));
+      elapsed += speed;
+      if (elapsed >= duration) {
+        setSpinning(false);
+        setCurrentIndex(targetIdx);
+        setWinner(targetName);
+        setMpSpinWinner(targetName);
+        if (mpRole === "host") setShowBeginGame(true);
+      } else {
+        if      (elapsed > duration * 0.7) speed += 40;
+        else if (elapsed > duration * 0.4) speed += 20;
+        spinTimeoutRef.current = setTimeout(run, speed);
+      }
+    };
+    spinTimeoutRef.current = setTimeout(run, speed);
+  };
+
+  // Keep runMpSpinAnimationRef fresh every render so the subscription callback can call it
+  useEffect(() => { runMpSpinAnimationRef.current = runMpSpinAnimation; });
+
   const triggerRouletteSpin = () => {
     if (spinning || players.length === 0) return;
+
+    // ── Multiplayer mode: host computes winner + broadcasts ────────────────
+    if (isMultiplayer && mpRoomCode && mpRole === "host") {
+      const finalIdx     = Math.floor(Math.random() * players.length);
+      const winnerName   = players[finalIdx];
+      // Start our own animation immediately
+      runMpSpinAnimation(winnerName);
+      // Broadcast winner to guests with a 200 ms delay so they start ~simultaneously
+      mpBroadcastDelayRef.current = setTimeout(() => {
+        broadcastState(mpRoomCode, {
+          schemaVersion: SYNC_SCHEMA_VERSION,
+          players: [], activeCounters: {} as never, dayNightState: "none",
+          updatedAt: Date.now(), updatedBy: "host",
+          phase: "turn-select",
+          mpSpinWinner: winnerName,
+        });
+      }, 200);
+      return;
+    }
+
+    // ── Single-device mode (original behaviour) ───────────────────────────
     setSpinning(true);
     setWinner(null);
     setRollOffResults([]);
@@ -274,24 +402,32 @@ export const TurnOrder: React.FC = () => {
             Active Roster ({players.length})
           </h3>
 
-          <form onSubmit={handleAddPlayer} style={{ display: "flex", gap: "8px" }}>
-            <input
-              type="text"
-              className="glass-input"
-              placeholder="Add player..."
-              value={newPlayerName}
-              onChange={e => setNewPlayerName(e.target.value)}
-              style={{ flex: 1, padding: "8px 12px", fontSize: "0.85rem" }}
-            />
-            <button
-              type="submit"
-              className="glass-button"
-              aria-label="Add player to roster"
-              style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", padding: "8px 12px", fontSize: "0.8rem" }}
-            >
-              Add
-            </button>
-          </form>
+          {/* Hide add-player form in multiplayer mode (roster is locked from lobby) */}
+          {!isMultiplayer && (
+            <form onSubmit={handleAddPlayer} style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                className="glass-input"
+                placeholder="Add player..."
+                value={newPlayerName}
+                onChange={e => setNewPlayerName(e.target.value)}
+                style={{ flex: 1, padding: "8px 12px", fontSize: "0.85rem" }}
+              />
+              <button
+                type="submit"
+                className="glass-button"
+                aria-label="Add player to roster"
+                style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", padding: "8px 12px", fontSize: "0.8rem" }}
+              >
+                Add
+              </button>
+            </form>
+          )}
+          {isMultiplayer && (
+            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontStyle: "italic", textAlign: "center" }}>
+              Roster locked — set in lobby
+            </div>
+          )}
 
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
             {players.length === 0 ? (
@@ -336,15 +472,17 @@ export const TurnOrder: React.FC = () => {
 
                       <span style={{ flex: 1, fontSize: "0.9rem", fontWeight: currentIndex === idx ? 700 : 500 }}>{p}</span>
 
-                      <button
-                        onClick={() => handleRemovePlayer(idx)}
-                        aria-label={`Remove ${p} from roster`}
-                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
-                        onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
-                        onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
-                      >
-                        Remove
-                      </button>
+                      {!isMultiplayer && (
+                        <button
+                          onClick={() => handleRemovePlayer(idx)}
+                          aria-label={`Remove ${p} from roster`}
+                          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
+                          onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
+                          onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
 
                     {/* Inline color picker — expands below the row */}
@@ -418,22 +556,63 @@ export const TurnOrder: React.FC = () => {
               )}
             </div>
 
-            <button
-              onClick={triggerRouletteSpin}
-              className="glass-button"
-              disabled={spinning || players.length === 0}
-              aria-label={spinning ? "Selecting a player…" : "Spin the wheel to randomly choose who goes first"}
-              aria-busy={spinning}
-              style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", width: "100%", justifyContent: "center" }}
-            >
-              <span>{spinning ? "Selecting..." : "Spin the Wheel"}</span>
-            </button>
+            {/* In multiplayer mode, only host can spin; guests see a waiting message */}
+            {isMultiplayer && mpRole !== "host" ? (
+              <div style={{
+                padding: "10px 16px", borderRadius: "8px", textAlign: "center",
+                background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)",
+                color: "var(--text-muted)", fontSize: "0.85rem",
+              }}>
+                {spinning ? "⏳ Spinning…" : "Waiting for host to spin…"}
+              </div>
+            ) : (
+              <button
+                onClick={triggerRouletteSpin}
+                className="glass-button"
+                disabled={spinning || players.length === 0}
+                aria-label={spinning ? "Selecting a player…" : "Spin the wheel to randomly choose who goes first"}
+                aria-busy={spinning}
+                style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", width: "100%", justifyContent: "center" }}
+              >
+                <span>{spinning ? "Selecting..." : "Spin the Wheel"}</span>
+              </button>
+            )}
 
             {winner && (
               <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.95rem", color: "#ffffff", background: "rgba(234,179,8,0.1)", border: "1.5px solid rgba(234,179,8,0.3)", padding: "10px 16px", borderRadius: "8px", width: "100%", justifyContent: "center" }}>
                 <Trophy size={16} color="var(--accent-gold)" />
                 <span><strong>{winner}</strong> goes first!</span>
               </div>
+            )}
+
+            {/* ── Multiplayer: host-only "Begin Game" button ── */}
+            {isMultiplayer && showBeginGame && mpRole === "host" && mpRoomCode && (
+              <button
+                onClick={() => {
+                  broadcastState(mpRoomCode, {
+                    schemaVersion: SYNC_SCHEMA_VERSION,
+                    players: [], activeCounters: {} as never, dayNightState: "none",
+                    updatedAt: Date.now(), updatedBy: "host",
+                    phase: "game",
+                    mpSpinWinner: winner ?? undefined,
+                    lobbyPlayers: mpLobbyPlayers,
+                  });
+                  onMpPhaseChange?.("game", winner ?? undefined);
+                }}
+                aria-label="Begin the game — start life counter for all players"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  width: "100%", padding: "12px 20px", borderRadius: "12px", cursor: "pointer",
+                  background: "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(6,182,212,0.15))",
+                  border: "1.5px solid rgba(139,92,246,0.5)",
+                  color: "#fff", fontSize: "0.95rem", fontWeight: 700,
+                  boxShadow: "0 0 20px rgba(139,92,246,0.25)",
+                  animation: "pulse-glow 2s infinite",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <Play size={16} /> Begin Game →
+              </button>
             )}
           </div>
 

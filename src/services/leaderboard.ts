@@ -8,10 +8,11 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface GamePlayer {
-  userId?: string;    // auth.uid() — undefined for unlinked seats
+  userId?: string;        // auth.uid() — undefined for unlinked seats
   playerName: string;
   finalLife: number;
   isWinner: boolean;
+  commanderName?: string; // set from multiplayer lobby
 }
 
 export interface RecordGameParams {
@@ -80,11 +81,12 @@ export async function recordGame(params: RecordGameParams): Promise<string | nul
   // 2. Insert participants
   const { error: partErr } = await supabase.from("game_participants").insert(
     params.players.map(p => ({
-      game_id:     session.id,
-      user_id:     p.userId ?? null,
-      player_name: p.playerName,
-      final_life:  p.finalLife,
-      is_winner:   p.isWinner,
+      game_id:        session.id,
+      user_id:        p.userId ?? null,
+      player_name:    p.playerName,
+      final_life:     p.finalLife,
+      is_winner:      p.isWinner,
+      commander_name: p.commanderName ?? null,
     })),
   );
 

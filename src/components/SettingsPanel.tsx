@@ -5,6 +5,7 @@ import type { ThemeId } from "../constants/themes";
 import { upsertProfile, getDisplayName } from "../services/auth";
 import type { AuthUser } from "../services/auth";
 import { isSupabaseConfigured } from "../services/supabase";
+import { STORAGE_KEYS } from "../constants/storageKeys";
 
 interface SettingsPanelProps {
   apiKey: string;
@@ -34,6 +35,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
     e.preventDefault();
     if (!authUser?.id) return;
     await upsertProfile(authUser.id, displayName.trim() || "Player");
+    localStorage.setItem(STORAGE_KEYS.DISPLAY_NAME, displayName.trim() || "Player");
     setDisplayNameSaved(true);
     setTimeout(() => setDisplayNameSaved(false), 3000);
   };
@@ -394,7 +396,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
 
           {/* Display name form */}
           <form onSubmit={handleSaveDisplayName} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Leaderboard display name</label>
+            <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Display / Player Name</label>
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
               <input
                 type="text"
@@ -420,7 +422,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
               </button>
             </div>
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              This name appears on the global leaderboard. Max 24 characters.
+              Used on the leaderboard and pre-filled as your name when joining a multiplayer room. Max 24 characters.
             </p>
           </form>
         </div>

@@ -1,5 +1,5 @@
 import React from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy } from "lucide-react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 
 interface SidebarProps {
@@ -14,6 +14,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: "judge",       label: "AI Judge",      icon: Scale     },
     { id: "life",        label: "Life Counter",  icon: Heart     },
+    { id: "gamenight",   label: "Game Night",    icon: Sparkles  },
     { id: "dice",        label: "Dice & Coins",  icon: Dices     },
     { id: "turns",       label: "Turn Order",    icon: Shuffle   },
     { id: "rules",       label: "Quick Rules",   icon: BookOpen  },

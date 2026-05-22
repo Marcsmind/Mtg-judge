@@ -5,10 +5,10 @@
  * All state lives in LifeCounter; PlayerCard is purely presentational and
  * communicates back via callback props.
  */
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Plus, Minus, ShieldAlert, Crown, Skull, Radiation,
-  Swords, Star, Coins, Shield,
+  Swords, Star, Coins, Shield, Wand2, X,
 } from "lucide-react";
 import type { Player, ActiveCounters, TokenKey } from "../../types/game";
 
@@ -52,6 +52,8 @@ interface PlayerCardProps {
   togglePlayerTokensPanel:(id: number) => void;
   setActiveDamageEditor:(id: number) => void;
   revivePlayer:         (id: number) => void;
+  isFirst?:             boolean;  // "Goes First" star — auto-dismisses after 10 s
+  commanderName?:       string;   // enables the commander card-art popup button
 }
 
 export const PlayerCard: React.FC<PlayerCardProps> = ({
@@ -78,8 +80,28 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   togglePlayerTokensPanel,
   setActiveDamageEditor,
   revivePlayer,
+  isFirst = false,
+  commanderName,
 }) => {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+
+  // ── "Goes First" badge — shows briefly then auto-dismisses ───────────────
+  const [showFirstBadge, setShowFirstBadge] = useState(isFirst);
+  const firstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (isFirst) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowFirstBadge(true);
+      if (firstTimerRef.current) clearTimeout(firstTimerRef.current);
+      firstTimerRef.current = setTimeout(() => setShowFirstBadge(false), 10_000);
+    } else {
+      setShowFirstBadge(false);
+    }
+    return () => { if (firstTimerRef.current) clearTimeout(firstTimerRef.current); };
+  }, [isFirst]);
+
+  // ── Commander card-art popup ──────────────────────────────────────────────
+  const [cmdPopupOpen, setCmdPopupOpen] = useState(false);
 
   // ── Defeat conditions ─────────────────────────────────────────────────────
   const isDeadGeneral = p.life <= 0;
@@ -115,6 +137,26 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)",
       }}
     >
+      {/* ── "Goes First" Star Badge — auto-dismisses after 10 s ── */}
+      {showFirstBadge && (
+        <div
+          aria-label="This player goes first"
+          style={{
+            position: "absolute", top: "8px", left: "50%", transform: "translateX(-50%)",
+            background: "rgba(234,179,8,0.18)", border: "1px solid rgba(234,179,8,0.45)",
+            borderRadius: "20px", padding: "3px 10px",
+            display: "flex", alignItems: "center", gap: "5px",
+            fontSize: "0.68rem", fontWeight: 700, color: "#eab308",
+            zIndex: 20, whiteSpace: "nowrap",
+            boxShadow: "0 0 14px rgba(234,179,8,0.35)",
+            animation: "pulse-glow 2s infinite",
+            pointerEvents: "none",
+          }}
+        >
+          <Star size={10} fill="#eab308" color="#eab308" /> Goes First
+        </div>
+      )}
+
       {/* ── Monarch Badge ── */}
       {activeCounters.monarch && (
         <button
@@ -259,6 +301,24 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           onFocus={e => e.target.style.borderBottomColor = playerTheme.accent}
           onBlur={e => e.target.style.borderBottomColor = "transparent"}
         />
+        {/* Commander wand button — only shown when commanderName is set */}
+        {commanderName && (
+          <button
+            onClick={() => setCmdPopupOpen(true)}
+            aria-label={`View ${p.name}'s commander: ${commanderName}`}
+            title={`View commander: ${commanderName}`}
+            style={{
+              background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)",
+              borderRadius: "6px", padding: "3px 5px", cursor: "pointer", flexShrink: 0,
+              display: "flex", alignItems: "center",
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(139,92,246,0.25)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(139,92,246,0.12)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.3)"; }}
+          >
+            <Wand2 size={13} color="var(--accent-purple)" />
+          </button>
+        )}
         <button
           onClick={() => cycleColor(p.id)}
           aria-label={`Cycle color for ${p.name}`}
@@ -272,6 +332,45 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           title="Cycle Color"
         />
       </div>
+
+      {/* ── Commander Card-Art Popup ── */}
+      {cmdPopupOpen && commanderName && (
+        <>
+          {/* Backdrop */}
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+            onClick={() => setCmdPopupOpen(false)}
+          />
+          {/* Card modal */}
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+            zIndex: 51, display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
+            maxWidth: "260px",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#fff", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {commanderName}
+              </span>
+              <button
+                onClick={() => setCmdPopupOpen(false)}
+                aria-label="Close commander card view"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", padding: "2px" }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <img
+              src={`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(commanderName)}&format=image&version=border_crop`}
+              alt={commanderName}
+              style={{ borderRadius: "14px", maxWidth: "260px", width: "100%", boxShadow: "0 8px 40px rgba(0,0,0,0.7)" }}
+              onError={e => {
+                // Fallback: show art crop
+                (e.target as HTMLImageElement).src = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(commanderName)}&format=image&version=art_crop`;
+              }}
+            />
+          </div>
+        </>
+      )}
 
       {/* City's Blessing label */}
       {activeCounters.cityBlessing && p.cityBlessing && (

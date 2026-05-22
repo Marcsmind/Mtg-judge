@@ -38,6 +38,19 @@ export interface Player {
   tokens: PlayerTokens;
   enabledTokens: TokenKey[];
   tokensOpen: boolean;
+  commanderName?: string;  // set from multiplayer lobby; used for card-art popup
+}
+
+// ── Multiplayer Lobby ──────────────────────────────────────────────────────────
+
+/** Per-device identity during the pre-game lobby phase. */
+export interface LobbyPlayer {
+  deviceId: string;       // stable random UUID per device (from localStorage)
+  playerName: string;     // editable in lobby; pre-filled from Settings display name
+  colorName: "white" | "blue" | "black" | "red" | "green" | "purple";
+  commanderName: string;  // optional — text field with Scryfall autocomplete
+  isHost: boolean;
+  isReady: boolean;
 }
 
 export type DayNightState = "none" | "day" | "night";

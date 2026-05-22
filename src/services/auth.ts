@@ -6,6 +6,7 @@
  */
 
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { STORAGE_KEYS } from "../constants/storageKeys";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -128,4 +129,21 @@ export async function getDisplayName(userId: string): Promise<string> {
     .eq("id", userId)
     .single();
   return data?.display_name ?? "Player";
+}
+
+// ── Device identity ───────────────────────────────────────────────────────────
+
+/**
+ * Returns a stable random UUID for this device.
+ * Generated once and persisted in localStorage — survives page reloads,
+ * does NOT survive localStorage clear. Used as a unique device identifier
+ * during the multiplayer lobby phase.
+ */
+export function getDeviceId(): string {
+  let id = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(STORAGE_KEYS.DEVICE_ID, id);
+  }
+  return id;
 }

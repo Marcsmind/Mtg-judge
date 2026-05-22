@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { CardCodex } from "./components/CardCodex";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -9,12 +9,14 @@ import { TurnOrder } from "./views/TurnOrder";
 import { QuickRules } from "./views/QuickRules";
 import { DeckBuilder } from "./views/DeckBuilder";
 import { Leaderboard } from "./views/Leaderboard";
+import { GameNight } from "./views/GameNight";
 import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
 import { initAuth, onAuthStateChange, linkGoogleAccount } from "./services/auth";
 import type { AuthUser } from "./services/auth";
+import type { LobbyPlayer } from "./types/game";
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>("judge");
@@ -60,6 +62,53 @@ function App() {
     applyTheme(t);
   };
 
+  // ── Multiplayer lobby orchestration ──────────────────────────────────────
+  const [mpLobbyPlayers, setMpLobbyPlayers] = useState<LobbyPlayer[]>([]);
+  const [mpSpinWinner,   setMpSpinWinner]   = useState<string | null>(null);
+  const [mpRoomCode,     setMpRoomCode]     = useState<string | null>(null);
+  const [mpRole,         setMpRole]         = useState<"host" | "guest" | null>(null);
+  // Bumped every time a multiplayer game starts to force LifeCounter to remount
+  // with fresh state, ensuring the lazy useState initializer runs with new lobby data.
+  const [mpGameKey, setMpGameKey] = useState(0);
+
+  /**
+   * Called by LifeCounter when the lobby transitions to a new phase.
+   *
+   * "turn-select": LifeCounter passes the final lobby player list + room metadata
+   *   so App.tsx can relay them directly to TurnOrder — no localStorage polling needed.
+   * "game":        TurnOrder (via LifeCounter) signals the game has started;
+   *   App.tsx bumps the LifeCounter key so it remounts with lobby data.
+   */
+  const handleMpPhaseChange = useCallback((
+    phase: "turn-select" | "game" | null,
+    lobbyPlayers?: LobbyPlayer[],
+    roomCode?: string,
+    role?: "host" | "guest",
+  ) => {
+    if (phase === "turn-select" && lobbyPlayers) {
+      setMpLobbyPlayers(lobbyPlayers);
+      if (roomCode) setMpRoomCode(roomCode);
+      if (role)     setMpRole(role);
+      setActiveTab("turns");
+    }
+    if (phase === "game") {
+      setMpGameKey(prev => prev + 1);
+      setActiveTab("life");
+    }
+  }, []);
+
+  /**
+   * Called by TurnOrder when the host broadcasts "Begin Game".
+   * `spinWinner` is the name of the player who won the spin wheel.
+   */
+  const handleTurnOrderPhaseChange = useCallback((phase: "game", spinWinner?: string) => {
+    if (phase === "game") {
+      if (spinWinner) setMpSpinWinner(spinWinner);
+      setMpGameKey(prev => prev + 1);
+      setActiveTab("life");
+    }
+  }, []);
+
   // Re-read gemini model when leaving the settings tab so changes are picked up
   useEffect(() => {
     if (activeTab === "settings") return;
@@ -88,11 +137,31 @@ function App() {
           />
         );
       case "life":
-        return <LifeCounter userId={authUser?.id} />;
+        return (
+          <LifeCounter
+            key={mpGameKey}
+            userId={authUser?.id}
+            mpInitLobbyPlayers={mpLobbyPlayers.length > 0 ? mpLobbyPlayers : undefined}
+            mpInitFirstPlayer={mpSpinWinner ?? undefined}
+          />
+        );
+      case "gamenight":
+        return (
+          <GameNight
+            onMpPhaseChange={handleMpPhaseChange}
+          />
+        );
       case "dice":
         return <DiceAndCoins />;
       case "turns":
-        return <TurnOrder />;
+        return (
+          <TurnOrder
+            mpRoomCode={mpRoomCode}
+            mpRole={mpRole}
+            mpLobbyPlayers={mpLobbyPlayers.length > 0 ? mpLobbyPlayers : undefined}
+            onMpPhaseChange={handleTurnOrderPhaseChange}
+          />
+        );
       case "rules":
         return <QuickRules />;
       case "deck":

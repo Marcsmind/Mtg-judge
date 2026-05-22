@@ -21,13 +21,13 @@
 
 import { supabase } from "./supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import type { Player, ActiveCounters, DayNightState } from "../types/game";
+import type { Player, ActiveCounters, DayNightState, LobbyPlayer } from "../types/game";
 
 // ── Schema version ────────────────────────────────────────────────────────────
 // Bump this whenever the SyncState shape changes in a breaking way.
 // handleRemoteUpdate in LifeCounter.tsx discards payloads with a mismatched
 // version to prevent silent data corruption during rolling deploys.
-export const SYNC_SCHEMA_VERSION = 1;
+export const SYNC_SCHEMA_VERSION = 2;
 
 // ── Shared state shape ────────────────────────────────────────────────────────
 export interface SyncState {
@@ -38,6 +38,10 @@ export interface SyncState {
   roomName?:      string;   // Optional host-set display name shown in LIVE badge
   updatedAt:      number;   // Date.now() — used for last-write-wins
   updatedBy:      string;   // player name or device fingerprint
+  // ── Multiplayer lobby extensions ──────────────────────────────────────────
+  phase?:         "lobby" | "turn-select" | "game";  // lifecycle phase
+  lobbyPlayers?:  LobbyPlayer[];  // canonical player list during lobby phase
+  mpSpinWinner?:  string;         // playerName chosen by the spin (turn-select phase)
 }
 
 // ── Connection status type (forwarded to the UI layer) ───────────────────────

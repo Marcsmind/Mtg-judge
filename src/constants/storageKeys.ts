@@ -27,4 +27,8 @@ export const STORAGE_KEYS = {
   THEME:              "nexus_judge_theme",
   ROOM_CODE:          "nexus_judge_room_code",
   ACCESS_CODE:        "nexus_judge_access_code",
+  DISPLAY_NAME:       "nexus_judge_display_name",  // local fallback for lobby pre-fill
+  DEVICE_ID:          "nexus_device_id",            // stable random UUID per device
+  MP_LOBBY_PLAYERS:   "nexus_mp_lobby_players",     // LobbyPlayer[] JSON
+  MP_FIRST_PLAYER:    "nexus_mp_first_player",      // first player name from spin
 } as const;
