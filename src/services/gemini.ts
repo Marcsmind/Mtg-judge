@@ -144,8 +144,10 @@ export function getLocalMockResponse(_query: string, cards: ScryfallCard[], ruli
 
 // ── Internal fetch router ─────────────────────────────────────────────────────
 // If the caller has their own API key, call Gemini directly.
-// Otherwise route through the Netlify serverless proxy so friends never need
-// to configure a key — the server key is kept in Netlify env vars only.
+// Otherwise route through the Netlify serverless proxy. Trusted users who have
+// been given the server access code can use the shared key without a personal key.
+// The access code is read from localStorage and included in the proxy request body
+// so the server can validate it server-side (the code is never returned to the client).
 async function fetchGemini(model: string, payload: object, apiKey: string): Promise<Response> {
   if (apiKey) {
     return fetch(
@@ -153,10 +155,11 @@ async function fetchGemini(model: string, payload: object, apiKey: string): Prom
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
     );
   }
+  const accessCode = localStorage.getItem("nexus_judge_access_code") ?? "";
   return fetch("/.netlify/functions/gemini-proxy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, payload }),
+    body: JSON.stringify({ model, payload, accessCode }),
   });
 }
 

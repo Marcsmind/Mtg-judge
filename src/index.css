@@ -43,6 +43,10 @@
   --mtg-green-glow: rgba(22, 163, 74, 0.3);
   --mtg-green-text: #ffffff;
 
+  /* Body background gradient colours — overridden per theme via JS */
+  --body-grad-1: rgba(139, 92, 246, 0.08);
+  --body-grad-2: rgba(6, 182, 212, 0.05);
+
   /* Font settings */
   font-family: 'Inter', sans-serif;
   color-scheme: dark;
@@ -58,9 +62,9 @@
 
 body {
   background-color: var(--bg-deep);
-  background-image: 
-    radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 40%);
+  background-image:
+    radial-gradient(circle at 10% 20%, var(--body-grad-1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, var(--body-grad-2) 0%, transparent 40%);
   background-attachment: fixed;
   color: var(--text-primary);
   min-height: 100vh;

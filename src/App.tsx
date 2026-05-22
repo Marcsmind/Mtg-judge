@@ -9,6 +9,8 @@ import { TurnOrder } from "./views/TurnOrder";
 import { QuickRules } from "./views/QuickRules";
 import { DeckBuilder } from "./views/DeckBuilder";
 import { STORAGE_KEYS } from "./constants/storageKeys";
+import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
+import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
 
 function App() {
@@ -31,20 +33,20 @@ function App() {
     return next;
   });
 
-  const [theme, setThemeState] = useState<"dark" | "light">(() => {
-    const stored = localStorage.getItem(STORAGE_KEYS.THEME);
-    if (stored === "dark" || stored === "light") return stored;
-    // No saved preference — respect the OS setting
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  const [theme, setThemeState] = useState<ThemeId>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.THEME) as ThemeId | null;
+    // Accept any known theme id; fall back to "void" (default dark)
+    if (stored && THEMES.some(t => t.id === stored)) return stored;
+    return DEFAULT_THEME;
   });
-  // Apply theme attribute to <html> whenever it changes
+  // Apply theme CSS vars + data-theme attribute whenever theme changes
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    applyTheme(theme);
   }, [theme]);
-  const setTheme = (t: "dark" | "light") => {
+  const setTheme = (t: ThemeId) => {
     setThemeState(t);
     localStorage.setItem(STORAGE_KEYS.THEME, t);
-    document.documentElement.setAttribute("data-theme", t);
+    applyTheme(t);
   };
 
   // Re-read gemini model when leaving the settings tab so changes are picked up

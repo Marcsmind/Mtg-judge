@@ -8,6 +8,7 @@ export interface ScryfallCard {
   oracle_text?: string;
   mana_cost?: string;
   type_line?: string;
+  cmc?: number;        // Converted mana cost — used for mana-curve chart
   color_identity?: string[];
   image_uris?: {
     normal?: string;

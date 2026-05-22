@@ -1,28 +1,6 @@
 import React from "react";
 import { X, Trophy, Skull, Swords, Shield, Crown } from "lucide-react";
-
-// ── Types (mirror LifeCounter's Player interface) ────────────────────────────
-interface PlayerTokens { treasure: number; food: number; clue: number; blood: number; }
-type TokenKey = keyof PlayerTokens;
-
-interface Player {
-  id: number;
-  name: string;
-  life: number;
-  tax: number;
-  taxPartner: number;
-  partnerMode: boolean;
-  colorName: "white" | "blue" | "black" | "red" | "green" | "purple";
-  commanderDamage: Record<string, number>;
-  isMonarch: boolean;
-  hasInitiative: boolean;
-  cityBlessing: boolean;
-  poison: number;
-  rad: number;
-  tokens: PlayerTokens;
-  enabledTokens: TokenKey[];
-  tokensOpen: boolean;
-}
+import type { Player } from "../../types/game";
 
 interface GameSummaryModalProps {
   players: Player[];

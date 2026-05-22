@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Shuffle, Sparkles, RefreshCw, Trophy, Users, AlertTriangle } from "lucide-react";
+import { Shuffle, Sparkles, RefreshCw, Trophy, Users, AlertTriangle, ChevronRight } from "lucide-react";
 import { useAppStore } from "../store/useAppStore";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 
@@ -63,6 +63,15 @@ export const TurnOrder: React.FC = () => {
     const s = localStorage.getItem(STORAGE_KEYS.TURN_INDEX);
     return s ? parseInt(s, 10) : null;
   });
+
+  // ── Turn tracker ─────────────────────────────────────────────────────────
+  const [turnNumber, setTurnNumber] = useState<number>(1);
+
+  const handleNextTurn = () => {
+    if (players.length === 0 || currentIndex === null) return;
+    setCurrentIndex(prev => ((prev ?? 0) + 1) % players.length);
+    setTurnNumber(prev => prev + 1);
+  };
 
   // ── Roll-off ──────────────────────────────────────────────────────────────
   const [rollOffResults, setRollOffResults] = useState<RollOffResult[]>(() => {
@@ -145,6 +154,7 @@ export const TurnOrder: React.FC = () => {
     setWinner(null);
     setRollOffResults([]);
     setTiedPlayers([]);
+    setTurnNumber(1);
 
     const duration = 3000;
     let speed = 60;
@@ -184,6 +194,7 @@ export const TurnOrder: React.FC = () => {
     setTiedPlayers([]);
     setRollOffResults([]);
     setActiveRollPool(pool);
+    if (!subset) setTurnNumber(1);
 
     // Pre-compute final results immediately (fair — happens before animation)
     const finalResults: RollOffResult[] = pool.map(name => ({
@@ -520,6 +531,74 @@ export const TurnOrder: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Module 3: Turn Tracker — appears once a first player is determined */}
+          {currentIndex !== null && (
+            <div className="glass-panel" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px", background: "rgba(22,19,32,0.4)" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <ChevronRight size={16} color="var(--accent-emerald)" />
+                Turn Tracker
+              </h3>
+
+              {/* Current player display */}
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
+                background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)",
+                borderRadius: "10px", padding: "14px",
+              }}>
+                <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--accent-emerald)", letterSpacing: "1px", textTransform: "uppercase" }}>
+                  Turn {turnNumber} — Active Player
+                </span>
+                <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "#fff", fontFamily: "'Outfit', sans-serif" }}>
+                  {players[currentIndex] ?? "—"}
+                </span>
+                {playerColors[players[currentIndex]] && (
+                  <div style={{
+                    width: "10px", height: "10px", borderRadius: "50%",
+                    background: LC_COLORS[playerColors[players[currentIndex]]],
+                    boxShadow: `0 0 8px ${LC_COLORS[playerColors[players[currentIndex]]]}80`,
+                  }} />
+                )}
+              </div>
+
+              {/* Next turn queue (preview next 2) */}
+              {players.length > 1 && (
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {[1, 2].map(offset => {
+                    const idx = (currentIndex + offset) % players.length;
+                    const name = players[idx];
+                    if (!name) return null;
+                    const colorKey = playerColors[name] as LCColorKey | undefined;
+                    return (
+                      <div key={offset} style={{
+                        flex: 1, padding: "8px 10px", borderRadius: "8px",
+                        background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)",
+                        display: "flex", alignItems: "center", gap: "6px",
+                      }}>
+                        <span style={{ fontSize: "0.6rem", color: "var(--text-muted)", fontWeight: 600 }}>+{offset}</span>
+                        {colorKey && <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: LC_COLORS[colorKey], flexShrink: 0 }} />}
+                        <span style={{ fontSize: "0.78rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Next Turn button */}
+              <button
+                onClick={handleNextTurn}
+                className="glass-button"
+                style={{
+                  background: "rgba(16,185,129,0.12)", borderColor: "rgba(16,185,129,0.35)",
+                  color: "var(--accent-emerald)", width: "100%", justifyContent: "center",
+                  fontWeight: 700,
+                }}
+              >
+                <ChevronRight size={16} />
+                <span>Next Turn ▶</span>
+              </button>
+            </div>
+          )}
 
         </div>
       </div>

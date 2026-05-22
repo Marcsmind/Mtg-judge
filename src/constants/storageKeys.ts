@@ -26,4 +26,5 @@ export const STORAGE_KEYS = {
   CONTROLS_COLLAPSED: "nexus_judge_controls_collapsed",
   THEME:              "nexus_judge_theme",
   ROOM_CODE:          "nexus_judge_room_code",
+  ACCESS_CODE:        "nexus_judge_access_code",
 } as const;

@@ -40,6 +40,20 @@ function parseDecklist(raw: string): string[] {
     });
 }
 
+/** Build a mana-curve histogram: groups 0–5 and "6+" */
+function buildManaCurve(cards: (ScryfallCard | null)[]): Record<string, number> {
+  const curve: Record<string, number> = { "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6+": 0 };
+  for (const card of cards) {
+    if (!card) continue;
+    // Skip lands (they have cmc 0 but skew the chart)
+    if (card.type_line?.toLowerCase().includes("land")) continue;
+    const cmc = card.cmc ?? 0;
+    if (cmc >= 6) curve["6+"]++;
+    else curve[String(Math.floor(cmc))]++;
+  }
+  return curve;
+}
+
 /** Extract card names from AI-generated markdown (lines starting with "- ") */
 function extractCardNames(markdown: string): string[] {
   return markdown
@@ -480,6 +494,40 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Mana Curve Chart */}
+            {importedCards.filter(Boolean).length > 0 && (() => {
+              const curve = buildManaCurve(importedCards);
+              const maxCount = Math.max(...Object.values(curve), 1);
+              const total = Object.values(curve).reduce((a, b) => a + b, 0);
+              const barColors = ["#94a3b8","#38bdf8","#34d399","#facc15","#f97316","#f43f5e","#a855f7"];
+              return (
+                <div className="glass-panel" style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h4 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--accent-cyan)" }}>⚡ Mana Curve</h4>
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{total} non-land spells</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "flex-end", height: "80px" }}>
+                    {Object.entries(curve).map(([cmc, count], i) => (
+                      <div key={cmc} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                        {count > 0 && (
+                          <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "var(--text-secondary)" }}>{count}</span>
+                        )}
+                        <div style={{
+                          width: "100%",
+                          height: `${Math.max((count / maxCount) * 56, count > 0 ? 4 : 0)}px`,
+                          background: barColors[i] ?? "var(--accent-purple)",
+                          borderRadius: "4px 4px 0 0",
+                          transition: "height 0.3s ease",
+                          opacity: count === 0 ? 0.15 : 0.85,
+                        }} />
+                        <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>{cmc}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* AI Analysis result */}
             {analysisResult && (

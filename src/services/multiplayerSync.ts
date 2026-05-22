@@ -9,20 +9,23 @@
 
 import { supabase } from "./supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { Player, ActiveCounters, DayNightState } from "../types/game";
+
+// ── Schema version ────────────────────────────────────────────────────────────
+// Bump this whenever the SyncState shape changes in a breaking way.
+// handleRemoteUpdate in LifeCounter.tsx discards payloads with a mismatched
+// version to prevent silent data corruption during rolling deploys.
+export const SYNC_SCHEMA_VERSION = 1;
 
 // ── Shared state shape ────────────────────────────────────────────────────────
-
-// Imported by LifeCounter — these must stay in sync with its local types.
-// We redeclare them as `unknown` payloads to avoid a circular import; the
-// consumer casts them back to the concrete types before using.
 export interface SyncState {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  players:        any[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  activeCounters: any;
-  dayNightState:  string;
-  updatedAt:      number; // Date.now() — used for last-write-wins
-  updatedBy:      string; // player name or device fingerprint
+  schemaVersion:  number;   // Must equal SYNC_SCHEMA_VERSION — otherwise discard
+  players:        Player[];
+  activeCounters: ActiveCounters;
+  dayNightState:  DayNightState;
+  roomName?:      string;   // Optional host-set display name shown in LIVE badge
+  updatedAt:      number;   // Date.now() — used for last-write-wins
+  updatedBy:      string;   // player name or device fingerprint
 }
 
 // ── Active channel registry ───────────────────────────────────────────────────
@@ -31,12 +34,12 @@ const channels: Map<string, RealtimeChannel> = new Map();
 
 // ── Room code generator ───────────────────────────────────────────────────────
 
-/** Returns a random 6-character uppercase alphanumeric room code, e.g. "X3KP7Q" */
+/** Returns a random 4-character uppercase alphanumeric room code, e.g. "X3KP" */
 export function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous I/1/0/O
   let code = "";
   // Called from an event handler, not during render — Math.random() is fine here
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;

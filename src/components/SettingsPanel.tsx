@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { Settings, Shield, Key, Check, Info, Trash2, Moon, Sun } from "lucide-react";
+import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock } from "lucide-react";
+import { THEMES } from "../constants/themes";
+import type { ThemeId } from "../constants/themes";
 
 interface SettingsPanelProps {
   apiKey: string;
   setApiKey: (key: string) => void;
-  theme?: "dark" | "light";
-  setTheme?: (t: "dark" | "light") => void;
+  theme?: ThemeId;
+  setTheme?: (t: ThemeId) => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "dark", setTheme }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
   const [saved, setSaved] = useState(false);
+  const [accessCodeInput, setAccessCodeInput] = useState(
+    () => localStorage.getItem("nexus_judge_access_code") || ""
+  );
+  const [accessCodeSaved, setAccessCodeSaved] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem("nexus_judge_gemini_model") || "gemini-2.5-flash"
@@ -23,6 +29,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setKeyInput(apiKey);
   }, [apiKey]);
+
+  const handleSaveAccessCode = (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const clean = accessCodeInput.trim().toUpperCase();
+    if (clean) {
+      localStorage.setItem("nexus_judge_access_code", clean);
+    } else {
+      localStorage.removeItem("nexus_judge_access_code");
+    }
+    setAccessCodeInput(clean);
+    setAccessCodeSaved(true);
+    setTimeout(() => setAccessCodeSaved(false), 3000);
+  };
+
+  const handleClearAccessCode = () => {
+    localStorage.removeItem("nexus_judge_access_code");
+    setAccessCodeInput("");
+    setAccessCodeSaved(false);
+  };
 
   const handleSave = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -77,51 +102,49 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
         </div>
       </div>
 
-      {/* ── Theme Toggle ── */}
+      {/* ── Theme Picker ── */}
       {setTheme && (
-        <div className="glass-panel" style={{ padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+        <div className="glass-panel" style={{ padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {theme === "dark" ? <Moon size={18} color="var(--accent-purple)" /> : <Sun size={18} color="var(--accent-gold)" />}
+            <Palette size={18} color="var(--accent-purple)" />
             <div>
-              <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>Appearance</p>
+              <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>Theme</p>
               <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                {theme === "dark" ? "Dark mode active" : "Light mode active"}
+                {THEMES.find(t => t.id === theme)?.emoji ?? ""}&nbsp;
+                {THEMES.find(t => t.id === theme)?.label ?? "Void"} palette active
               </p>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "6px" }}>
-            <button
-              onClick={() => setTheme("dark")}
-              aria-label="Dark mode"
-              title="Switch to dark mode"
-              style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "8px 14px", borderRadius: "8px", cursor: "pointer",
-                fontWeight: 600, fontSize: "0.82rem",
-                background: theme === "dark" ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${theme === "dark" ? "rgba(139,92,246,0.45)" : "rgba(255,255,255,0.08)"}`,
-                color: theme === "dark" ? "var(--accent-purple)" : "var(--text-muted)",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <Moon size={14} /> Dark
-            </button>
-            <button
-              onClick={() => setTheme("light")}
-              aria-label="Light mode"
-              title="Switch to light mode"
-              style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "8px 14px", borderRadius: "8px", cursor: "pointer",
-                fontWeight: 600, fontSize: "0.82rem",
-                background: theme === "light" ? "rgba(234,179,8,0.15)" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${theme === "light" ? "rgba(234,179,8,0.4)" : "rgba(255,255,255,0.08)"}`,
-                color: theme === "light" ? "var(--accent-gold)" : "var(--text-muted)",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <Sun size={14} /> Light
-            </button>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {THEMES.map(palette => {
+              const active = theme === palette.id;
+              return (
+                <button
+                  key={palette.id}
+                  onClick={() => setTheme(palette.id)}
+                  aria-label={`${palette.label} theme`}
+                  title={palette.label}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "7px",
+                    padding: "7px 14px", borderRadius: "8px", cursor: "pointer",
+                    fontWeight: 600, fontSize: "0.82rem",
+                    background: active ? `${palette.swatch}22` : "rgba(255,255,255,0.04)",
+                    border: `1.5px solid ${active ? palette.swatch : "rgba(255,255,255,0.08)"}`,
+                    color: active ? palette.swatch : "var(--text-muted)",
+                    transition: "all 0.15s ease",
+                    boxShadow: active ? `0 0 10px ${palette.swatch}40` : "none",
+                  }}
+                >
+                  {/* Colour dot */}
+                  <span style={{
+                    display: "inline-block", width: "10px", height: "10px",
+                    borderRadius: "50%", background: palette.swatch, flexShrink: 0,
+                    boxShadow: active ? `0 0 6px ${palette.swatch}` : "none",
+                  }} />
+                  {palette.emoji} {palette.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -298,6 +321,90 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
             </p>
           </div>
         </div>
+
+      </div>
+
+      {/* ── Server Access Code Panel ── */}
+      <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "20px" }}>
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
+          <Lock size={22} color="var(--accent-gold)" />
+          <div>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Server Access Code</h3>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+              Enter the code shared by the app owner to use the shared AI key — no personal Gemini key needed.
+            </p>
+          </div>
+        </div>
+
+        {/* Explainer */}
+        <div style={{ display: "flex", gap: "14px", background: "rgba(234,179,8,0.05)", border: "1px solid rgba(234,179,8,0.15)", borderRadius: "10px", padding: "14px" }}>
+          <Lock size={20} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: "2px" }} />
+          <div style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
+            <p style={{ color: "var(--text-secondary)" }}>
+              The app owner sets a private code in their Netlify deployment. When you enter the correct code here,
+              the shared server key is unlocked for you — without exposing the key itself.
+              If you have your own Gemini API key above, it takes priority and this code is not needed.
+            </p>
+          </div>
+        </div>
+
+        {/* Access Code Form */}
+        <form onSubmit={handleSaveAccessCode} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.95rem", fontWeight: 600, color: "var(--text-primary)" }}>
+              <Lock size={15} color="var(--accent-gold)" />
+              Access Code
+            </label>
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <input
+              type="password"
+              className="glass-input"
+              placeholder="Enter the access code…"
+              value={accessCodeInput}
+              onChange={e => setAccessCodeInput(e.target.value)}
+              style={{ flex: 1, fontFamily: "monospace", letterSpacing: "2px" }}
+              autoComplete="off"
+            />
+            {accessCodeInput && (
+              <button
+                type="button"
+                onClick={handleClearAccessCode}
+                className="glass-button"
+                style={{
+                  background: "rgba(244, 63, 94, 0.08)",
+                  borderColor: "rgba(244, 63, 94, 0.15)",
+                  color: "var(--accent-rose)",
+                  padding: "10px 14px"
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(244, 63, 94, 0.2)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(244, 63, 94, 0.08)"}
+                title="Clear Access Code"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+            <button
+              type="submit"
+              className="glass-button"
+              disabled={accessCodeInput.trim() === (localStorage.getItem("nexus_judge_access_code") || "")}
+              style={{
+                background: accessCodeSaved ? "var(--accent-emerald)" : "rgba(234,179,8,0.15)",
+                borderColor: accessCodeSaved ? "var(--accent-emerald)" : "rgba(234,179,8,0.35)",
+                color: accessCodeSaved ? "#fff" : "var(--accent-gold)",
+              }}
+            >
+              {accessCodeSaved ? <Check size={16} /> : null}
+              <span>{accessCodeSaved ? "Code Saved!" : "Save Access Code"}</span>
+            </button>
+          </div>
+        </form>
 
       </div>
     </div>

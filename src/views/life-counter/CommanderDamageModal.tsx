@@ -1,5 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
+import type { Player } from "../../types/game";
 
 type ColorName = "white" | "blue" | "black" | "red" | "green" | "purple";
 
@@ -7,14 +8,6 @@ interface ColorTheme {
   bg: string;
   accent: string;
   border: string;
-}
-
-interface Player {
-  id: number;
-  name: string;
-  colorName: ColorName;
-  commanderDamage: Record<string, number>;
-  partnerMode: boolean;
 }
 
 interface CommanderDamageModalProps {

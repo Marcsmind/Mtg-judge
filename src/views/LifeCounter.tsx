@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Plus, Minus, ShieldAlert, RefreshCw, Users, Shield,
-  Crown, Skull, Radiation, Settings2, Check, Moon, Sun,
-  Swords, Star, Coins, Save, Menu, Undo2,
+  RefreshCw, Users,
+  Crown, Skull, Radiation, Swords, Star,
+  Settings2, Check, Moon, Sun,
+  Save, Menu, Undo2,
   Play, Square, RotateCcw, Timer, Wifi, WifiOff, Copy, Trophy
 } from "lucide-react";
 import { useAppStore } from "../store/useAppStore";
@@ -13,51 +14,24 @@ import {
   joinRoom as joinSyncRoom,
   broadcastState,
   leaveRoom,
+  SYNC_SCHEMA_VERSION,
 } from "../services/multiplayerSync";
 import type { SyncState } from "../services/multiplayerSync";
+import type { Player, ActiveCounters, DayNightState, TokenKey } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { GameHistoryLedger } from "./life-counter/GameHistoryLedger";
 import { CommanderDamageModal } from "./life-counter/CommanderDamageModal";
 import { SaveGameModal, MAX_SLOTS } from "./life-counter/SaveGameModal";
 import type { GameSnapshot } from "./life-counter/SaveGameModal";
 import { GameSummaryModal } from "./life-counter/GameSummaryModal";
+import { PlayerCard } from "./life-counter/PlayerCard";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { useToast } from "../components/Toast";
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
-type TokenKey = "treasure" | "food" | "clue" | "blood";
-interface PlayerTokens { treasure: number; food: number; clue: number; blood: number; }
-
-interface Player {
-  id: number;
-  name: string;
-  life: number;
-  tax: number;
-  taxPartner: number;
-  partnerMode: boolean;
-  colorName: "white" | "blue" | "black" | "red" | "green" | "purple";
-  commanderDamage: Record<string, number>;
-  isMonarch: boolean;
-  hasInitiative: boolean;
-  cityBlessing: boolean;
-  poison: number;
-  rad: number;
-  tokens: PlayerTokens;
-  enabledTokens: TokenKey[];   // Which token types this player has enabled (per-player)
-  tokensOpen: boolean;         // Whether this player's token panel is expanded
-}
-
-type DayNightState = "none" | "day" | "night";
-
-interface ActiveCounters {
-  monarch: boolean;
-  poison: boolean;
-  rad: boolean;
-  dayNight: boolean;
-  initiative: boolean;
-  cityBlessing: boolean;
-  tokens: boolean;
-}
+// Player, PlayerTokens, TokenKey, DayNightState, ActiveCounters are imported
+// from src/types/game.ts — the single source of truth shared across all
+// life-counter sub-components and multiplayerSync.
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -73,13 +47,6 @@ const colors = {
   purple: { bg: "linear-gradient(135deg, #1f0c2a 0%, #341247 100%)", accent: "#ec4899", border: "rgba(236,72,153,0.4)" },
 };
 const colorKeys = Object.keys(colors) as Array<keyof typeof colors>;
-
-const TOKEN_TYPES: { key: TokenKey; label: string; emoji: string; color: string }[] = [
-  { key: "treasure", label: "Treasure", emoji: "🪙", color: "#eab308" },
-  { key: "food",     label: "Food",     emoji: "🍎", color: "#10b981" },
-  { key: "clue",     label: "Clue",     emoji: "🔍", color: "#06b6d4" },
-  { key: "blood",    label: "Blood",    emoji: "🩸", color: "#f43f5e" },
-];
 
 const MECHANICS_CONFIG: { key: keyof ActiveCounters; label: string; Icon: React.ElementType; color: string; desc: string }[] = [
   { key: "monarch",      label: "Monarch",         Icon: Crown,     color: "#eab308", desc: "One player holds the crown" },
@@ -97,6 +64,7 @@ function parseSavedPlayer(raw: any, fallbackLife: number): Player {
   return {
     id:             raw.id,
     name:           raw.name ?? `Player ${raw.id}`,
+    avatar:         raw.avatar ?? "",
     life:           typeof raw.life === "number" ? raw.life : fallbackLife,
     tax:            raw.tax ?? 0,
     taxPartner:     raw.taxPartner ?? 0,
@@ -123,6 +91,7 @@ function createPlayer(index: number, life: number): Player {
   return {
     id: index + 1,
     name: `Player ${index + 1}`,
+    avatar: "",
     life,
     tax: 0,
     taxPartner: 0,
@@ -143,6 +112,7 @@ function createPlayer(index: number, life: number): Player {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const LifeCounter: React.FC = () => {
+  const { showToast } = useToast();
 
   // ── State ──
   const [startingLife, setStartingLifeState] = useState<number>(() => {
@@ -251,6 +221,7 @@ export const LifeCounter: React.FC = () => {
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [roomConnected, setRoomConnected] = useState(false);
   const [roomRole, setRoomRole] = useState<"host" | "guest" | null>(null);
+  const [roomName, setRoomName] = useState("");          // Optional host-set display name
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [roomLoading, setRoomLoading] = useState(false);
   const [roomCopied, setRoomCopied] = useState(false);
@@ -266,6 +237,7 @@ export const LifeCounter: React.FC = () => {
   // the action, by which time React has re-rendered with the NEW state values.
   // Without this ref the timer closes over the OLD players snapshot and broadcasts it.
   const buildSyncStateRef = useRef<() => SyncState>(() => ({
+    schemaVersion: SYNC_SCHEMA_VERSION,
     players: [], activeCounters: {} as ActiveCounters,
     dayNightState: "none", updatedAt: 0, updatedBy: "",
   }));
@@ -305,9 +277,11 @@ export const LifeCounter: React.FC = () => {
 
   /** Build the current game state snapshot for broadcasting */
   const buildSyncState = (): SyncState => ({
+    schemaVersion: SYNC_SCHEMA_VERSION,
     players,
     activeCounters,
     dayNightState,
+    roomName: roomName || undefined,
     updatedAt: Date.now(),
     updatedBy: players[0]?.name ?? "Unknown",
   });
@@ -400,12 +374,16 @@ export const LifeCounter: React.FC = () => {
    * ignore incoming remote state to prevent their change from reverting.
    */
   const handleRemoteUpdate = (state: SyncState) => {
+    // Discard payloads from a different schema version — prevents silent data
+    // corruption when the Player shape changes in a future deploy.
+    if (state.schemaVersion !== SYNC_SCHEMA_VERSION) return;
     if (state.updatedAt <= lastAppliedAt.current) return;
     if (Date.now() - lastLocalChangeAt.current < 500) return;
     lastAppliedAt.current = state.updatedAt;
     setPlayers(state.players);
     setActiveCounters(state.activeCounters);
-    setDayNightState(state.dayNightState as typeof dayNightState);
+    setDayNightState(state.dayNightState);
+    if (state.roomName !== undefined) setRoomName(state.roomName);
   };
   // Keep the ref fresh every render so async Supabase callbacks always call the latest version
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -473,6 +451,7 @@ export const LifeCounter: React.FC = () => {
     if (!roomCode) return;
     navigator.clipboard.writeText(roomCode).catch(() => undefined);
     setRoomCopied(true);
+    showToast(`Room code ${roomCode} copied!`, "success");
     setTimeout(() => setRoomCopied(false), 2000);
   };
 
@@ -618,6 +597,18 @@ export const LifeCounter: React.FC = () => {
     setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, name: name || `Player ${playerId}` } : p));
   };
 
+  const setAvatar = (playerId: number, emoji: string) => {
+    scheduleBroadcast();
+    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, avatar: emoji } : p));
+  };
+
+  const revivePlayer = (playerId: number) => {
+    scheduleBroadcast();
+    setPlayers(prev => prev.map(p =>
+      p.id === playerId ? { ...p, life: startingLife, commanderDamage: {}, poison: 0 } : p
+    ));
+  };
+
   const adjustTax = (playerId: number, isPartner: boolean, amount: number) => {
     const player = players.find(p => p.id === playerId);
     if (!player) return;
@@ -760,22 +751,6 @@ export const LifeCounter: React.FC = () => {
     setPlayers(prev => prev.map(p =>
       p.id === playerId ? { ...p, tokensOpen: !p.tokensOpen } : p
     ));
-  };
-
-  // ── Helpers ──
-  const isDeadGeneral  = (p: Player) => p.life <= 0;
-  const isPoisonDead   = (p: Player) => (p.poison ?? 0) >= 10;
-
-  const getCmdDeathReason = (p: Player): string | null => {
-    for (const [key, dmg] of Object.entries(p.commanderDamage)) {
-      if (dmg >= 21) {
-        const srcId = parseInt(key.split("_")[0]);
-        const isPartner = key.includes("_B");
-        const src = players.find(s => s.id === srcId);
-        return `${src?.name ?? `P${srcId}`}'s ${isPartner ? "Partner" : "Commander"} (${dmg}/21)`;
-      }
-    }
-    return null;
   };
 
   const getGridStyle = () => {
@@ -1086,6 +1061,16 @@ export const LifeCounter: React.FC = () => {
                 </span>
               ) : !roomConnected ? (
                 <>
+                  {/* Optional room name */}
+                  <input
+                    type="text"
+                    className="glass-input"
+                    placeholder="Room name (optional)"
+                    value={roomName}
+                    onChange={e => setRoomName(e.target.value.slice(0, 24))}
+                    style={{ width: "130px", padding: "5px 9px", fontSize: "0.75rem" }}
+                  />
+
                   {/* Create Room */}
                   <button
                     onClick={handleCreateRoom}
@@ -1104,7 +1089,7 @@ export const LifeCounter: React.FC = () => {
                       className="glass-input"
                       placeholder="Room code…"
                       value={joinCodeInput}
-                      onChange={e => setJoinCodeInput(e.target.value.toUpperCase().slice(0, 6))}
+                      onChange={e => setJoinCodeInput(e.target.value.toUpperCase().slice(0, 4))}
                       onKeyDown={e => { if (e.key === "Enter") handleJoinRoom(); }}
                       style={{ width: "96px", padding: "6px 10px", fontSize: "0.8rem", letterSpacing: "1px", fontWeight: 700 }}
                     />
@@ -1129,6 +1114,7 @@ export const LifeCounter: React.FC = () => {
                   }}>
                     <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
                     <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--accent-emerald)" }}>LIVE</span>
+                    {roomName && <span style={{ fontSize: "0.75rem", color: "var(--accent-emerald)", fontWeight: 600, maxWidth: "100px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{roomName}</span>}
                     <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "1px" }}>{roomCode}</span>
                     <button
                       onClick={copyRoomCode}
@@ -1194,404 +1180,33 @@ export const LifeCounter: React.FC = () => {
         <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
           {players.map(p => {
             const playerTheme = colors[p.colorName] || colors.purple;
-            const cmdDeath = getCmdDeathReason(p);
-            const poisonDead = isPoisonDead(p);
-            const isDefeated = isDeadGeneral(p) || !!cmdDeath || poisonDead;
-
             return (
-              <div
+              <PlayerCard
                 key={p.id}
-                style={{
-                  background: playerTheme.bg, borderRadius: "14px",
-                  border: `1.5px solid ${p.isMonarch ? "#eab308" : isDefeated ? "rgba(239,68,68,0.6)" : playerTheme.border}`,
-                  padding: "12px 14px", display: "flex", flexDirection: "column", gap: "4px",
-                  boxShadow: p.isMonarch
-                    ? "0 0 24px rgba(234,179,8,0.18), 0 4px 20px rgba(0,0,0,0.3)"
-                    : isDefeated
-                      ? "0 0 20px rgba(239,68,68,0.2) inset, 0 4px 20px rgba(0,0,0,0.3)"
-                      : "0 4px 20px rgba(0,0,0,0.3)",
-                  position: "relative", overflow: "hidden",
-                  transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)",
-                }}
-              >
-
-                {/* ── Monarch Badge ── click uncrowned player to crown them;
-                     click the current monarch to release the crown entirely */}
-                {activeCounters.monarch && (
-                  <button
-                    onClick={() => p.isMonarch ? releaseMonarch() : assignMonarch(p.id)}
-                    aria-label={p.isMonarch ? "Release Monarch crown" : "Crown this player as Monarch"}
-                    title={p.isMonarch ? "Click to release the crown (no one becomes Monarch)" : "Click to crown this player"}
-                    style={{
-                      position: "absolute", top: "40px", right: activeCounters.initiative ? "52px" : "10px",
-                      zIndex: 10, width: "36px", height: "36px", borderRadius: "50%",
-                      background: p.isMonarch ? "rgba(234,179,8,0.25)" : "rgba(255,255,255,0.05)",
-                      border: `1.5px solid ${p.isMonarch ? "#eab308" : "rgba(255,255,255,0.1)"}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer",
-                      boxShadow: p.isMonarch ? "0 0 14px rgba(234,179,8,0.55)" : "none",
-                      transition: "all 0.2s ease",
-                    }}
-                  >
-                    <Crown size={18} color={p.isMonarch ? "#eab308" : "rgba(255,255,255,0.2)"} />
-                  </button>
-                )}
-
-                {/* ── Initiative Badge ── click holder to release; click others to assign */}
-                {activeCounters.initiative && (
-                  <button
-                    onClick={() => p.hasInitiative ? releaseInitiative() : assignInitiative(p.id)}
-                    aria-label={p.hasInitiative ? "Release the Initiative" : "Assign the Initiative to this player"}
-                    title={p.hasInitiative ? "Click to release the Initiative (no one holds it)" : "Click to assign the Initiative"}
-                    style={{
-                      position: "absolute", top: "40px", right: "10px",
-                      zIndex: 10, width: "36px", height: "36px", borderRadius: "50%",
-                      background: p.hasInitiative ? "rgba(6,182,212,0.25)" : "rgba(255,255,255,0.05)",
-                      border: `1.5px solid ${p.hasInitiative ? "#06b6d4" : "rgba(255,255,255,0.1)"}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer",
-                      boxShadow: p.hasInitiative ? "0 0 14px rgba(6,182,212,0.55)" : "none",
-                      transition: "all 0.2s ease",
-                    }}
-                  >
-                    <Swords size={17} color={p.hasInitiative ? "#06b6d4" : "rgba(255,255,255,0.2)"} />
-                  </button>
-                )}
-
-                {/* ── Defeated Overlay ── */}
-                {isDefeated && (
-                  <div style={{
-                    position: "absolute", inset: 0,
-                    background: "rgba(8,7,11,0.88)", backdropFilter: "blur(5px)",
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                    gap: "10px", zIndex: 5, padding: "20px", textAlign: "center",
-                  }}>
-                    <ShieldAlert size={34} color="var(--accent-rose)" />
-                    <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "0.5px" }}>DEFEATED</span>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", maxWidth: "80%" }}>
-                      {poisonDead ? "10 Poison Counters" : cmdDeath ? `Cmd Dmg from ${cmdDeath}` : `Life → ${p.life}`}
-                    </span>
-                    <button
-                      onClick={() => setPlayers(prev => prev.map(pl => pl.id === p.id ? { ...pl, life: startingLife, commanderDamage: {}, poison: 0 } : pl))}
-                      className="glass-button"
-                      style={{ padding: "5px 14px", fontSize: "0.72rem", marginTop: "4px" }}
-                    >
-                      Revive
-                    </button>
-                  </div>
-                )}
-
-                {/* ── Header Row: Name + Color Dot ── */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingRight: (activeCounters.monarch || activeCounters.initiative) ? "44px" : "0" }}>
-                  <input
-                    type="text"
-                    value={p.name}
-                    onChange={e => renamePlayer(p.id, e.target.value)}
-                    style={{
-                      background: "none", border: "none", color: "#fff",
-                      fontSize: "0.95rem", fontWeight: 700, fontFamily: "'Outfit', sans-serif",
-                      flex: 1, outline: "none", borderBottom: "1px dashed transparent",
-                      transition: "border-color 0.15s ease",
-                    }}
-                    onFocus={e => e.target.style.borderBottomColor = playerTheme.accent}
-                    onBlur={e => e.target.style.borderBottomColor = "transparent"}
-                  />
-                  <button
-                    onClick={() => cycleColor(p.id)}
-                    aria-label="Cycle player color"
-                    style={{
-                      width: "18px", height: "18px", borderRadius: "50%", background: playerTheme.accent,
-                      border: "2px solid #fff", cursor: "pointer", flexShrink: 0,
-                      transition: "transform 0.15s ease",
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"}
-                    onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-                    title="Cycle Color"
-                  />
-                </div>
-
-                {/* City's Blessing label */}
-                {activeCounters.cityBlessing && p.cityBlessing && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "-2px" }}>
-                    <Star size={10} color="#eab308" fill="#eab308" />
-                    <span style={{ fontSize: "0.65rem", color: "#eab308", fontWeight: 600 }}>City's Blessing</span>
-                  </div>
-                )}
-
-                {/* ── LIFE TOTAL ── */}
-                <div className="lc-life-section" style={{ display: "flex", justifyContent: "center", alignItems: "center", flex: 1, paddingTop: "2px" }}>
-                  <button
-                    className="lc-life-small-adj"
-                    onClick={() => adjustLife(p.id, -5)}
-                    title="−5 life"
-                    style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", fontSize: "1rem", fontWeight: 700, cursor: "pointer", padding: "8px 18px", transition: "color 0.1s", letterSpacing: "0.5px" }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#fff"}
-                    onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.55)"}
-                  >
-                    −5
-                  </button>
-
-                  <button
-                    className="lc-life-btn lc-life-btn-minus"
-                    onClick={() => adjustLife(p.id, -1)}
-                    style={{
-                      background: "rgba(0,0,0,0.35)", border: "none", borderRadius: "50%",
-                      width: "42px", height: "42px", display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "#fff", cursor: "pointer", transition: "background 0.15s", flexShrink: 0,
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.6)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.35)"}
-                  >
-                    <Minus size={20} />
-                  </button>
-
-                  <span
-                    className="lc-life-number"
-                    style={{
-                      fontSize: "clamp(3.8rem, 5.5vw, 7rem)",
-                      fontWeight: 900, fontFamily: "'Outfit', sans-serif",
-                      minWidth: "100px", textAlign: "center",
-                      textShadow: `0 0 40px ${playerTheme.accent}50, 0 4px 16px rgba(0,0,0,0.6)`,
-                      lineHeight: 1, letterSpacing: "-3px",
-                      filter: p.life < 10 ? "drop-shadow(0 0 8px rgba(239,68,68,0.7))" : "none",
-                      color: p.life <= 0 ? "#ef4444" : p.life < 10 ? "#fca5a5" : "#fff",
-                    }}
-                  >
-                    {p.life}
-                  </span>
-
-                  <button
-                    className="lc-life-btn lc-life-btn-plus"
-                    onClick={() => adjustLife(p.id, 1)}
-                    style={{
-                      background: "rgba(0,0,0,0.35)", border: "none", borderRadius: "50%",
-                      width: "42px", height: "42px", display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "#fff", cursor: "pointer", transition: "background 0.15s", flexShrink: 0,
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.6)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.35)"}
-                  >
-                    <Plus size={20} />
-                  </button>
-
-                  <button
-                    className="lc-life-small-adj"
-                    onClick={() => adjustLife(p.id, 5)}
-                    title="+5 life"
-                    style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", fontSize: "1rem", fontWeight: 700, cursor: "pointer", padding: "8px 18px", transition: "color 0.1s", letterSpacing: "0.5px" }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#fff"}
-                    onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.55)"}
-                  >
-                    +5
-                  </button>
-                </div>
-
-                {/* ── Poison + Rad Counters ── */}
-                {(activeCounters.poison || activeCounters.rad) && (
-                  <div style={{ display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
-
-                    {activeCounters.poison && (
-                      <div style={{
-                        display: "flex", alignItems: "center",
-                        background: (p.poison ?? 0) >= 10 ? "rgba(239,68,68,0.2)" : "rgba(0,0,0,0.38)",
-                        border: `1.5px solid ${(p.poison ?? 0) >= 10 ? "rgba(239,68,68,0.6)" : "rgba(16,185,129,0.4)"}`,
-                        borderRadius: "12px", padding: "5px 4px",
-                        boxShadow: (p.poison ?? 0) >= 10 ? "0 0 12px rgba(239,68,68,0.3)" : "none",
-                      }}>
-                        <button onClick={() => adjustPoison(p.id, -1)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: "2px 8px", fontSize: "1.1rem", fontWeight: 700, lineHeight: 1 }}>−</button>
-                        <div style={{ display: "flex", alignItems: "center", gap: "7px", minWidth: "58px", justifyContent: "center" }}>
-                          <Skull size={18} color={(p.poison ?? 0) >= 10 ? "#ef4444" : "#10b981"} />
-                          <span style={{ fontSize: "1.5rem", fontWeight: 900, color: (p.poison ?? 0) >= 10 ? "#ef4444" : "#fff", minWidth: "26px", textAlign: "center", lineHeight: 1 }}>
-                            {p.poison ?? 0}
-                          </span>
-                          <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", lineHeight: 1 }}>/10</span>
-                        </div>
-                        <button onClick={() => adjustPoison(p.id, 1)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: "2px 8px", fontSize: "1.1rem", fontWeight: 700, lineHeight: 1 }}>+</button>
-                      </div>
-                    )}
-
-                    {activeCounters.rad && (
-                      <div style={{
-                        display: "flex", alignItems: "center",
-                        background: "rgba(0,0,0,0.38)",
-                        border: "1.5px solid rgba(249,115,22,0.4)",
-                        borderRadius: "12px", padding: "5px 4px",
-                      }}>
-                        <button onClick={() => adjustRad(p.id, -1)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: "2px 8px", fontSize: "1.1rem", fontWeight: 700, lineHeight: 1 }}>−</button>
-                        <div style={{ display: "flex", alignItems: "center", gap: "7px", minWidth: "48px", justifyContent: "center" }}>
-                          <Radiation size={18} color="#f97316" />
-                          <span style={{ fontSize: "1.5rem", fontWeight: 900, color: "#fff", minWidth: "26px", textAlign: "center", lineHeight: 1 }}>
-                            {p.rad ?? 0}
-                          </span>
-                        </div>
-                        <button onClick={() => adjustRad(p.id, 1)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: "2px 8px", fontSize: "1.1rem", fontWeight: 700, lineHeight: 1 }}>+</button>
-                      </div>
-                    )}
-
-                  </div>
-                )}
-
-                {/* ── Enabled Token Counters (above bottom row) ── */}
-                {p.enabledTokens.length > 0 && (
-                  <div style={{ display: "flex", gap: "4px", justifyContent: "center", flexWrap: "wrap" }}>
-                    {TOKEN_TYPES.filter(t => p.enabledTokens.includes(t.key)).map(({ key, emoji, color }) => (
-                      <div key={key} style={{
-                        display: "flex", alignItems: "center", gap: "1px",
-                        background: "rgba(0,0,0,0.35)", border: `1px solid ${color}38`,
-                        borderRadius: "9px", padding: "2px 3px",
-                      }}>
-                        <button onClick={() => adjustToken(p.id, key, -1)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "1px 5px", fontSize: "0.85rem", fontWeight: 700, lineHeight: 1 }}>−</button>
-                        <span style={{ fontSize: "0.9rem" }}>{emoji}</span>
-                        <span style={{ fontSize: "0.9rem", fontWeight: 800, color: "#fff", minWidth: "16px", textAlign: "center" }}>{p.tokens?.[key] ?? 0}</span>
-                        <button onClick={() => adjustToken(p.id, key, 1)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "1px 5px", fontSize: "0.85rem", fontWeight: 700, lineHeight: 1 }}>+</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* City's Blessing Toggle */}
-                {activeCounters.cityBlessing && (
-                  <div style={{ display: "flex", justifyContent: "center" }}>
-                    <button
-                      onClick={() => toggleCityBlessing(p.id)}
-                      style={{
-                        background: p.cityBlessing ? "rgba(234,179,8,0.12)" : "rgba(255,255,255,0.04)",
-                        border: `1px solid ${p.cityBlessing ? "rgba(234,179,8,0.35)" : "rgba(255,255,255,0.08)"}`,
-                        borderRadius: "8px", padding: "3px 12px", cursor: "pointer",
-                        color: p.cityBlessing ? "#eab308" : "var(--text-muted)",
-                        fontSize: "0.7rem", display: "flex", alignItems: "center", gap: "5px",
-                      }}
-                    >
-                      <Star size={10} fill={p.cityBlessing ? "#eab308" : "none"} color={p.cityBlessing ? "#eab308" : "var(--text-muted)"} />
-                      {p.cityBlessing ? "City's Blessing ✓" : "Gain City's Blessing"}
-                    </button>
-                  </div>
-                )}
-
-                {/* Commander Damage Badges */}
-                {Object.keys(p.commanderDamage).length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", justifyContent: "center" }}>
-                    {Object.entries(p.commanderDamage).map(([key, dmg]) => {
-                      if (!dmg) return null;
-                      const srcId = parseInt(key.split("_")[0], 10);
-                      const isPartner = key.includes("_B");
-                      const src = players.find(s => s.id === srcId);
-                      const srcColor = src ? (colors[src.colorName]?.accent || "#ef4444") : "#ef4444";
-                      return (
-                        <div key={key} style={{
-                          background: "rgba(0,0,0,0.4)", border: `1px solid ${srcColor}70`,
-                          borderRadius: "6px", padding: "2px 8px", fontSize: "0.7rem",
-                          color: srcColor, display: "flex", gap: "5px", alignItems: "center",
-                        }}>
-                          <span>{src?.name ?? `P${srcId}`}{isPartner ? " (P)" : ""}</span>
-                          <span style={{ fontWeight: 800, color: dmg >= 21 ? "#ef4444" : "#fff" }}>{dmg}/21</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Token Type Picker (expands above bottom row when tokensOpen) */}
-                {p.tokensOpen && (
-                  <div style={{
-                    background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.07)",
-                    borderRadius: "8px", padding: "6px 8px",
-                    display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "center",
-                  }}>
-                    {TOKEN_TYPES.map(({ key, label, emoji, color }) => {
-                      const isEnabled = p.enabledTokens.includes(key);
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => togglePlayerTokenType(p.id, key)}
-                          style={{
-                            background: isEnabled ? `${color}18` : "rgba(255,255,255,0.03)",
-                            border: `1px solid ${isEnabled ? `${color}50` : "rgba(255,255,255,0.08)"}`,
-                            borderRadius: "7px", padding: "3px 8px", cursor: "pointer",
-                            color: isEnabled ? color : "var(--text-muted)",
-                            fontSize: "0.68rem", fontWeight: isEnabled ? 700 : 500,
-                            display: "flex", alignItems: "center", gap: "4px",
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          <span style={{ fontSize: "0.85rem" }}>{emoji}</span>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Bottom Row: Tax | [Tokens + Cmd Dmg] */}
-                <div className="lc-bottom-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "9px", gap: "4px" }}>
-
-                  {/* Tax (left) */}
-                  <div className="lc-tax-section" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 700, letterSpacing: "0.5px" }}>TAX:</span>
-                      <button
-                        onClick={() => togglePartner(p.id)}
-                        style={{
-                          fontSize: "0.68rem", border: "none",
-                          background: p.partnerMode ? "var(--accent-purple)" : "rgba(255,255,255,0.05)",
-                          color: p.partnerMode ? "#fff" : "var(--text-muted)",
-                          padding: "2px 8px", borderRadius: "10px", cursor: "pointer", fontWeight: 700,
-                        }}
-                      >Partner</button>
-                    </div>
-                    <div style={{ display: "flex", gap: p.partnerMode ? "8px" : "0", alignItems: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(0,0,0,0.2)", borderRadius: "6px", padding: "3px 7px" }}>
-                        <button onClick={() => adjustTax(p.id, false, -2)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Minus size={12} /></button>
-                        <span style={{ fontSize: "1.05rem", fontWeight: 700, minWidth: "22px", textAlign: "center", color: "#fff" }}>{p.tax}</span>
-                        <button onClick={() => adjustTax(p.id, false, 2)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Plus size={12} /></button>
-                      </div>
-                      {p.partnerMode && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(0,0,0,0.2)", borderRadius: "6px", padding: "3px 7px" }}>
-                          <button onClick={() => adjustTax(p.id, true, -2)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Minus size={12} /></button>
-                          <span style={{ fontSize: "1.05rem", fontWeight: 700, minWidth: "22px", textAlign: "center", color: "#fff" }}>{p.taxPartner}</span>
-                          <button onClick={() => adjustTax(p.id, true, 2)} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Plus size={12} /></button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Tokens + Cmd Dmg grouped (share a row on mobile) */}
-                  <div className="lc-bottom-secondary" style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                    {/* Tokens button */}
-                    <button
-                      onClick={() => togglePlayerTokensPanel(p.id)}
-                      style={{
-                        background: p.tokensOpen ? "rgba(234,179,8,0.12)" : p.enabledTokens.length > 0 ? "rgba(234,179,8,0.06)" : "rgba(255,255,255,0.04)",
-                        border: `1px solid ${p.tokensOpen ? "rgba(234,179,8,0.4)" : p.enabledTokens.length > 0 ? "rgba(234,179,8,0.2)" : "rgba(255,255,255,0.08)"}`,
-                        borderRadius: "8px", padding: "7px 10px", cursor: "pointer",
-                        color: p.tokensOpen || p.enabledTokens.length > 0 ? "#eab308" : "var(--text-muted)",
-                        fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "5px",
-                        transition: "all 0.15s ease", flexShrink: 0,
-                      }}
-                    >
-                      <Coins size={12} color={p.tokensOpen || p.enabledTokens.length > 0 ? "#eab308" : "var(--text-muted)"} />
-                      <span className="lc-btn-label">Tokens{p.enabledTokens.length > 0 ? ` (${p.enabledTokens.length})` : ""}</span>
-                    </button>
-
-                    {/* Cmd Damage Button */}
-                    <button
-                      onClick={() => setActiveDamageEditor(p.id)}
-                      style={{
-                        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "8px", padding: "7px 10px", color: "var(--text-primary)",
-                        fontSize: "0.72rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px",
-                        transition: "background 0.15s", flexShrink: 0,
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-                      onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-                    >
-                      <Shield size={13} color="var(--accent-cyan)" />
-                      <span className="lc-btn-label">Cmd Dmg</span>
-                    </button>
-                  </div>
-                </div>
-
-              </div>
+                p={p}
+                players={players}
+                playerTheme={playerTheme}
+                activeCounters={activeCounters}
+                colors={colors}
+                adjustLife={adjustLife}
+                adjustPoison={adjustPoison}
+                adjustRad={adjustRad}
+                adjustToken={adjustToken}
+                adjustTax={adjustTax}
+                togglePartner={togglePartner}
+                renamePlayer={renamePlayer}
+                cycleColor={cycleColor}
+                setAvatar={setAvatar}
+                assignMonarch={assignMonarch}
+                releaseMonarch={releaseMonarch}
+                assignInitiative={assignInitiative}
+                releaseInitiative={releaseInitiative}
+                toggleCityBlessing={toggleCityBlessing}
+                togglePlayerTokenType={togglePlayerTokenType}
+                togglePlayerTokensPanel={togglePlayerTokensPanel}
+                setActiveDamageEditor={setActiveDamageEditor}
+                revivePlayer={revivePlayer}
+              />
             );
           })}
         </div>
