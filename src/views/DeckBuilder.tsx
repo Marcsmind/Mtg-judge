@@ -10,7 +10,8 @@ import {
 } from "../services/scryfall";
 import type { ScryfallCard } from "../services/scryfall";
 import { askGeminiDeckBuilder } from "../services/gemini";
-import { buildManaCurve } from "../utils/deckUtils";
+import { buildManaCurve, buildColorSpread, calcDeckCost, toMoxfieldFormat, COLOR_META } from "../utils/deckUtils";
+import { useToast } from "../components/Toast";
 
 interface DeckBuilderProps {
   apiKey: string;
@@ -27,16 +28,30 @@ const BUDGET_LABELS: Record<BudgetTier, string> = {
   competitive: "Competitive",
 };
 
-/** Strip quantity prefix from a line: "1 Sol Ring", "4x Forest" → card name */
+/**
+ * Parse a decklist in MTGO / Moxfield / MTGA format into unique card names.
+ * Handles:
+ *   "1 Sol Ring"            (MTGO)
+ *   "1 Sol Ring (CMR) 263"  (Moxfield with set + collector number)
+ *   "4x Birds of Paradise"  (quantity with x)
+ * Section headers (Commander, Deck, Sideboard) and comment lines are ignored.
+ */
 function parseDecklist(raw: string): string[] {
   const seen = new Set<string>();
   return raw
     .split("\n")
-    .map(line => line.trim().replace(/^\d+[xX]?\s+/, "").trim())
-    .filter(line => line.length > 1)
-    .filter(line => {
-      if (seen.has(line.toLowerCase())) return false;
-      seen.add(line.toLowerCase());
+    .filter(l => /^\s*\d/.test(l))                                 // only lines starting with a quantity
+    .map(l =>
+      l.trim()
+       .replace(/^\d+[xX]?\s+/, "")                               // strip quantity prefix
+       .replace(/\s*\([A-Z0-9]{2,6}\)\s*\d+.*$/i, "")            // strip "(SET) CollectorNum" suffix
+       .trim()
+    )
+    .filter(name => {
+      if (!name) return false;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
 }
@@ -56,6 +71,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   geminiModel,
   openCodexWith,
 }) => {
+  const { showToast } = useToast();
   const [mode, setMode] = useState<DeckMode>("generate");
 
   // ── Generate mode state ──
@@ -121,6 +137,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
     navigator.clipboard.writeText(names.join("\n")).catch(() => undefined);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyMoxfield = (names: string[]) => {
+    navigator.clipboard.writeText(toMoxfieldFormat(names)).catch(() => undefined);
+    showToast("Copied in Moxfield format!", "success");
   };
 
   // ── Import mode ──
@@ -343,13 +364,27 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--accent-purple)" }}>
                     Generated Decklist
                   </h3>
-                  <button
-                    onClick={handleCopyDecklist}
-                    className="glass-button"
-                    style={{ padding: "6px 12px", fontSize: "0.78rem" }}
-                  >
-                    {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy Names</>}
-                  </button>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      onClick={handleCopyDecklist}
+                      className="glass-button"
+                      style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                    >
+                      {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy Names</>}
+                    </button>
+                    <button
+                      onClick={() => handleCopyMoxfield(extractCardNames(generatedDeck))}
+                      className="glass-button"
+                      style={{
+                        padding: "6px 12px", fontSize: "0.78rem",
+                        background: "rgba(16,185,129,0.08)",
+                        borderColor: "rgba(16,185,129,0.25)",
+                        color: "var(--accent-emerald)",
+                      }}
+                    >
+                      <Copy size={12} /> Moxfield
+                    </button>
+                  </div>
                 </div>
 
                 <div className="chat-markdown" style={{ fontSize: "0.88rem" }}>
@@ -411,27 +446,68 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
             {/* Card grid */}
             {importedCards.length > 0 && (
               <div className="glass-panel" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>
-                    {importedCards.filter(Boolean).length} / {importedCards.length} cards found
-                  </span>
-                  <button
-                    onClick={handleAnalyzeImport}
-                    disabled={analyzing || importedCards.filter(Boolean).length === 0}
-                    className="glass-button"
-                    style={{
-                      padding: "7px 14px", fontSize: "0.82rem", fontWeight: 700,
-                      background: "linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(6,182,212,0.1) 100%)",
-                      borderColor: "rgba(139,92,246,0.35)",
-                    }}
-                  >
-                    {analyzing ? (
-                      <><Loader size={13} style={{ animation: "spinner 0.8s linear infinite" }} /> Analyzing…</>
-                    ) : (
-                      <><Wand2 size={13} /> Analyze with AI</>
-                    )}
-                  </button>
-                </div>
+                {/* Header row: count + cost + action buttons */}
+                {(() => {
+                  const found = importedCards.filter(Boolean) as ScryfallCard[];
+                  const cost  = calcDeckCost(importedCards);
+                  return (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+                      {/* Left: count + cost pill */}
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>
+                          {found.length} / {importedCards.length} cards found
+                        </span>
+                        {cost.priced > 0 && (
+                          <div style={{
+                            display: "flex", flexDirection: "column",
+                            background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.25)",
+                            borderRadius: "8px", padding: "4px 10px",
+                          }}>
+                            <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                              ~${cost.total.toFixed(2)}
+                            </span>
+                            <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>
+                              avg ${(cost.total / cost.priced).toFixed(2)}/card
+                              {cost.unpriced > 0 ? ` · ${cost.unpriced} no price` : ""}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {/* Right: Moxfield copy + AI analyze */}
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={() => handleCopyMoxfield(found.map(c => c.name))}
+                          disabled={found.length === 0}
+                          className="glass-button"
+                          style={{
+                            padding: "7px 12px", fontSize: "0.78rem",
+                            background: "rgba(16,185,129,0.08)",
+                            borderColor: "rgba(16,185,129,0.25)",
+                            color: "var(--accent-emerald)",
+                          }}
+                        >
+                          <Copy size={13} /> Moxfield
+                        </button>
+                        <button
+                          onClick={handleAnalyzeImport}
+                          disabled={analyzing || found.length === 0}
+                          className="glass-button"
+                          style={{
+                            padding: "7px 14px", fontSize: "0.82rem", fontWeight: 700,
+                            background: "linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(6,182,212,0.1) 100%)",
+                            borderColor: "rgba(139,92,246,0.35)",
+                          }}
+                        >
+                          {analyzing ? (
+                            <><Loader size={13} style={{ animation: "spinner 0.8s linear infinite" }} /> Analyzing…</>
+                          ) : (
+                            <><Wand2 size={13} /> Analyze with AI</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* 4-column grid */}
                 <div style={{
@@ -483,36 +559,74 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
               </div>
             )}
 
-            {/* Mana Curve Chart */}
+            {/* Color Spread + Mana Curve Charts */}
             {importedCards.filter(Boolean).length > 0 && (() => {
-              const curve = buildManaCurve(importedCards);
-              const maxCount = Math.max(...Object.values(curve), 1);
-              const total = Object.values(curve).reduce((a, b) => a + b, 0);
+              const curve     = buildManaCurve(importedCards);
+              const spread    = buildColorSpread(importedCards);
+              const maxCurve  = Math.max(...Object.values(curve), 1);
+              const maxSpread = Math.max(...Object.values(spread), 1);
+              const totalSpells = Object.values(curve).reduce((a, b) => a + b, 0);
               const barColors = ["#94a3b8","#38bdf8","#34d399","#facc15","#f97316","#f43f5e","#a855f7"];
+              const colorKeys = Object.keys(spread).filter(k => spread[k] > 0);
               return (
-                <div className="glass-panel" style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h4 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--accent-cyan)" }}>⚡ Mana Curve</h4>
-                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{total} non-land spells</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "6px", alignItems: "flex-end", height: "80px" }}>
-                    {Object.entries(curve).map(([cmc, count], i) => (
-                      <div key={cmc} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-                        {count > 0 && (
-                          <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "var(--text-secondary)" }}>{count}</span>
-                        )}
-                        <div style={{
-                          width: "100%",
-                          height: `${Math.max((count / maxCount) * 56, count > 0 ? 4 : 0)}px`,
-                          background: barColors[i] ?? "var(--accent-purple)",
-                          borderRadius: "4px 4px 0 0",
-                          transition: "height 0.3s ease",
-                          opacity: count === 0 ? 0.15 : 0.85,
-                        }} />
-                        <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>{cmc}</span>
+                <div className="glass-panel" style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+
+                  {/* ── Color Identity Spread ── */}
+                  {colorKeys.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <h4 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--accent-purple)" }}>🎨 Color Spread</h4>
+                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>by color identity</span>
                       </div>
-                    ))}
+                      <div style={{ display: "flex", gap: "8px", alignItems: "flex-end", height: "60px" }}>
+                        {colorKeys.map(pip => {
+                          const count = spread[pip];
+                          const meta  = COLOR_META[pip];
+                          return (
+                            <div key={pip} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}>
+                              <span style={{ fontSize: "0.6rem", fontWeight: 700, color: meta.color }}>{count}</span>
+                              <div style={{
+                                width: "100%",
+                                height: `${Math.max((count / maxSpread) * 40, 4)}px`,
+                                background: meta.color,
+                                borderRadius: "3px 3px 0 0",
+                                opacity: 0.8,
+                                transition: "height 0.3s ease",
+                              }} />
+                              <span style={{ fontSize: "0.65rem", color: meta.color, fontWeight: 700 }}>{pip}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Mana Curve ── */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h4 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--accent-cyan)" }}>⚡ Mana Curve</h4>
+                      <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{totalSpells} non-land spells</span>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "flex-end", height: "72px" }}>
+                      {Object.entries(curve).map(([cmc, count], i) => (
+                        <div key={cmc} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                          {count > 0 && (
+                            <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "var(--text-secondary)" }}>{count}</span>
+                          )}
+                          <div style={{
+                            width: "100%",
+                            height: `${Math.max((count / maxCurve) * 50, count > 0 ? 4 : 0)}px`,
+                            background: barColors[i] ?? "var(--accent-purple)",
+                            borderRadius: "4px 4px 0 0",
+                            transition: "height 0.3s ease",
+                            opacity: count === 0 ? 0.15 : 0.85,
+                          }} />
+                          <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>{cmc}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
                 </div>
               );
             })()}

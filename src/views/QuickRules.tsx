@@ -180,8 +180,8 @@ export const QuickRules: React.FC = () => {
           </div>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <button onClick={expandAll}   className="glass-button" style={{ padding: "6px 12px", fontSize: "0.78rem" }}>Expand All</button>
-          <button onClick={collapseAll} className="glass-button" style={{ padding: "6px 12px", fontSize: "0.78rem" }}>Collapse All</button>
+          <button onClick={expandAll}   className="glass-button" aria-label="Expand all rule sections" style={{ padding: "6px 12px", fontSize: "0.78rem" }}>Expand All</button>
+          <button onClick={collapseAll} className="glass-button" aria-label="Collapse all rule sections" style={{ padding: "6px 12px", fontSize: "0.78rem" }}>Collapse All</button>
         </div>
       </div>
 
@@ -194,12 +194,14 @@ export const QuickRules: React.FC = () => {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search rules, keywords, mechanics…"
+          aria-label="Search rules, keywords, and mechanics"
           className="glass-input"
           style={{ width: "100%", paddingLeft: "36px", paddingRight: "12px", fontSize: "0.88rem" }}
         />
         {search && (
           <button
             onClick={() => setSearch("")}
+            aria-label="Clear search"
             style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex" }}
           >
             ✕
@@ -228,6 +230,8 @@ export const QuickRules: React.FC = () => {
               {/* Section Header */}
               <button
                 onClick={() => toggleSection(section.id)}
+                aria-label={`${isOpen ? "Collapse" : "Expand"} ${section.title} section`}
+                aria-expanded={isOpen}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
                   padding: "14px 18px", background: isOpen ? `${section.color}0c` : "rgba(255,255,255,0.01)",

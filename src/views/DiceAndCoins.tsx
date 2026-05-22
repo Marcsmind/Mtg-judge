@@ -192,6 +192,8 @@ export const DiceAndCoins: React.FC = () => {
                 <button
                   key={num}
                   onClick={() => setDiceCount(num)}
+                  aria-label={`Roll ${num} ${num === 1 ? "die" : "dice"}`}
+                  aria-pressed={diceCount === num}
                   style={{
                     background: diceCount === num ? "var(--accent-purple)" : "rgba(255,255,255,0.02)",
                     border: "1px solid var(--border-color)",
@@ -219,6 +221,11 @@ export const DiceAndCoins: React.FC = () => {
               {/* 3-D two-faced coin */}
               <div
                 onClick={handleFlipCoin}
+                role="button"
+                tabIndex={0}
+                aria-label="Flip coin"
+                aria-disabled={coinFlipping}
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") handleFlipCoin(); }}
                 style={{ perspective: "600px", width: "140px", height: "140px", cursor: coinFlipping ? "not-allowed" : "pointer" }}
               >
                 <div style={{
@@ -258,6 +265,7 @@ export const DiceAndCoins: React.FC = () => {
                   onClick={handleFlipCoin}
                   className="glass-button"
                   disabled={coinFlipping}
+                  aria-label={coinFlipping ? "Coin is flipping" : "Flip coin"}
                   style={{ background: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.1)", padding: "10px 24px" }}
                 >
                   <span>{coinFlipping ? "Flipping..." : "Flip Coin"}</span>
@@ -320,6 +328,7 @@ export const DiceAndCoins: React.FC = () => {
                           onClick={() => handleRollDice(d.name, d.sides, d.color)}
                           className="glass-button"
                           disabled={rolling}
+                          aria-label={`Roll ${diceCount > 1 ? `${diceCount}×` : ""}${d.name}`}
                           style={{ padding: "6px 14px", fontSize: "0.75rem", background: "rgba(255,255,255,0.04)" }}
                         >
                           Roll
@@ -409,17 +418,17 @@ export const DiceAndCoins: React.FC = () => {
               {history.length > 0 && (
                 <button
                   onClick={handleClearHistory}
+                  aria-label="Clear roll ledger"
                   style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px" }}
                   onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
                   onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
-                  title="Clear Ledger"
                 >
                   <Trash2 size={14} />
                 </button>
               )}
               <button
                 onClick={() => setLedgerOpen(false)}
-                title="Collapse ledger"
+                aria-label="Collapse roll ledger"
                 style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px", display: "flex" }}
                 onMouseEnter={e => e.currentTarget.style.color = "var(--text-primary)"}
                 onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
@@ -463,17 +472,17 @@ export const DiceAndCoins: React.FC = () => {
         </div>
       ) : (
         /* Collapsed ledger — thin strip */
-        <div
+        <button
           className="glass-panel"
-          style={{ width: "32px", display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0", flexShrink: 0, gap: "10px", cursor: "pointer" }}
+          aria-label={`Open roll ledger${history.length > 0 ? `, ${history.length} entries` : ""}`}
+          style={{ width: "32px", display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0", flexShrink: 0, gap: "10px", cursor: "pointer", border: "none" }}
           onClick={() => setLedgerOpen(true)}
-          title="Open Roll Ledger"
         >
           <ChevronLeft size={16} color="var(--accent-purple)" />
           <div style={{ writingMode: "vertical-rl", textOrientation: "mixed", transform: "rotate(180deg)", fontSize: "0.62rem", color: "var(--text-muted)", letterSpacing: "0.5px", fontWeight: 600, textTransform: "uppercase", userSelect: "none" }}>
             Ledger {history.length > 0 ? `(${history.length})` : ""}
           </div>
-        </div>
+        </button>
       )}
 
     </div>

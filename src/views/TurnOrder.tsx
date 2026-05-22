@@ -257,6 +257,7 @@ export const TurnOrder: React.FC = () => {
         <button
           onClick={handleResetPlayers}
           className="glass-button"
+          aria-label="Sync roster from Life Counter and reset results"
           style={{ padding: "8px 12px", fontSize: "0.8rem", background: "rgba(255,255,255,0.02)" }}
         >
           <RefreshCw size={14} />
@@ -285,6 +286,7 @@ export const TurnOrder: React.FC = () => {
             <button
               type="submit"
               className="glass-button"
+              aria-label="Add player to roster"
               style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", padding: "8px 12px", fontSize: "0.8rem" }}
             >
               Add
@@ -318,8 +320,8 @@ export const TurnOrder: React.FC = () => {
                       <button
                         data-color-picker
                         onClick={() => setColorPickerFor(isPickerOpen ? null : p)}
-                        title="Pick a color (syncs to Life Counter)"
-                        aria-label={`Color for ${p}`}
+                        aria-label={`${isPickerOpen ? "Close" : "Open"} color picker for ${p}`}
+                        aria-pressed={isPickerOpen}
                         style={{
                           width: "16px", height: "16px", borderRadius: "50%",
                           background: dotColor,
@@ -336,6 +338,7 @@ export const TurnOrder: React.FC = () => {
 
                       <button
                         onClick={() => handleRemovePlayer(idx)}
+                        aria-label={`Remove ${p} from roster`}
                         style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
                         onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
                         onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
@@ -361,7 +364,8 @@ export const TurnOrder: React.FC = () => {
                           <button
                             key={key}
                             onClick={() => setColor(p, key)}
-                            title={key}
+                            aria-label={`Set ${p}'s color to ${key}`}
+                            aria-pressed={colorKey === key}
                             style={{
                               width: "22px", height: "22px", borderRadius: "50%",
                               background: hex,
@@ -377,6 +381,7 @@ export const TurnOrder: React.FC = () => {
                         {colorKey && (
                           <button
                             onClick={() => { setPlayerColors(prev => { const n = { ...prev }; delete n[p]; return n; }); setColorPickerFor(null); }}
+                            aria-label={`Clear color for ${p}`}
                             style={{ fontSize: "0.68rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", marginLeft: "2px" }}
                             onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
                             onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
@@ -417,6 +422,8 @@ export const TurnOrder: React.FC = () => {
               onClick={triggerRouletteSpin}
               className="glass-button"
               disabled={spinning || players.length === 0}
+              aria-label={spinning ? "Selecting a player…" : "Spin the wheel to randomly choose who goes first"}
+              aria-busy={spinning}
               style={{ background: "var(--accent-purple)", borderColor: "var(--accent-purple)", color: "#ffffff", width: "100%", justifyContent: "center" }}
             >
               <span>{spinning ? "Selecting..." : "Spin the Wheel"}</span>
@@ -441,6 +448,8 @@ export const TurnOrder: React.FC = () => {
               onClick={() => triggerRollOff()}
               className="glass-button"
               disabled={rollingOff || players.length === 0}
+              aria-label={rollingOff ? "Rolling D20s for all players…" : "Roll D20 for all players to determine turn order"}
+              aria-busy={rollingOff}
               style={{ background: "rgba(255,255,255,0.04)", width: "100%", justifyContent: "center" }}
             >
               <span>{rollingOff ? "Rolling D20s..." : "Roll D20 for All"}</span>
@@ -493,6 +502,7 @@ export const TurnOrder: React.FC = () => {
                   onClick={triggerTieReroll}
                   disabled={rollingOff}
                   className="glass-button"
+                  aria-label={`Re-roll D20 between tied players: ${tiedPlayers.join(", ")}`}
                   style={{ padding: "5px 10px", fontSize: "0.75rem", background: "rgba(234,179,8,0.12)", borderColor: "rgba(234,179,8,0.3)", color: "var(--accent-gold)", flexShrink: 0 }}
                 >
                   Re-Roll
@@ -588,6 +598,7 @@ export const TurnOrder: React.FC = () => {
               <button
                 onClick={handleNextTurn}
                 className="glass-button"
+                aria-label={`End turn ${turnNumber} — advance to ${players[((currentIndex ?? 0) + 1) % players.length]}`}
                 style={{
                   background: "rgba(16,185,129,0.12)", borderColor: "rgba(16,185,129,0.35)",
                   color: "var(--accent-emerald)", width: "100%", justifyContent: "center",
