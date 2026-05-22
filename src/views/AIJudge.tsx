@@ -110,6 +110,13 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const autocompleteAbortRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize the textarea as content grows (max ~4 lines / 140px)
+  const autoResize = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  };
 
   // ── Zustand: card history + pendingTagCard signal ──
   const addToCardHistory = useAppStore((s) => s.addToCardHistory);
@@ -224,6 +231,8 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     setError("");
     setQueryLoading(true);
     setQuery("");
+    // Reset textarea height after clearing
+    if (inputRef.current) inputRef.current.style.height = "44px";
 
     const userMessage: Message = {
       role: "user",
@@ -595,18 +604,35 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           marginBottom: "12px",
         }}
       >
-        <input
-          type="text"
+        <textarea
+          ref={inputRef}
+          rows={1}
           className="glass-input"
           placeholder={
             apiKey
-              ? "Ask a rules question... (e.g. If my commander is phased out...)"
+              ? "Ask a rules question… (e.g. If my commander is phased out…)"
               : "Mock Mode: Tag cards to see their text, or add API Key in settings"
           }
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); autoResize(e.target); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              // Trigger form submit programmatically
+              (e.currentTarget.closest("form") as HTMLFormElement | null)?.requestSubmit();
+            }
+          }}
           disabled={queryLoading}
-          style={{ flex: 1, padding: "14px 18px", fontSize: "0.95rem" }}
+          style={{
+            flex: 1,
+            resize: "none",
+            overflow: "hidden",
+            minHeight: "44px",
+            maxHeight: "140px",
+            padding: "11px 16px",
+            fontSize: "16px",
+            lineHeight: "1.4",
+          }}
         />
         <button
           type="submit"

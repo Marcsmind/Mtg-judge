@@ -44,7 +44,7 @@ export const CardTagBar: React.FC<CardTagBarProps> = ({
               aria-expanded={suggestions.length > 0}
               aria-haspopup="listbox"
               role="combobox"
-              style={{ width: "100%", paddingLeft: "36px", fontSize: "0.85rem" }}
+              style={{ width: "100%", paddingLeft: "36px", fontSize: "16px" }}
             />
             <Search
               size={14}

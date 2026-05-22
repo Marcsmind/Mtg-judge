@@ -32,4 +32,5 @@ export const STORAGE_KEYS = {
   MP_LOBBY_PLAYERS:   "nexus_mp_lobby_players",     // LobbyPlayer[] JSON
   MP_FIRST_PLAYER:    "nexus_mp_first_player",      // first player name from spin
   SAVED_DECKS:        "nexus_saved_decks",           // SavedDeck[] JSON
+  MY_PLAYER_INDEX:    "nexus_judge_my_player_index", // which player seat is "mine" on this device
 } as const;

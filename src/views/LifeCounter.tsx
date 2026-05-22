@@ -238,6 +238,22 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   });
   const [turnNumber, setTurnNumber] = useState<number>(1);
 
+  // ── Seat ownership: which player index is "me" on this device ──
+  const [myPlayerIndex, setMyPlayerIndex] = useState<number | null>(() => {
+    const s = localStorage.getItem(STORAGE_KEYS.MY_PLAYER_INDEX);
+    return s !== null ? parseInt(s, 10) : null;
+  });
+
+  const claimSeat = (idx: number) => {
+    const next = myPlayerIndex === idx ? null : idx; // tap same seat again to unclaim
+    setMyPlayerIndex(next);
+    if (next !== null) {
+      localStorage.setItem(STORAGE_KEYS.MY_PLAYER_INDEX, String(next));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX);
+    }
+  };
+
   // ── Multiplayer (extracted into useMultiplayer hook) ──
   const {
     roomCode, roomConnected, roomRole, roomName, setRoomName,
@@ -1234,6 +1250,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 revivePlayer={revivePlayer}
                 isFirst={firstPlayerName !== null && p.name === firstPlayerName}
                 isActiveTurn={idx === activePlayerIndex}
+                isLocalPlayer={myPlayerIndex === null || idx === myPlayerIndex}
+                claimSeat={() => claimSeat(idx)}
                 commanderName={p.commanderName}
                 onSetCommander={setPlayerCommander}
                 onClearCommander={clearPlayerCommander}

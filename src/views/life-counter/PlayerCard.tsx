@@ -13,6 +13,7 @@ import {
 import type { Player, ActiveCounters, TokenKey } from "../../types/game";
 import type { SavedDeck } from "../../types/deck";
 import { SetCommanderModal } from "./SetCommanderModal";
+import { CommanderPreviewModal } from "./CommanderPreviewModal";
 
 // ── MTG-themed emoji avatar presets ──────────────────────────────────────────
 const AVATAR_PRESETS = ["🐉", "🧙", "🏰", "⚔️", "💀", "🌿", "🔥", "💧"];
@@ -60,6 +61,8 @@ interface PlayerCardProps {
   onClearCommander?:    (id: number) => void;
   savedDecks?:          SavedDeck[];
   isActiveTurn?:        boolean;  // turn tracker — highlights the active player
+  isLocalPlayer?:       boolean;  // true = this seat belongs to the device; default true (open edit)
+  claimSeat?:           () => void; // tap "Me" to claim / unclaim this seat
 }
 
 export const PlayerCard: React.FC<PlayerCardProps> = ({
@@ -92,6 +95,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   onClearCommander,
   savedDecks = [],
   isActiveTurn = false,
+  isLocalPlayer = true,
+  claimSeat,
 }) => {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
@@ -110,8 +115,9 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     return () => { if (firstTimerRef.current) clearTimeout(firstTimerRef.current); };
   }, [isFirst]);
 
-  // ── Set Commander modal ───────────────────────────────────────────────────
-  const [setCmdOpen, setSetCmdOpen] = useState(false);
+  // ── Commander modals ──────────────────────────────────────────────────────
+  const [setCmdOpen, setSetCmdOpen]       = useState(false);
+  const [previewOpen, setPreviewOpen]     = useState(false);
 
   // ── Defeat conditions ─────────────────────────────────────────────────────
   const isDeadGeneral = p.life <= 0;
@@ -333,33 +339,64 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           onFocus={e => e.target.style.borderBottomColor = playerTheme.accent}
           onBlur={e => e.target.style.borderBottomColor = "transparent"}
         />
-        {/* Commander wand — always visible; dimmed when no commander set */}
+        {/* Commander wand
+            - Commander set    → open preview modal; canEdit = isLocalPlayer
+            - No commander     → open editor only when isLocalPlayer; no-op for others     */}
         <button
-          onClick={() => setSetCmdOpen(true)}
-          aria-label={commanderName ? `Change ${p.name}'s commander: ${commanderName}` : `Set commander for ${p.name}`}
-          title={commanderName ? `Commander: ${commanderName}` : "Set commander"}
+          onClick={() => {
+            if (commanderName) {
+              setPreviewOpen(true);
+            } else if (isLocalPlayer && onSetCommander) {
+              setSetCmdOpen(true);
+            }
+            // other player + no commander → intentional no-op
+          }}
+          aria-label={commanderName ? `View ${p.name}'s commander: ${commanderName}` : (isLocalPlayer ? `Set commander for ${p.name}` : `${p.name} has no commander set`)}
+          title={commanderName ? `Commander: ${commanderName}` : (isLocalPlayer ? "Set commander" : "No commander set")}
           className="touch-icon-btn"
           style={{
             background: commanderName ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)",
             border: `1px solid ${commanderName ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)"}`,
-            borderRadius: "6px", padding: "3px 5px", cursor: "pointer", flexShrink: 0,
-            display: "flex", alignItems: "center",
-            opacity: commanderName ? 1 : 0.4,
+            borderRadius: "6px", padding: "3px 5px",
+            cursor: (commanderName || isLocalPlayer) ? "pointer" : "default",
+            flexShrink: 0, display: "flex", alignItems: "center",
+            opacity: commanderName ? 1 : (isLocalPlayer ? 0.5 : 0.2),
             transition: "all 0.15s ease",
           }}
           onMouseEnter={e => {
+            if (!commanderName && !isLocalPlayer) return;
             e.currentTarget.style.opacity = "1";
             e.currentTarget.style.background = "rgba(139,92,246,0.2)";
             e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)";
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.opacity = commanderName ? "1" : "0.4";
+            e.currentTarget.style.opacity = commanderName ? "1" : (isLocalPlayer ? "0.5" : "0.2");
             e.currentTarget.style.background = commanderName ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)";
             e.currentTarget.style.borderColor = commanderName ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)";
           }}
         >
           <Wand2 size={13} color={commanderName ? "var(--accent-purple)" : "var(--text-muted)"} />
         </button>
+        {/* "Me" pill — tap to claim / unclaim this seat */}
+        {claimSeat && (
+          <button
+            onClick={claimSeat}
+            aria-label={isLocalPlayer ? "This is your seat (tap to unclaim)" : "Claim this seat as yours"}
+            title={isLocalPlayer ? "Your seat — tap to unclaim" : "Claim this seat"}
+            className="touch-icon-btn"
+            style={{
+              background: isLocalPlayer ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.04)",
+              border: `1px solid ${isLocalPlayer ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.1)"}`,
+              borderRadius: "12px", padding: "2px 7px", cursor: "pointer", flexShrink: 0,
+              display: "flex", alignItems: "center", gap: "3px",
+              fontSize: "0.6rem", fontWeight: 700,
+              color: isLocalPlayer ? "var(--accent-purple)" : "var(--text-muted)",
+              transition: "all 0.15s ease",
+            }}
+          >
+            👤 {isLocalPlayer ? "Me" : "Me?"}
+          </button>
+        )}
         <button
           onClick={() => cycleColor(p.id)}
           aria-label={`Cycle color for ${p.name}`}
@@ -374,6 +411,17 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           title="Cycle Color"
         />
       </div>
+
+      {/* ── Commander Preview Modal (read-only by default; edit button when isLocalPlayer) ── */}
+      {previewOpen && commanderName && (
+        <CommanderPreviewModal
+          commanderName={commanderName}
+          playerName={p.name}
+          canEdit={isLocalPlayer}
+          onEdit={() => { setPreviewOpen(false); setSetCmdOpen(true); }}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
 
       {/* ── Set Commander Modal ── */}
       {setCmdOpen && onSetCommander && (

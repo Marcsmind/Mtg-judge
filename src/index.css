@@ -69,6 +69,7 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
+  overscroll-behavior: none; /* prevent iOS rubber-band bounce near nav bar */
 }
 
 /* Custom Scrollbar */
@@ -116,6 +117,7 @@ body {
   color: var(--text-primary);
   padding: 10px 14px;
   font-family: inherit;
+  font-size: 16px; /* prevents iOS auto-zoom (< 16px triggers it) */
   outline: none;
   transition: all 0.2s ease;
 }
@@ -447,20 +449,26 @@ h1, h2, h3, h4, h5 {
 
 /* ── Mobile: sidebar collapses to a bottom tab bar ─────────────────────────── */
 @media (max-width: 768px) {
+  /* Prevent iOS rubber-band bounce from revealing the bar's dead zone */
+  input, textarea, select {
+    font-size: 16px !important; /* prevents iOS auto-zoom (< 16px triggers it) */
+  }
+
   .app-container {
     flex-direction: column;
   }
 
-  /* Sidebar → fixed bottom tab bar, scrollable for 9+ items */
+  /* Sidebar → fixed bottom tab bar — 6 evenly-spaced items, no horizontal scroll */
   .app-container > aside {
     width: 100% !important;
-    height: 64px !important;
+    height: calc(64px + env(safe-area-inset-bottom)) !important;
     margin: 0 !important;
     border-radius: 0 !important;
     flex-direction: row !important;
-    padding: 0 4px !important;
-    justify-content: flex-start !important;
-    gap: 2px !important;
+    padding: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    justify-content: space-around !important;
+    gap: 0 !important;
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
@@ -468,23 +476,19 @@ h1, h2, h3, h4, h5 {
     border-top: 1px solid var(--border-color) !important;
     border-left: none !important;
     border-right: none !important;
-    overflow-x: auto !important;
+    overflow-x: hidden !important;
     overflow-y: hidden !important;
-    scrollbar-width: none !important;
-  }
-
-  .app-container > aside::-webkit-scrollbar {
-    display: none !important;
   }
 
   /* Nav items: column layout (icon on top, hidden label below) */
   .app-container > aside nav,
   .app-container > aside .sidebar-footer {
     flex-direction: row !important;
-    gap: 2px !important;
+    gap: 0 !important;
     align-items: center;
     display: flex !important;
-    flex-shrink: 0 !important;
+    flex: 1 !important;
+    justify-content: space-around !important;
   }
 
   .app-container > aside nav button,
@@ -496,12 +500,12 @@ h1, h2, h3, h4, h5 {
     font-size: 0.6rem !important;
     min-width: 44px !important;
     min-height: 44px !important;
-    flex-shrink: 0 !important;
+    flex: 1 !important;
   }
 
-  /* Main content: add padding so last content isn't hidden behind tab bar */
+  /* Main content: pad below the tab bar + safe area */
   .main-content {
-    padding-bottom: 76px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom)) !important;
   }
 
   /* Hide brand logo and nav labels on mobile tab bar */

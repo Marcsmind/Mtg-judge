@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Shuffle, Sparkles, RefreshCw, Trophy, Users, AlertTriangle, ChevronRight, Play } from "lucide-react";
 import { useAppStore } from "../store/useAppStore";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { useMobile } from "../hooks/useMobile";
 import {
   subscribeWithRetry,
   broadcastState,
@@ -49,6 +50,8 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
   mpLobbyPlayers,
   onMpPhaseChange,
 }) => {
+  const isMobile = useMobile(768);
+
   // ── Refs ──────────────────────────────────────────────────────────────────
   const spinTimeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rollAnimIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -393,10 +396,15 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "24px" }}>
+      <div style={{
+        display: isMobile ? "flex" : "grid",
+        flexDirection: isMobile ? "column" : undefined,
+        gridTemplateColumns: isMobile ? undefined : "1fr 1.2fr",
+        gap: "16px",
+      }}>
 
         {/* ── Left: Player Roster ── */}
-        <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px", background: "rgba(22,19,32,0.4)", maxHeight: "500px" }}>
+        <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px", background: "rgba(22,19,32,0.4)", maxHeight: isMobile ? undefined : "500px" }}>
           <h3 style={{ fontSize: "1.1rem", fontWeight: 700, borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
             <Users size={16} color="var(--accent-cyan)" />
             Active Roster ({players.length})

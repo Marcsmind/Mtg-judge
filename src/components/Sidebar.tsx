@@ -1,6 +1,8 @@
-import React from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles, HelpCircle } from "lucide-react";
+import React, { useState } from "react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles, HelpCircle, MoreHorizontal } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
+import { BottomSheet } from "./BottomSheet";
+import { useMobile } from "../hooks/useMobile";
 
 interface SidebarProps {
   activeTab: TabId;
@@ -10,7 +12,13 @@ interface SidebarProps {
   onToggleCollapsed: () => void;
 }
 
+// Primary tabs always shown in the mobile bottom bar (5 + "More" = 6 items)
+const PRIMARY_IDS: TabId[] = ["judge", "life", "gamenight", "dice", "deck"];
+
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openCodex, collapsed, onToggleCollapsed }) => {
+  const isMobile = useMobile(768);
+  const [moreOpen, setMoreOpen] = useState(false);
+
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: "judge",       label: "AI Judge",      icon: Scale       },
     { id: "life",        label: "Life Counter",  icon: Heart       },
@@ -23,6 +31,134 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
     { id: "guide",       label: "App Guide",     icon: HelpCircle  },
   ];
 
+  const primaryItems = navItems.filter(i => PRIMARY_IDS.includes(i.id));
+  const moreItems    = navItems.filter(i => !PRIMARY_IDS.includes(i.id));
+
+  // ── Mobile: bottom tab bar ──────────────────────────────────────────────────
+  if (isMobile) {
+    const makeTabBtn = (item: typeof navItems[0], onPress: () => void) => {
+      const Icon = item.icon;
+      const isActive = activeTab === item.id;
+      return (
+        <button
+          key={item.id}
+          onClick={onPress}
+          className={`sidebar-link ${isActive ? "active" : ""}`}
+          aria-current={isActive ? "page" : undefined}
+          aria-label={item.label}
+          style={{
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            gap: "3px", padding: "6px 4px",
+            background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
+            border: "none", borderRadius: "8px",
+            color: isActive ? "var(--accent-purple)" : "var(--text-muted)",
+            fontSize: "0.55rem", fontWeight: isActive ? 700 : 500,
+            cursor: "pointer", transition: "all 0.15s ease",
+          }}
+        >
+          <Icon size={20} />
+          <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>{item.label.split(" ")[0]}</span>
+        </button>
+      );
+    };
+
+    return (
+      <aside className="glass-panel" style={{ /* CSS media query handles layout */ }}>
+        <nav role="navigation" aria-label="Main navigation" style={{ display: "flex", flex: 1 }}>
+          {primaryItems.map(item => makeTabBtn(item, () => setActiveTab(item.id)))}
+          {/* "More" button — opens bottom drawer */}
+          <button
+            onClick={() => setMoreOpen(true)}
+            aria-label="More navigation options"
+            style={{
+              flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              gap: "3px", padding: "6px 4px",
+              background: "transparent",
+              border: "none", borderRadius: "8px",
+              color: "var(--text-muted)",
+              fontSize: "0.55rem", fontWeight: 500,
+              cursor: "pointer", transition: "all 0.15s ease",
+            }}
+          >
+            <MoreHorizontal size={20} />
+            <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>More</span>
+          </button>
+        </nav>
+
+        {/* "More" drawer */}
+        {moreOpen && (
+          <BottomSheet onClose={() => setMoreOpen(false)} zIndex={300} maxWidth="400px" padding="20px">
+            <div style={{ marginBottom: "16px", fontWeight: 700, fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+              More
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "16px" }}>
+              {moreItems.map(item => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { setActiveTab(item.id); setMoreOpen(false); }}
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "center",
+                      justifyContent: "center", gap: "8px", padding: "16px 8px",
+                      background: isActive ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${isActive ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
+                      borderRadius: "12px", cursor: "pointer",
+                      color: isActive ? "var(--accent-purple)" : "var(--text-secondary)",
+                      fontSize: "0.75rem", fontWeight: isActive ? 700 : 500,
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <Icon size={22} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+              {/* Card Codex */}
+              <button
+                onClick={() => { openCodex(); setMoreOpen(false); }}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  justifyContent: "center", gap: "8px", padding: "16px 8px",
+                  background: "rgba(6,182,212,0.06)",
+                  border: "1px solid rgba(6,182,212,0.2)",
+                  borderRadius: "12px", cursor: "pointer",
+                  color: "var(--accent-cyan)",
+                  fontSize: "0.75rem", fontWeight: 500,
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <Search size={22} />
+                <span>Card Codex</span>
+              </button>
+              {/* Settings */}
+              <button
+                onClick={() => { setActiveTab("settings"); setMoreOpen(false); }}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  justifyContent: "center", gap: "8px", padding: "16px 8px",
+                  background: activeTab === "settings" ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${activeTab === "settings" ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
+                  borderRadius: "12px", cursor: "pointer",
+                  color: activeTab === "settings" ? "var(--accent-purple)" : "var(--text-secondary)",
+                  fontSize: "0.75rem", fontWeight: activeTab === "settings" ? 700 : 500,
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <Settings size={22} />
+                <span>Settings</span>
+              </button>
+            </div>
+          </BottomSheet>
+        )}
+      </aside>
+    );
+  }
+
+  // ── Desktop: collapsible sidebar ─────────────────────────────────────────────
   return (
     <aside
       className="glass-panel"
