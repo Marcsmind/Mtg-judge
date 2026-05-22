@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import {
-  Wand2, Upload, Search, Copy, Check, Loader, AlertTriangle, X
+  Wand2, Upload, Search, Copy, Check, Loader, AlertTriangle, X,
+  BookMarked, Trash2, Pencil, PlusCircle,
 } from "lucide-react";
+import { loadDecks, addDeck, updateDeck, deleteDeck } from "../services/decks";
+import type { SavedDeck } from "../types/deck";
+import { searchCardFuzzy as searchCardForDeck, getCardImage as getDeckCardImage, autocompleteCard as autocompleteDeck } from "../services/scryfall";
 import {
   autocompleteCard,
   searchCardFuzzy,
@@ -19,7 +23,7 @@ interface DeckBuilderProps {
   openCodexWith: (name: string) => void;
 }
 
-type DeckMode = "generate" | "import";
+type DeckMode = "generate" | "import" | "decks";
 type BudgetTier = "any" | "budget" | "competitive";
 
 const BUDGET_LABELS: Record<BudgetTier, string> = {
@@ -89,6 +93,98 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   const [fetchProgress, setFetchProgress] = useState<{ done: number; total: number } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+
+  // ── My Decks state ──
+  const [savedDecks, setSavedDecks] = useState<SavedDeck[]>(() => loadDecks());
+  const [deckThumbs, setDeckThumbs] = useState<Record<string, string>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
+  const [newDeckName, setNewDeckName] = useState("");
+  const [newDeckCmd, setNewDeckCmd] = useState("");
+  const [newDeckPartner, setNewDeckPartner] = useState("");
+  const [newDeckNotes, setNewDeckNotes] = useState("");
+  const [deckCmdSugs, setDeckCmdSugs] = useState<string[]>([]);
+  const [deckPartnerSugs, setDeckPartnerSugs] = useState<string[]>([]);
+  const deckCmdAbortRef = useRef<AbortController | null>(null);
+  const deckPartnerAbortRef = useRef<AbortController | null>(null);
+
+  // Re-read decks when switching to the decks tab
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (mode === "decks") setSavedDecks(loadDecks());
+  }, [mode]);
+
+  // Lazy-load thumbnail images for each deck's commander
+  useEffect(() => {
+    if (mode !== "decks") return;
+    let cancelled = false;
+    savedDecks.forEach(async deck => {
+      if (deckThumbs[deck.id]) return;
+      const card = await searchCardForDeck(deck.commanderName);
+      if (card && !cancelled) {
+        setDeckThumbs(prev => ({ ...prev, [deck.id]: getDeckCardImage(card) }));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [savedDecks, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Autocomplete for new deck commander field
+  useEffect(() => {
+    const delay = setTimeout(async () => {
+      if (newDeckCmd.trim().length < 2) { setDeckCmdSugs([]); return; }
+      deckCmdAbortRef.current?.abort();
+      deckCmdAbortRef.current = new AbortController();
+      const list = await autocompleteDeck(newDeckCmd, deckCmdAbortRef.current.signal);
+      setDeckCmdSugs(list.slice(0, 8));
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [newDeckCmd]);
+
+  // Autocomplete for partner field
+  useEffect(() => {
+    const delay = setTimeout(async () => {
+      if (newDeckPartner.trim().length < 2) { setDeckPartnerSugs([]); return; }
+      deckPartnerAbortRef.current?.abort();
+      deckPartnerAbortRef.current = new AbortController();
+      const list = await autocompleteDeck(newDeckPartner, deckPartnerAbortRef.current.signal);
+      setDeckPartnerSugs(list.slice(0, 6));
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [newDeckPartner]);
+
+  const resetDeckForm = () => {
+    setNewDeckName(""); setNewDeckCmd(""); setNewDeckPartner(""); setNewDeckNotes("");
+    setDeckCmdSugs([]); setDeckPartnerSugs([]); setShowAddForm(false); setEditingDeckId(null);
+  };
+
+  const handleSaveDeck = () => {
+    const name = newDeckName.trim();
+    const commanderName = newDeckCmd.trim();
+    if (!name || !commanderName) return;
+    if (editingDeckId) {
+      updateDeck(editingDeckId, { name, commanderName, partnerName: newDeckPartner.trim() || undefined, notes: newDeckNotes.trim() || undefined });
+    } else {
+      addDeck({ name, commanderName, partnerName: newDeckPartner.trim() || undefined, notes: newDeckNotes.trim() || undefined });
+    }
+    setSavedDecks(loadDecks());
+    setDeckThumbs(prev => { const next = { ...prev }; if (editingDeckId) delete next[editingDeckId]; return next; });
+    resetDeckForm();
+  };
+
+  const handleEditDeck = (deck: SavedDeck) => {
+    setEditingDeckId(deck.id);
+    setNewDeckName(deck.name);
+    setNewDeckCmd(deck.commanderName);
+    setNewDeckPartner(deck.partnerName ?? "");
+    setNewDeckNotes(deck.notes ?? "");
+    setShowAddForm(true);
+  };
+
+  const handleDeleteDeck = (id: string) => {
+    deleteDeck(id);
+    setSavedDecks(loadDecks());
+    setDeckThumbs(prev => { const next = { ...prev }; delete next[id]; return next; });
+  };
 
   // ── Autocomplete abort controller ──
   const cmdAbortRef = useRef<AbortController | null>(null);
@@ -219,9 +315,9 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
         background: "rgba(255,255,255,0.03)",
         border: "1px solid var(--border-color)",
         borderRadius: "10px", padding: "3px", flexShrink: 0,
-        maxWidth: "340px",
+        maxWidth: "480px",
       }}>
-        {(["generate", "import"] as DeckMode[]).map(m => (
+        {(["generate", "import", "decks"] as DeckMode[]).map(m => (
           <button
             key={m}
             onClick={() => setMode(m)}
@@ -231,12 +327,12 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
               color: mode === m ? "#fff" : "var(--text-secondary)",
               fontWeight: mode === m ? 700 : 500,
               fontSize: "0.85rem", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
               transition: "all 0.15s ease",
             }}
           >
-            {m === "generate" ? <Wand2 size={13} /> : <Upload size={13} />}
-            {m === "generate" ? "AI Generate" : "Import List"}
+            {m === "generate" ? <Wand2 size={13} /> : m === "import" ? <Upload size={13} /> : <BookMarked size={13} />}
+            {m === "generate" ? "AI Generate" : m === "import" ? "Import List" : "My Decks"}
           </button>
         ))}
       </div>
@@ -657,6 +753,187 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
             </div>
           </>
         )}
+        {/* ════════════════════════════════════════
+            MY DECKS MODE
+        ════════════════════════════════════════ */}
+        {mode === "decks" && (
+          <>
+            {/* Add Deck button / form toggle */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>
+                {savedDecks.length === 0 ? "No saved decks yet." : `${savedDecks.length} saved deck${savedDecks.length > 1 ? "s" : ""}`}
+              </p>
+              <button
+                onClick={() => { resetDeckForm(); setShowAddForm(v => !v); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px",
+                  borderRadius: "9px", cursor: "pointer",
+                  background: showAddForm ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.1)",
+                  border: "1px solid rgba(139,92,246,0.35)",
+                  color: "var(--accent-purple)", fontSize: "0.82rem", fontWeight: 700,
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <PlusCircle size={14} /> {showAddForm ? "Cancel" : "Add Deck"}
+              </button>
+            </div>
+
+            {/* Add / Edit form */}
+            {showAddForm && (
+              <div className="glass-panel" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <p style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
+                  {editingDeckId ? "Edit Deck" : "New Deck"}
+                </p>
+
+                {/* Deck Name */}
+                <div>
+                  <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: "4px", fontWeight: 700 }}>Deck Name *</label>
+                  <input
+                    type="text" value={newDeckName} onChange={e => setNewDeckName(e.target.value)}
+                    placeholder="e.g. Atraxa Infect" maxLength={40}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-primary)", fontSize: "0.9rem", outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => (e.target.style.borderColor = "var(--accent-purple)")}
+                    onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
+                  />
+                </div>
+
+                {/* Commander autocomplete */}
+                <div style={{ position: "relative" }}>
+                  <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: "4px", fontWeight: 700 }}>Commander *</label>
+                  <input
+                    type="text" value={newDeckCmd}
+                    onChange={e => { setNewDeckCmd(e.target.value); }}
+                    placeholder="e.g. Atraxa, Praetors' Voice"
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-primary)", fontSize: "0.88rem", outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => (e.target.style.borderColor = "var(--accent-purple)")}
+                    onBlur={e => { setTimeout(() => setDeckCmdSugs([]), 150); (e.target.style.borderColor = "rgba(255,255,255,0.1)"); }}
+                  />
+                  {deckCmdSugs.length > 0 && (
+                    <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 30, background: "var(--bg-dark)", border: "1px solid var(--border-color)", borderRadius: "8px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.5)" }}>
+                      {deckCmdSugs.map((s, i) => (
+                        <button key={i} onMouseDown={() => { setNewDeckCmd(s); setDeckCmdSugs([]); }}
+                          style={{ display: "block", width: "100%", padding: "7px 12px", background: "transparent", border: "none", color: "var(--text-primary)", fontSize: "0.85rem", textAlign: "left", cursor: "pointer" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(139,92,246,0.12)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                        >{s}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Partner (optional) */}
+                <div style={{ position: "relative" }}>
+                  <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: "4px", fontWeight: 700 }}>Partner <span style={{ fontWeight: 400 }}>(optional)</span></label>
+                  <input
+                    type="text" value={newDeckPartner}
+                    onChange={e => setNewDeckPartner(e.target.value)}
+                    placeholder="Partner commander name"
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-primary)", fontSize: "0.88rem", outline: "none", boxSizing: "border-box" }}
+                    onFocus={e => (e.target.style.borderColor = "var(--accent-purple)")}
+                    onBlur={e => { setTimeout(() => setDeckPartnerSugs([]), 150); (e.target.style.borderColor = "rgba(255,255,255,0.1)"); }}
+                  />
+                  {deckPartnerSugs.length > 0 && (
+                    <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 30, background: "var(--bg-dark)", border: "1px solid var(--border-color)", borderRadius: "8px", overflow: "hidden", boxShadow: "0 6px 24px rgba(0,0,0,0.5)" }}>
+                      {deckPartnerSugs.map((s, i) => (
+                        <button key={i} onMouseDown={() => { setNewDeckPartner(s); setDeckPartnerSugs([]); }}
+                          style={{ display: "block", width: "100%", padding: "7px 12px", background: "transparent", border: "none", color: "var(--text-primary)", fontSize: "0.85rem", textAlign: "left", cursor: "pointer" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(139,92,246,0.12)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                        >{s}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: "4px", fontWeight: 700 }}>Notes <span style={{ fontWeight: 400 }}>(optional)</span></label>
+                  <textarea
+                    value={newDeckNotes} onChange={e => setNewDeckNotes(e.target.value)}
+                    placeholder="Strategy notes, combos, budget info…" rows={2} maxLength={200}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-primary)", fontSize: "0.82rem", outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                    onFocus={e => (e.target.style.borderColor = "var(--accent-purple)")}
+                    onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                  <button onClick={resetDeckForm} style={{ padding: "8px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-secondary)", fontSize: "0.82rem", cursor: "pointer" }}>Cancel</button>
+                  <button
+                    onClick={handleSaveDeck}
+                    disabled={!newDeckName.trim() || !newDeckCmd.trim()}
+                    style={{
+                      padding: "8px 16px", borderRadius: "8px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer",
+                      background: newDeckName.trim() && newDeckCmd.trim() ? "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(6,182,212,0.2))" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${newDeckName.trim() && newDeckCmd.trim() ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
+                      color: newDeckName.trim() && newDeckCmd.trim() ? "#fff" : "var(--text-muted)",
+                    }}
+                  >
+                    <Check size={13} style={{ marginRight: "5px" }} />{editingDeckId ? "Save Changes" : "Save Deck"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Deck cards */}
+            {savedDecks.map(deck => {
+              const winRate = deck.gamesPlayed > 0 ? Math.round((deck.wins / deck.gamesPlayed) * 100) : null;
+              const thumbUrl = deckThumbs[deck.id];
+              return (
+                <div key={deck.id} className="glass-panel" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  {/* Commander art thumbnail */}
+                  {thumbUrl ? (
+                    <img src={thumbUrl} alt={deck.commanderName} style={{ width: "52px", height: "37px", borderRadius: "6px", objectFit: "cover", objectPosition: "center 15%", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.5)" }} />
+                  ) : (
+                    <div style={{ width: "52px", height: "37px", borderRadius: "6px", background: "rgba(139,92,246,0.1)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <BookMarked size={16} color="var(--accent-purple)" />
+                    </div>
+                  )}
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{deck.name}</p>
+                    <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      ⚔️ {deck.commanderName}{deck.partnerName ? ` + ${deck.partnerName}` : ""}
+                    </p>
+                    {deck.notes && <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{deck.notes}</p>}
+                  </div>
+                  {/* Stats */}
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    {winRate !== null ? (
+                      <>
+                        <span style={{
+                          fontSize: "0.82rem", fontWeight: 800,
+                          color: winRate >= 50 ? "#10b981" : winRate >= 33 ? "#f59e0b" : "#ef4444",
+                        }}>{winRate}%</span>
+                        <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{deck.wins}W / {deck.gamesPlayed - deck.wins}L</p>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>No games</span>
+                    )}
+                  </div>
+                  {/* Actions */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
+                    <button onClick={() => handleEditDeck(deck)} aria-label={`Edit ${deck.name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "3px", display: "flex" }} onMouseEnter={e => e.currentTarget.style.color = "var(--accent-purple)"} onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => handleDeleteDeck(deck.id)} aria-label={`Delete ${deck.name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "3px", display: "flex" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {savedDecks.length === 0 && !showAddForm && (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
+                <BookMarked size={32} style={{ margin: "0 auto 12px", display: "block", opacity: 0.3 }} />
+                <p style={{ fontSize: "0.88rem" }}>No decks saved yet.</p>
+                <p style={{ fontSize: "0.78rem", marginTop: "4px" }}>Add your first deck to track win rates and fill in your commander quickly during Game Night.</p>
+              </div>
+            )}
+          </>
+        )}
+
       </div>
     </div>
   );

@@ -265,7 +265,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
 
   if (phase === "lobby" && roomConnected && roomCode) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "calc(100vh - 48px)", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "calc(100dvh - 48px)", overflow: "hidden" }}>
 
         {/* Header bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, flexWrap: "wrap", gap: "8px" }}>
@@ -367,7 +367,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
       ) : (
         <>
           {/* Host / Join cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
 
             {/* Host a Game */}
             <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "14px" }}>

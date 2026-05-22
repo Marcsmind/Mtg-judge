@@ -4,8 +4,11 @@ import {
   Crown, Skull, Radiation, Swords, Star,
   Settings2, Check, Moon, Sun,
   Save, Menu, Undo2,
-  Play, Square, RotateCcw, Timer, Wifi, WifiOff, Copy, Trophy
+  Play, Square, RotateCcw, Timer, Wifi, WifiOff, Copy, Trophy, Clock
 } from "lucide-react";
+import { useMobile } from "../hooks/useMobile";
+import { loadDecks, recordDeckResult } from "../services/decks";
+import type { SavedDeck } from "../types/deck";
 import { useAppStore } from "../store/useAppStore";
 import { hapticHeavy } from "../utils/haptics";
 import {
@@ -143,6 +146,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         name: lp.playerName,
         colorName: lp.colorName,
         commanderName: lp.commanderName || undefined,
+        deckId: lp.deckId ?? undefined,
       }));
     }
     // ── Standard localStorage init ────────────────────────────────────────────
@@ -161,6 +165,12 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const [showCountersMenu, setShowCountersMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // ── Mobile breakpoint ──
+  const isMobile = useMobile(768);
+
+  // ── Saved decks (for SetCommanderModal "From My Decks" picker) ──
+  const [savedDecks] = useState<SavedDeck[]>(() => loadDecks());
+
   // ── Collapsible game history ──
   const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(() => {
     try {
@@ -175,6 +185,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     localStorage.setItem(STORAGE_KEYS.HISTORY_COLLAPSED, String(next));
     return next;
   });
+
+  // ── Mobile history visibility (opt-in; no side panel by default on phones) ──
+  const [historyVisible, setHistoryVisible] = useState(false);
 
   // ── Collapsible control bar (START / player-count / mechanics row) ──
   const [controlsCollapsed, setControlsCollapsed] = useState<boolean>(() => {
@@ -636,21 +649,24 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
   /** Record the game to Supabase and then reset the board. */
   const handleEndGameConfirm = async (selectedPlayerId: number | null) => {
+    // Capture players snapshot BEFORE doReset mutates state
+    const playerSnapshot = players.slice();
+
     // Determine winner: sole survivor, or player with highest life
     const notDefeated = (p: Player) => {
       const cmdTaken = Object.values(p.commanderDamage).reduce((s, v) => s + v, 0);
       return p.life > 0 && (p.poison ?? 0) < 10 && cmdTaken < 21;
     };
-    const alive = players.filter(notDefeated);
-    const winner = alive.length === 1 ? alive[0] : [...players].sort((a, b) => b.life - a.life)[0];
+    const alive = playerSnapshot.filter(notDefeated);
+    const winner = alive.length === 1 ? alive[0] : [...playerSnapshot].sort((a, b) => b.life - a.life)[0];
 
     if (isSupabaseConfigured && userId) {
       await recordGame({
         roomCode:        roomCode ?? undefined,
-        playerCount:     players.length,
+        playerCount:     playerSnapshot.length,
         startingLife,
         durationSeconds: timerSeconds,
-        players: players.map(p => ({
+        players: playerSnapshot.map(p => ({
           userId:        p.id === selectedPlayerId ? userId : undefined,
           playerName:    p.name,
           finalLife:     p.life,
@@ -659,6 +675,13 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         })),
       });
       showToast("Game recorded to leaderboard! 🏆", "success");
+    }
+
+    // Record per-deck win/loss for any player slot that has a deckId
+    for (const p of playerSnapshot) {
+      if (p.deckId) {
+        recordDeckResult(p.deckId, p.id === winner?.id && notDefeated(winner));
+      }
     }
 
     setShowEndGame(false);
@@ -689,6 +712,20 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
   const renamePlayer = (playerId: number, name: string) => {
     setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, name: name || `Player ${playerId}` } : p));
+  };
+
+  const setPlayerCommander = (playerId: number, commanderName: string, deckId?: string) => {
+    scheduleBroadcast();
+    setPlayers(prev => prev.map(p =>
+      p.id === playerId ? { ...p, commanderName: commanderName || undefined, deckId: deckId ?? p.deckId } : p
+    ));
+  };
+
+  const clearPlayerCommander = (playerId: number) => {
+    scheduleBroadcast();
+    setPlayers(prev => prev.map(p =>
+      p.id === playerId ? { ...p, commanderName: undefined, deckId: undefined } : p
+    ));
   };
 
   const setAvatar = (playerId: number, emoji: string) => {
@@ -860,7 +897,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", gap: "16px", height: "calc(100vh - 48px)", overflow: "hidden" }}>
+    <div style={{ display: "flex", gap: "16px", height: "calc(100dvh - 48px)", overflow: "hidden" }}>
 
       {/* ── Main Column ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflow: "hidden", minWidth: 0 }}>
@@ -979,6 +1016,28 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             <Undo2 size={14} />
             <span className="lc-controls-label">Undo</span>
           </button>
+
+          {/* History toggle — mobile only */}
+          {isMobile && (
+            <button
+              onClick={() => setHistoryVisible(v => !v)}
+              aria-pressed={historyVisible}
+              aria-label={historyVisible ? "Hide game history" : "Show game history"}
+              title={historyVisible ? "Hide history" : "Show history"}
+              style={{
+                display: "flex", alignItems: "center", gap: "6px",
+                background: historyVisible ? "rgba(6,182,212,0.12)" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${historyVisible ? "rgba(6,182,212,0.3)" : "rgba(255,255,255,0.08)"}`,
+                borderRadius: "8px", padding: "7px 10px",
+                color: historyVisible ? "var(--accent-cyan)" : "var(--text-muted)",
+                cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
+                transition: "all 0.15s ease", flexShrink: 0,
+              }}
+            >
+              <Clock size={14} />
+              <span className="lc-controls-label">History</span>
+            </button>
+          )}
 
           {/* Controls toggle — hamburger, top-right */}
           <button
@@ -1322,6 +1381,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 revivePlayer={revivePlayer}
                 isFirst={firstPlayerName !== null && p.name === firstPlayerName}
                 commanderName={p.commanderName}
+                onSetCommander={setPlayerCommander}
+                onClearCommander={clearPlayerCommander}
+                savedDecks={savedDecks}
               />
             );
           })}
@@ -1344,8 +1406,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         );
       })()}
 
-      {/* ── Side Ledger ── */}
-      <GameHistoryLedger history={history} collapsed={historyCollapsed} onToggle={toggleHistory} />
+      {/* ── Side Ledger — always on desktop; opt-in on mobile via History button ── */}
+      {(!isMobile || historyVisible) && (
+        <GameHistoryLedger history={history} collapsed={historyCollapsed} onToggle={toggleHistory} />
+      )}
 
       {/* ── Save / Load Game Modal ── */}
       {showSaveModal && (

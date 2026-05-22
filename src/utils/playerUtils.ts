@@ -33,7 +33,9 @@ export function parseSavedPlayer(raw: any, fallbackLife: number): Player {
       clue:     raw.tokens?.clue     ?? 0,
       blood:    raw.tokens?.blood    ?? 0,
     },
-    enabledTokens: Array.isArray(raw.enabledTokens) ? raw.enabledTokens : [],
-    tokensOpen:    raw.tokensOpen ?? false,
+    enabledTokens:  Array.isArray(raw.enabledTokens) ? raw.enabledTokens : [],
+    tokensOpen:     raw.tokensOpen ?? false,
+    commanderName:  raw.commanderName ?? undefined,
+    deckId:         raw.deckId        ?? undefined,
   };
 }

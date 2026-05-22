@@ -10,6 +10,7 @@ import { QuickRules } from "./views/QuickRules";
 import { DeckBuilder } from "./views/DeckBuilder";
 import { Leaderboard } from "./views/Leaderboard";
 import { GameNight } from "./views/GameNight";
+import { AppGuide } from "./views/AppGuide";
 import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
@@ -191,6 +192,8 @@ function App() {
             onLinkGoogle={linkGoogleAccount}
           />
         );
+      case "guide":
+        return <AppGuide onNavigate={(tab) => setActiveTab(tab)} />;
       default:
         return (
           <AIJudge

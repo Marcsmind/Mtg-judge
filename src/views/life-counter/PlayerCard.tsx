@@ -8,9 +8,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Plus, Minus, ShieldAlert, Crown, Skull, Radiation,
-  Swords, Star, Coins, Shield, Wand2, X,
+  Swords, Star, Coins, Shield, Wand2,
 } from "lucide-react";
 import type { Player, ActiveCounters, TokenKey } from "../../types/game";
+import type { SavedDeck } from "../../types/deck";
+import { SetCommanderModal } from "./SetCommanderModal";
 
 // ── MTG-themed emoji avatar presets ──────────────────────────────────────────
 const AVATAR_PRESETS = ["🐉", "🧙", "🏰", "⚔️", "💀", "🌿", "🔥", "💧"];
@@ -52,8 +54,11 @@ interface PlayerCardProps {
   togglePlayerTokensPanel:(id: number) => void;
   setActiveDamageEditor:(id: number) => void;
   revivePlayer:         (id: number) => void;
-  isFirst?:             boolean;  // "Goes First" star — auto-dismisses after 10 s
-  commanderName?:       string;   // enables the commander card-art popup button
+  isFirst?:             boolean;   // "Goes First" star — auto-dismisses after 10 s
+  commanderName?:       string;   // commander name — wand button always visible
+  onSetCommander?:      (id: number, name: string, deckId?: string) => void;
+  onClearCommander?:    (id: number) => void;
+  savedDecks?:          SavedDeck[];
 }
 
 export const PlayerCard: React.FC<PlayerCardProps> = ({
@@ -82,6 +87,9 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   revivePlayer,
   isFirst = false,
   commanderName,
+  onSetCommander,
+  onClearCommander,
+  savedDecks = [],
 }) => {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
@@ -100,8 +108,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     return () => { if (firstTimerRef.current) clearTimeout(firstTimerRef.current); };
   }, [isFirst]);
 
-  // ── Commander card-art popup ──────────────────────────────────────────────
-  const [cmdPopupOpen, setCmdPopupOpen] = useState(false);
+  // ── Set Commander modal ───────────────────────────────────────────────────
+  const [setCmdOpen, setSetCmdOpen] = useState(false);
 
   // ── Defeat conditions ─────────────────────────────────────────────────────
   const isDeadGeneral = p.life <= 0;
@@ -301,24 +309,32 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           onFocus={e => e.target.style.borderBottomColor = playerTheme.accent}
           onBlur={e => e.target.style.borderBottomColor = "transparent"}
         />
-        {/* Commander wand button — only shown when commanderName is set */}
-        {commanderName && (
-          <button
-            onClick={() => setCmdPopupOpen(true)}
-            aria-label={`View ${p.name}'s commander: ${commanderName}`}
-            title={`View commander: ${commanderName}`}
-            style={{
-              background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)",
-              borderRadius: "6px", padding: "3px 5px", cursor: "pointer", flexShrink: 0,
-              display: "flex", alignItems: "center",
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(139,92,246,0.25)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(139,92,246,0.12)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.3)"; }}
-          >
-            <Wand2 size={13} color="var(--accent-purple)" />
-          </button>
-        )}
+        {/* Commander wand — always visible; dimmed when no commander set */}
+        <button
+          onClick={() => setSetCmdOpen(true)}
+          aria-label={commanderName ? `Change ${p.name}'s commander: ${commanderName}` : `Set commander for ${p.name}`}
+          title={commanderName ? `Commander: ${commanderName}` : "Set commander"}
+          style={{
+            background: commanderName ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)",
+            border: `1px solid ${commanderName ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)"}`,
+            borderRadius: "6px", padding: "3px 5px", cursor: "pointer", flexShrink: 0,
+            display: "flex", alignItems: "center",
+            opacity: commanderName ? 1 : 0.4,
+            transition: "all 0.15s ease",
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.opacity = "1";
+            e.currentTarget.style.background = "rgba(139,92,246,0.2)";
+            e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.opacity = commanderName ? "1" : "0.4";
+            e.currentTarget.style.background = commanderName ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)";
+            e.currentTarget.style.borderColor = commanderName ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)";
+          }}
+        >
+          <Wand2 size={13} color={commanderName ? "var(--accent-purple)" : "var(--text-muted)"} />
+        </button>
         <button
           onClick={() => cycleColor(p.id)}
           aria-label={`Cycle color for ${p.name}`}
@@ -333,43 +349,17 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         />
       </div>
 
-      {/* ── Commander Card-Art Popup ── */}
-      {cmdPopupOpen && commanderName && (
-        <>
-          {/* Backdrop */}
-          <div
-            style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
-            onClick={() => setCmdPopupOpen(false)}
-          />
-          {/* Card modal */}
-          <div style={{
-            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-            zIndex: 51, display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
-            maxWidth: "260px",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#fff", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {commanderName}
-              </span>
-              <button
-                onClick={() => setCmdPopupOpen(false)}
-                aria-label="Close commander card view"
-                style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", padding: "2px" }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <img
-              src={`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(commanderName)}&format=image&version=border_crop`}
-              alt={commanderName}
-              style={{ borderRadius: "14px", maxWidth: "260px", width: "100%", boxShadow: "0 8px 40px rgba(0,0,0,0.7)" }}
-              onError={e => {
-                // Fallback: show art crop
-                (e.target as HTMLImageElement).src = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(commanderName)}&format=image&version=art_crop`;
-              }}
-            />
-          </div>
-        </>
+      {/* ── Set Commander Modal ── */}
+      {setCmdOpen && onSetCommander && (
+        <SetCommanderModal
+          playerId={p.id}
+          playerName={p.name}
+          currentCommanderName={commanderName}
+          savedDecks={savedDecks}
+          onConfirm={(name, deckId) => { onSetCommander(p.id, name, deckId); setSetCmdOpen(false); }}
+          onClear={() => { onClearCommander?.(p.id); setSetCmdOpen(false); }}
+          onClose={() => setSetCmdOpen(false)}
+        />
       )}
 
       {/* City's Blessing label */}

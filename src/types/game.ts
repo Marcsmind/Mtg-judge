@@ -38,7 +38,8 @@ export interface Player {
   tokens: PlayerTokens;
   enabledTokens: TokenKey[];
   tokensOpen: boolean;
-  commanderName?: string;  // set from multiplayer lobby; used for card-art popup
+  commanderName?: string;  // set from multiplayer lobby or in-game wand button
+  deckId?: string;         // links to a SavedDeck for per-deck win tracking (local only)
 }
 
 // ── Multiplayer Lobby ──────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ export interface LobbyPlayer {
   playerName: string;     // editable in lobby; pre-filled from Settings display name
   colorName: "white" | "blue" | "black" | "red" | "green" | "purple";
   commanderName: string;  // optional — text field with Scryfall autocomplete
+  deckId?: string;        // links to a SavedDeck; passed through to Player on game start
   isHost: boolean;
   isReady: boolean;
 }

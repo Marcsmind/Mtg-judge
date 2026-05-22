@@ -31,4 +31,5 @@ export const STORAGE_KEYS = {
   DEVICE_ID:          "nexus_device_id",            // stable random UUID per device
   MP_LOBBY_PLAYERS:   "nexus_mp_lobby_players",     // LobbyPlayer[] JSON
   MP_FIRST_PLAYER:    "nexus_mp_first_player",      // first player name from spin
+  SAVED_DECKS:        "nexus_saved_decks",           // SavedDeck[] JSON
 } as const;

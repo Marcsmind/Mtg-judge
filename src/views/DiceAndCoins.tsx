@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Dices, Hash, Trash2, ChevronRight, ChevronLeft } from "lucide-react";
 import { hapticMedium, hapticHeavy } from "../utils/haptics";
+import { useMobile } from "../hooks/useMobile";
 
 interface RollLog {
   id: string;
@@ -62,6 +63,7 @@ const D6Face: React.FC<{ value: number; size?: number; color?: string }> = ({ va
 };
 
 export const DiceAndCoins: React.FC = () => {
+  const isMobile = useMobile(768);
   const [ledgerOpen, setLedgerOpen] = useState(() => window.innerWidth >= 768);
   const [coinFlipping, setCoinFlipping] = useState(false);
   const [coinResult, setCoinResult] = useState<"Heads" | "Tails" | null>(null);
@@ -160,7 +162,14 @@ export const DiceAndCoins: React.FC = () => {
     : "0 0 24px rgba(139,92,246,0.4)";
 
   return (
-    <div style={{ display: "flex", gap: "24px", height: "calc(100vh - 48px)", overflow: "hidden", position: "relative" }}>
+    <div style={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      gap: isMobile ? "20px" : "24px",
+      height: isMobile ? "auto" : "calc(100dvh - 48px)",
+      overflow: isMobile ? "visible" : "hidden",
+      position: "relative",
+    }}>
 
       {/* Primary Roller Pane */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "20px", minWidth: 0 }}>
@@ -179,7 +188,7 @@ export const DiceAndCoins: React.FC = () => {
         </div>
 
         {/* Scrollable content area */}
-        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", paddingBottom: "20px" }}>
+        <div style={{ flex: 1, overflowY: isMobile ? "visible" : "auto", display: "flex", flexDirection: "column", gap: "16px", paddingBottom: "20px" }}>
 
           {/* Dice Count Modifier */}
           <div className="glass-panel" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: "16px", flexShrink: 0 }}>
@@ -210,7 +219,7 @@ export const DiceAndCoins: React.FC = () => {
           </div>
 
           {/* Coin + Dice Grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", flexShrink: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "20px", flexShrink: 0 }}>
 
             {/* ── Coin Flipper ── */}
             <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", background: "rgba(22,19,32,0.4)", minHeight: "300px" }}>
@@ -406,11 +415,62 @@ export const DiceAndCoins: React.FC = () => {
             </div>
           )}
 
+          {/* ── Mobile inline ledger ── */}
+          {isMobile && (
+            <div className="glass-panel" style={{ padding: "16px", flexShrink: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "10px", marginBottom: "12px" }}>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700 }}>Roll Ledger</h3>
+                {history.length > 0 && (
+                  <button
+                    onClick={handleClearHistory}
+                    aria-label="Clear roll ledger"
+                    style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px" }}
+                    onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
+                    onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+              {history.length === 0 ? (
+                <div style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "0.75rem", textAlign: "center", padding: "16px 0" }}>
+                  Ledger empty. Roll or flip to begin.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {history.map(log => (
+                    <div
+                      key={log.id}
+                      style={{
+                        fontSize: "0.75rem", padding: "8px 10px", borderRadius: "8px",
+                        background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.03)",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                      }}
+                    >
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+                        <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{log.label}</span>
+                        <span style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>{log.time}</span>
+                      </div>
+                      <span style={{
+                        fontSize: "0.85rem", fontWeight: 800,
+                        color: log.type === "coin" ? "var(--accent-gold)" : "var(--accent-purple)",
+                        background: log.type === "coin" ? "rgba(234,179,8,0.08)" : "rgba(139,92,246,0.08)",
+                        padding: "2px 8px", borderRadius: "4px",
+                      }}>
+                        {log.result}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
         </div>{/* end scrollable */}
       </div>
 
-      {/* ── Roll History Ledger (collapsible) ── */}
-      {ledgerOpen ? (
+      {/* ── Roll History Ledger (collapsible, desktop only) ── */}
+      {!isMobile && ledgerOpen ? (
         <div className="glass-panel" style={{ width: "280px", display: "flex", flexDirection: "column", padding: "16px", height: "100%", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "10px", marginBottom: "12px" }}>
             <h3 style={{ fontSize: "1rem", fontWeight: 700 }}>Roll Ledger</h3>
@@ -470,8 +530,8 @@ export const DiceAndCoins: React.FC = () => {
             )}
           </div>
         </div>
-      ) : (
-        /* Collapsed ledger — thin strip */
+      ) : !isMobile ? (
+        /* Collapsed ledger — thin strip, desktop only */
         <button
           className="glass-panel"
           aria-label={`Open roll ledger${history.length > 0 ? `, ${history.length} entries` : ""}`}
@@ -483,7 +543,7 @@ export const DiceAndCoins: React.FC = () => {
             Ledger {history.length > 0 ? `(${history.length})` : ""}
           </div>
         </button>
-      )}
+      ) : null}
 
     </div>
   );

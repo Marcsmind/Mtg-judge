@@ -15,6 +15,8 @@ import {
   getCardImage,
 } from "../../services/scryfall";
 import type { ScryfallCard } from "../../services/scryfall";
+import { loadDecks } from "../../services/decks";
+import type { SavedDeck } from "../../types/deck";
 
 // ── Color palette (matches LifeCounter / TurnOrder) ───────────────────────────
 const COLOR_OPTIONS: { key: LobbyPlayer["colorName"]; label: string; accent: string }[] = [
@@ -80,6 +82,7 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
   const [nameInput, setNameInput]             = useState(selfPlayer.playerName);
   const [cmdInput, setCmdInput]               = useState(selfPlayer.commanderName);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [savedDecks]                          = useState<SavedDeck[]>(() => loadDecks());
   // Card data for the currently confirmed commander (shows art thumbnail below input)
   const [confirmedCard, setConfirmedCard]     = useState<ScryfallCard | null>(null);
   // Card data shown while hovering a suggestion (preview image inside dropdown)
@@ -411,6 +414,44 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
             </div>
           )}
         </div>
+
+        {/* ── From My Decks quick-picker ── */}
+        {savedDecks.length > 0 && (
+          <div>
+            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "5px" }}>
+              From My Decks
+            </p>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {savedDecks.map(deck => (
+                <button
+                  key={deck.id}
+                  onClick={() => {
+                    handleSelectSuggestion(deck.commanderName);
+                    onUpdateSelf({ commanderName: deck.commanderName, deckId: deck.id });
+                  }}
+                  style={{
+                    padding: "4px 10px", borderRadius: "7px",
+                    background: selfPlayer.deckId === deck.id ? "rgba(139,92,246,0.18)" : "rgba(139,92,246,0.07)",
+                    border: `1px solid ${selfPlayer.deckId === deck.id ? "rgba(139,92,246,0.5)" : "rgba(139,92,246,0.2)"}`,
+                    color: selfPlayer.deckId === deck.id ? "var(--text-primary)" : "var(--text-secondary)",
+                    fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = "rgba(139,92,246,0.18)";
+                    e.currentTarget.style.color = "var(--text-primary)";
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = selfPlayer.deckId === deck.id ? "rgba(139,92,246,0.18)" : "rgba(139,92,246,0.07)";
+                    e.currentTarget.style.color = selfPlayer.deckId === deck.id ? "var(--text-primary)" : "var(--text-secondary)";
+                  }}
+                >
+                  {deck.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Ready toggle */}
         <button

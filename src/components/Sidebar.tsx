@@ -1,5 +1,5 @@
 import React from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles } from "lucide-react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles, HelpCircle } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 
 interface SidebarProps {
@@ -12,14 +12,15 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openCodex, collapsed, onToggleCollapsed }) => {
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
-    { id: "judge",       label: "AI Judge",      icon: Scale     },
-    { id: "life",        label: "Life Counter",  icon: Heart     },
-    { id: "gamenight",   label: "Game Night",    icon: Sparkles  },
-    { id: "dice",        label: "Dice & Coins",  icon: Dices     },
-    { id: "turns",       label: "Turn Order",    icon: Shuffle   },
-    { id: "rules",       label: "Quick Rules",   icon: BookOpen  },
-    { id: "deck",        label: "Deck Builder",  icon: Wand2     },
-    { id: "leaderboard", label: "Leaderboard",   icon: Trophy    },
+    { id: "judge",       label: "AI Judge",      icon: Scale       },
+    { id: "life",        label: "Life Counter",  icon: Heart       },
+    { id: "gamenight",   label: "Game Night",    icon: Sparkles    },
+    { id: "dice",        label: "Dice & Coins",  icon: Dices       },
+    { id: "turns",       label: "Turn Order",    icon: Shuffle     },
+    { id: "deck",        label: "Deck Builder",  icon: Wand2       },
+    { id: "leaderboard", label: "Leaderboard",   icon: Trophy      },
+    { id: "rules",       label: "Quick Rules",   icon: BookOpen    },
+    { id: "guide",       label: "App Guide",     icon: HelpCircle  },
   ];
 
   return (
@@ -28,7 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
       onClick={collapsed ? onToggleCollapsed : undefined}
       style={{
         width: collapsed ? "64px" : "260px",
-        height: "calc(100vh - 48px)",
+        height: "calc(100dvh - 48px)",
         margin: "24px 0 24px 24px",
         display: "flex",
         flexDirection: "column",
