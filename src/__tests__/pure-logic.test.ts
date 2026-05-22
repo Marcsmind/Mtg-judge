@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import { generateRoomCode, SYNC_SCHEMA_VERSION } from "../services/multiplayerSync";
 import { parseSavedPlayer } from "../utils/playerUtils";
-import { buildManaCurve } from "../views/DeckBuilder";
+import { buildManaCurve } from "../utils/deckUtils";
 
 // ── generateRoomCode ──────────────────────────────────────────────────────────
 

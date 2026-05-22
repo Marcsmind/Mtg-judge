@@ -279,7 +279,6 @@ export const LifeCounter: React.FC = () => {
   // The setTimeout in scheduleBroadcast fires ~150ms after an action, AFTER React
   // has already re-rendered with the new state — so .current() returns the
   // updated values rather than the stale closure captured at call time.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { buildSyncStateRef.current = buildSyncState; });
 
   /**
@@ -332,6 +331,7 @@ export const LifeCounter: React.FC = () => {
   // Auto-stop countdown when it reaches 0
   useEffect(() => {
     if (timerMode === "down" && timerRunning && timerSeconds === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTimerRunning(false);
       hapticHeavy();
     }
@@ -376,7 +376,6 @@ export const LifeCounter: React.FC = () => {
     if (state.roomName !== undefined) setRoomName(state.roomName);
   };
   // Keep refs fresh every render so async Supabase callbacks always call the latest version
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     handleRemoteUpdateRef.current = handleRemoteUpdate;
     handleConnectionStatusRef.current = (status: ConnectionStatus) => {
@@ -473,6 +472,7 @@ export const LifeCounter: React.FC = () => {
   useEffect(() => {
     const savedCode = localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
     if (!savedCode || !isSupabaseConfigured) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     handleJoinRoom(savedCode);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // runs once on mount only
