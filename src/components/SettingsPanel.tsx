@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2, BookOpen, HelpCircle, ExternalLink } from "lucide-react";
 import { THEMES } from "../constants/themes";
 import type { ThemeId } from "../constants/themes";
+import type { TabId } from "../constants/tabIds";
 import { upsertProfile, getDisplayName } from "../services/auth";
 import type { AuthUser } from "../services/auth";
 import { isSupabaseConfigured } from "../services/supabase";
@@ -14,7 +15,7 @@ interface SettingsPanelProps {
   setTheme?: (t: ThemeId) => void;
   authUser?: AuthUser | null;
   onLinkGoogle?: () => void;
-  onNavigate?: (tab: any) => void;
+  onNavigate?: (tab: TabId) => void;
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, onLinkGoogle, onNavigate }) => {

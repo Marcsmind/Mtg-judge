@@ -29,9 +29,7 @@ export const CardSearchSheet: React.FC<CardSearchSheetProps> = ({ onClose, onTag
     if (query.trim().length < 2) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutocompleteNames([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       return;
     }
