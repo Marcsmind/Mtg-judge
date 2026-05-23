@@ -22,7 +22,7 @@ import type { AuthUser } from "./services/auth";
 import type { LobbyPlayer } from "./types/game";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("judge");
+  const [activeTab, setActiveTab] = useState<TabId>("life");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [codexOpen, setCodexOpen] = useState<boolean>(false);
   const [judgeOpen, setJudgeOpen] = useState<boolean>(false);
@@ -133,18 +133,17 @@ function App() {
     setGeminiModel(savedModel);
   };
 
+  const handleNavigate = (tab: TabId) => {
+    if (tab === "judge") {
+      setJudgeOpen(true);
+    } else {
+      setActiveTab(tab);
+      setJudgeOpen(false); // Close modal if switching tabs
+    }
+  };
+
   const renderActiveView = () => {
     switch (activeTab) {
-      case "judge": // Fallback for desktop view
-        return (
-          <AIJudge
-            apiKey={apiKey}
-            geminiModel={geminiModel}
-            openCodex={() => { setCodexSearch(""); setCodexOpen(true); }}
-            openCodexWith={(term: string) => { setCodexSearch(term); setCodexOpen(true); }}
-            goToSettings={() => setActiveTab("settings")}
-          />
-        );
       case "life":
         return (
           <LifeCounter
@@ -206,12 +205,13 @@ function App() {
       case "guide":
         return <AppGuide onNavigate={(tab) => setActiveTab(tab)} />;
       default:
+        // Default to life counter if an unknown tab is selected somehow
         return (
-          <AIJudge
-            apiKey={apiKey}
-            geminiModel={geminiModel}
-            openCodex={() => setCodexOpen(true)}
-            goToSettings={() => setActiveTab("settings")}
+          <LifeCounter
+            key={mpGameKey}
+            userId={authUser?.id}
+            mpInitLobbyPlayers={mpLobbyPlayers.length > 0 ? mpLobbyPlayers : undefined}
+            mpInitFirstPlayer={mpSpinWinner ?? undefined}
           />
         );
     }
@@ -221,9 +221,8 @@ function App() {
     <div className="app-container">
       {/* Sidebar Navigation */}
       <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        openJudge={() => setJudgeOpen(true)}
+        activeTab={judgeOpen ? "judge" : activeTab}
+        setActiveTab={handleNavigate}
         openCodex={() => setCodexOpen(true)}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleSidebar}
@@ -250,8 +249,9 @@ function App() {
       {/* Slide-Up AI Judge Overlay */}
       {judgeOpen && (
         <div style={{
-          position: "fixed", top: 0, left: 0, width: "100%", height: "100%", zIndex: 100, background: "var(--bg-deep)", display: "flex", flexDirection: "column",
+          position: "fixed", inset: 0, zIndex: 100, background: "var(--bg-deep)", display: "flex", flexDirection: "column",
           animation: "slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+          boxSizing: "border-box",
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}>
@@ -264,11 +264,14 @@ function App() {
           <AIJudge
             apiKey={apiKey}
             geminiModel={geminiModel}
-            openCodex={() => setCodexOpen(true)}
-            openCodexWith={(term: string) => { setCodexSearch(term); setCodexOpen(true); }}
-            goToSettings={() => { setJudgeOpen(false); setActiveTab("settings"); }}
-            onClose={() => setJudgeOpen(false)}
             isModal={true}
+            onClose={() => setJudgeOpen(false)}
+            openCodex={() => { setCodexSearch(""); setCodexOpen(true); }}
+            openCodexWith={(term: string) => { setCodexSearch(term); setCodexOpen(true); }}
+            goToSettings={() => {
+              setJudgeOpen(false);
+              setActiveTab("settings");
+            }}
           />
         </div>
       )}

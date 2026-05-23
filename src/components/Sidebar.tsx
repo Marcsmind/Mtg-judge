@@ -6,7 +6,6 @@ import { useMobile } from "../hooks/useMobile";
 interface SidebarProps {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
-  openJudge: () => void;
   openCodex: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -14,7 +13,7 @@ interface SidebarProps {
 
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openJudge, openCodex, collapsed, onToggleCollapsed }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openCodex, collapsed, onToggleCollapsed }) => {
   const isMobile = useMobile(768);
 
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
@@ -61,23 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openJ
       <aside className="glass-panel" style={{ /* CSS media query handles layout */ }}>
         <nav role="navigation" aria-label="Main navigation" style={{ display: "flex", flex: 1 }}>
           {/* 1. Judge */}
-          <button
-            onClick={() => openJudge()}
-            aria-label="AI Judge"
-            style={{
-              flex: 1, display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center",
-              gap: "3px", padding: "6px 4px",
-              background: "transparent",
-              border: "none", borderRadius: "8px",
-              color: "var(--text-muted)",
-              fontSize: "0.55rem", fontWeight: 500,
-              cursor: "pointer", transition: "all 0.15s ease",
-            }}
-          >
-            <Scale size={20} />
-            <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>Judge</span>
-          </button>
+          {makeTabBtn(navItems.find(i => i.id === "judge")!, () => setActiveTab("judge"))}
 
           {/* 2. Life */}
           {makeTabBtn(navItems.find(i => i.id === "life")!, () => setActiveTab("life"))}
