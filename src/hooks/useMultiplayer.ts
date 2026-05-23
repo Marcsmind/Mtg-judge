@@ -7,6 +7,14 @@
  *  • Debounced broadcast of local game-state changes
  *  • Receives remote updates and calls back into LifeCounter via option callbacks
  *  • Auto-rejoin on mount and on visibility change
+ *
+ * Reconnect robustness (Fixes A–D):
+ *  Fix A — State request / catch-up: on reconnect, ask peers for current state
+ *           and suppress our own stale broadcasts for 3 s while catching up.
+ *  Fix B — Longer retry backoff: up to 5 attempts / ~52 s (in multiplayerSync.ts).
+ *  Fix C — Seat claim broadcast: announce seat ownership to peers on reconnect.
+ *  Fix D — DB persistence: every broadcast also writes to `game_states` table;
+ *           on reconnect, DB snapshot is read as fallback if no peer responds.
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -18,10 +26,17 @@ import {
   broadcastState,
   leaveRoom,
   SYNC_SCHEMA_VERSION,
+  sendStateRequest,
+  onStateRequest,
+  broadcastSeatClaim,
+  onSeatClaim,
+  persistState,
+  fetchPersistedState,
 } from "../services/multiplayerSync";
 import type { SyncState, ConnectionStatus } from "../services/multiplayerSync";
 import type { Player, ActiveCounters, DayNightState } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
+import { getDeviceId } from "../services/auth";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 
 // ── Options ───────────────────────────────────────────────────────────────────
@@ -97,6 +112,15 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     updatedBy: "",
   }));
 
+  // Fix A: suppress local broadcasts for 3 s after reconnect while catching up
+  // from a peer or DB snapshot (prevents stale local state from overwriting live game).
+  const isCatchingUp    = useRef(false);
+  const catchUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mirrors roomCode state — always current inside async Supabase callbacks
+  // (state reads inside closures capture the value at closure-creation time).
+  const roomCodeRef = useRef<string | null>(null);
+
   // Keep buildSyncStateRef fresh with the latest game-state values.
   // Use individual dep values (not the options object) so React can diff correctly.
   useEffect(() => {
@@ -129,6 +153,13 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     // ignore the incoming state to prevent their change from reverting.
     if (Date.now() - lastLocalChangeAt.current < 500) return;
 
+    // Fix A: a peer responded to our state_request — we have current game state,
+    // stop suppressing our own broadcasts.
+    if (isCatchingUp.current) {
+      if (catchUpTimerRef.current) clearTimeout(catchUpTimerRef.current);
+      isCatchingUp.current = false;
+    }
+
     if (state.players && state.players.length > 0) options.onRemotePlayers(state.players);
     options.onRemoteCounters(state.activeCounters);
     options.onRemoteDayNight(state.dayNightState);
@@ -146,6 +177,55 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       } else if (status === "connected") {
         setRoomReconnecting(false);
         setRoomError(null);
+
+        const code = roomCodeRef.current;
+        if (!code) return;
+
+        // Fix A: enter catch-up mode — suppress our own broadcasts for 3 s while
+        // waiting for a peer to push current state via state_request response.
+        isCatchingUp.current = true;
+        if (catchUpTimerRef.current) clearTimeout(catchUpTimerRef.current);
+        catchUpTimerRef.current = setTimeout(() => {
+          isCatchingUp.current = false;
+        }, 3_000);
+
+        // Ask connected peers for current state (arrives in ~50–100 ms).
+        sendStateRequest(code);
+
+        // Fix D: concurrently fetch DB snapshot — handles full-group disconnects
+        // where no peer is available to respond to the state_request above.
+        fetchPersistedState(code).then(saved => {
+          if (!saved) return;
+          if (saved.schemaVersion !== SYNC_SCHEMA_VERSION) return;
+          if (saved.updatedAt <= lastAppliedAt.current) return;
+          // Apply the DB snapshot as authoritative state
+          lastAppliedAt.current = saved.updatedAt;
+          options.onRemotePlayers(saved.players);
+          options.onRemoteCounters(saved.activeCounters);
+          options.onRemoteDayNight(saved.dayNightState);
+          // DB state received — done catching up
+          if (catchUpTimerRef.current) clearTimeout(catchUpTimerRef.current);
+          isCatchingUp.current = false;
+        });
+
+        // Fix C: announce seat ownership so peers can show a reconnect indicator.
+        const myIndex = parseInt(
+          localStorage.getItem(STORAGE_KEYS.MY_PLAYER_INDEX) ?? "-1",
+          10,
+        );
+        if (myIndex >= 0) {
+          const state = buildSyncStateRef.current();
+          const playerName = state.players[myIndex]?.name ?? "Player";
+          const role = (
+            localStorage.getItem("nexus_judge_room_role") ?? "guest"
+          ) as "host" | "guest";
+          broadcastSeatClaim(code, {
+            deviceId: getDeviceId(),
+            playerIndex: myIndex,
+            playerName,
+            role,
+          });
+        }
       } else if (status === "failed") {
         setRoomReconnecting(false);
         setRoomConnected(false);
@@ -156,14 +236,36 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
 
   // ── Debounced broadcast ──
   const scheduleBroadcast = () => {
-    if (!roomConnected || !roomCode) return;
+    // Guard: don't broadcast while catching up — our local state may be stale
+    // relative to changes peers made while we were disconnected.
+    if (!roomConnected || !roomCode || isCatchingUp.current) return;
     lastLocalChangeAt.current = Date.now();
     if (broadcastTimerRef.current) clearTimeout(broadcastTimerRef.current);
     broadcastTimerRef.current = setTimeout(() => {
-      broadcastState(roomCode, buildSyncStateRef.current());
-      // Fire-and-forget: real-time sync errors are non-critical; swallowing them
-      // is intentional so a flaky connection doesn't break the local game.
+      const state = buildSyncStateRef.current();
+      broadcastState(roomCode, state);
+      // Fix D: write snapshot to DB (fire-and-forget — never awaited, never blocks UI).
+      persistState(roomCode, state);
     }, 150);
+  };
+
+  // ── Shared post-connect setup ──────────────────────────────────────────────
+  // Called by both handleCreateRoom and handleJoinRoom after a successful subscribe.
+  // Registers Fix A (state_request responder) and Fix C (seat_claim listener)
+  // on the module-level handler Maps — these persist through channel recreation
+  // on reconnects, so we only need to register once per room join.
+  const _registerHandlers = (code: string) => {
+    // Fix A: when a peer asks for state, push our current game state to them.
+    onStateRequest(code, () => {
+      const c = roomCodeRef.current;
+      if (c) broadcastState(c, buildSyncStateRef.current());
+    });
+
+    // Fix C: optional — receive seat claims from reconnecting peers.
+    // Could show a toast here: showToast(`${claim.playerName} reconnected`, "success");
+    onSeatClaim(code, () => {
+      // Future: surface as a brief reconnect notification in the UI.
+    });
   };
 
   // ── Room actions ──
@@ -179,6 +281,8 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
         (status) => handleConnectionStatusRef.current(status),
       );
       if (ok) {
+        roomCodeRef.current = code;
+        _registerHandlers(code);
         setRoomCode(code);
         setRoomConnected(true);
         setRoomRole("host");
@@ -206,6 +310,8 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       (status) => handleConnectionStatusRef.current(status),
     );
     if (ok) {
+      roomCodeRef.current = code;
+      _registerHandlers(code);
       const role = overrideCode
         ? (localStorage.getItem("nexus_judge_room_role") as "host" | "guest" | null ?? "guest")
         : "guest";
@@ -223,7 +329,12 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
   };
 
   const handleLeaveRoom = () => {
-    if (roomCode) leaveRoom(roomCode);
+    // Cancel any in-flight catch-up timer
+    if (catchUpTimerRef.current) clearTimeout(catchUpTimerRef.current);
+    isCatchingUp.current = false;
+
+    if (roomCode) leaveRoom(roomCode); // also cleans up handler registrations
+    roomCodeRef.current = null;
     setRoomCode(null);
     setRoomConnected(false);
     setRoomRole(null);
@@ -233,6 +344,9 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     lastLocalChangeAt.current = 0;
     localStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
     localStorage.removeItem("nexus_judge_room_role");
+    // NOTE: do NOT call clearPersistedState() here.
+    // A player leaving ≠ the game ending. Other players may still be in the room.
+    // clearPersistedState() is only called from handleEndGameConfirm() in LifeCounter.tsx.
   };
 
   const copyRoomCode = () => {

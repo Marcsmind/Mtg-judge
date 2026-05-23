@@ -12,6 +12,8 @@ import type { SavedDeck } from "../types/deck";
 import { useAppStore } from "../store/useAppStore";
 import { hapticHeavy } from "../utils/haptics";
 import { useMultiplayer } from "../hooks/useMultiplayer";
+import { clearPersistedState } from "../services/multiplayerSync";
+import { getDeviceId } from "../services/auth";
 import type { Player, ActiveCounters, DayNightState, TokenKey, LobbyPlayer } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { GameHistoryLedger } from "./life-counter/GameHistoryLedger";
@@ -263,8 +265,16 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     setMyPlayerIndex(next);
     if (next !== null) {
       localStorage.setItem(STORAGE_KEYS.MY_PLAYER_INDEX, String(next));
+      // Fix C: persist seat claim so the reconnect handler can broadcast it
+      // (useMultiplayer reads this from localStorage in the "connected" branch)
+      localStorage.setItem("nexus_judge_seat_claim", JSON.stringify({
+        deviceId: getDeviceId(),
+        playerIndex: next,
+        playerName: players[next]?.name ?? `Player ${next + 1}`,
+      }));
     } else {
       localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX);
+      localStorage.removeItem("nexus_judge_seat_claim");
     }
   };
 
@@ -532,6 +542,13 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
       if (p.deckId) {
         recordDeckResult(p.deckId, p.id === winner?.id && notDefeated(winner));
       }
+    }
+
+    // Fix D: delete the DB snapshot now that the game is truly over.
+    // IMPORTANT: only called here — NOT in handleLeaveRoom.
+    // Leaving a room disconnects a device; ending the game resets the board.
+    if (roomCode) {
+      clearPersistedState(roomCode).catch(() => { /* non-critical */ });
     }
 
     setShowEndGame(false);
