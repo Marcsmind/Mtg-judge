@@ -130,8 +130,21 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
   const [players, setPlayers] = useState<Player[]>(() => {
     const sl = parseInt(localStorage.getItem("nexus_judge_starting_life") || String(DEFAULT_LIFE), 10);
-    // ── Multiplayer lobby init ────────────────────────────────────────────────
+
+    // ── Multiplayer lobby init (only when lobby data is fresh — i.e. no matching saved game) ──
     if (mpInitLobbyPlayers && mpInitLobbyPlayers.length > 0) {
+      // If localStorage already has a saved game with the same player count,
+      // that means this is a tab-switch remount mid-game — use the live state.
+      const saved = localStorage.getItem("nexus_judge_players");
+      if (saved) {
+        try {
+          const arr = JSON.parse(saved);
+          if (Array.isArray(arr) && arr.length === mpInitLobbyPlayers.length) {
+            return arr.map(p => parseSavedPlayer(p, sl));
+          }
+        } catch { /* corrupt — fall through to lobby init */ }
+      }
+      // Fresh game start: initialize from lobby roster.
       const sorted = [...mpInitLobbyPlayers].sort((a, b) => a.colorName.localeCompare(b.colorName));
       return sorted.map((lp, i) => ({
         ...createPlayer(i, sl),
@@ -141,6 +154,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         deckId: lp.deckId ?? undefined,
       }));
     }
+
     // ── Standard localStorage init ────────────────────────────────────────────
     const s = localStorage.getItem("nexus_judge_players");
     if (s) {

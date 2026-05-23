@@ -97,6 +97,9 @@ function App() {
     if (phase === "game") {
       setMpGameKey(prev => prev + 1);
       setActiveTab("life");
+      // Defer clear so LifeCounter's first mount sees the lobby players,
+      // then subsequent remounts (tab switches) fall through to localStorage.
+      setTimeout(() => setMpLobbyPlayers([]), 0);
     }
   }, []);
 
@@ -109,6 +112,8 @@ function App() {
       if (spinWinner) setMpSpinWinner(spinWinner);
       setMpGameKey(prev => prev + 1);
       setActiveTab("life");
+      // Same deferred clear — prevents re-init from lobby data on tab switches.
+      setTimeout(() => setMpLobbyPlayers([]), 0);
     }
   }, []);
 
