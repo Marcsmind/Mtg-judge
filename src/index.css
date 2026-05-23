@@ -322,10 +322,10 @@ h1, h2, h3, h4, h5 {
 
 /* ── Life Counter — mobile layout ────────────────────────────────────────── */
 
-/* Force 2-column grid on phones regardless of player count */
+/* Mobile grid — columns controlled by getGridStyle() inline style in LifeCounter.tsx */
 @media (max-width: 768px) {
   .life-counter-player-grid {
-    grid-template-columns: 1fr 1fr !important;
+    /* grid-template-columns set by JS (1fr for 2-player, 1fr 1fr for 3+) */
     overflow-y: auto !important;
     height: auto !important;
     /* Remove max-height cap so grid can grow when controls hidden */

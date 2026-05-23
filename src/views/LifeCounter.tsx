@@ -2,15 +2,15 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   RefreshCw, Users,
   Crown, Skull, Radiation, Swords, Star,
-  Settings2, Check, Moon, Sun,
+  Settings2, Check, Moon,
   Save, Menu, Undo2,
   Play, Square, RotateCcw, Timer, Wifi, WifiOff, Copy, Trophy, Clock
 } from "lucide-react";
 import { useMobile } from "../hooks/useMobile";
+import { useGameTimer } from "../hooks/useGameTimer";
 import { loadDecks, recordDeckResult } from "../services/decks";
 import type { SavedDeck } from "../types/deck";
 import { useAppStore } from "../store/useAppStore";
-import { hapticHeavy } from "../utils/haptics";
 import { useMultiplayer } from "../hooks/useMultiplayer";
 import { clearPersistedState } from "../services/multiplayerSync";
 import { getDeviceId } from "../services/auth";
@@ -23,10 +23,12 @@ import type { GameSnapshot } from "./life-counter/SaveGameModal";
 import { GameSummaryModal } from "./life-counter/GameSummaryModal";
 import { EndGameModal } from "./life-counter/EndGameModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
+import { DayNightBanner } from "./life-counter/DayNightBanner";
 import { recordGame } from "../services/leaderboard";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { parseSavedPlayer } from "../utils/playerUtils";
 import { useToast } from "../components/Toast";
+import { BottomSheet } from "../components/BottomSheet";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 // Player, PlayerTokens, TokenKey, DayNightState, ActiveCounters are imported
@@ -215,6 +217,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showEndGame, setShowEndGame] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [savedGames, setSavedGames] = useState<(GameSnapshot | null)[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SAVED_GAMES);
@@ -236,10 +239,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const handleUndoRef = useRef<() => void>(() => undefined);
 
   // ── Game Timer ──
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerMode, setTimerMode] = useState<"up" | "down">("up");
-  const COUNTDOWN_FROM = 2700; // 45 minutes
+  const {
+    timerSeconds, timerRunning, timerMode, timerColor,
+    formatTime, toggleTimer, resetTimer, setTimerMode,
+  } = useGameTimer();
 
   // ── firstPlayerName (lobby spin winner — read-only echo of mpInitFirstPlayer) ──
   const firstPlayerName: string | null = mpInitFirstPlayer ?? null;
@@ -348,43 +351,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  // ── Timer interval — set up/torn down reactively ──
-  useEffect(() => {
-    if (!timerRunning) return;
-    const interval = setInterval(() => {
-      setTimerSeconds(prev => timerMode === "down" ? Math.max(0, prev - 1) : prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timerRunning, timerMode]);
-
-  // Auto-stop countdown when it reaches 0
-  useEffect(() => {
-    if (timerMode === "down" && timerRunning && timerSeconds === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTimerRunning(false);
-      hapticHeavy();
-    }
-  }, [timerSeconds, timerMode, timerRunning]);
-
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-  };
-
-  const toggleTimer = () => setTimerRunning(prev => !prev);
-
-  const resetTimer = () => {
-    setTimerRunning(false);
-    setTimerSeconds(timerMode === "down" ? COUNTDOWN_FROM : 0);
-  };
-
-  const timerColor = timerMode === "down"
-    ? timerSeconds < 60 ? "var(--accent-rose)"
-    : timerSeconds < 300 ? "#f59e0b"
-    : "var(--text-primary)"
-    : "var(--text-primary)";
-
   // ── Turn tracker handlers ──
 
   const goNextTurn = () => {
@@ -482,18 +448,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     } catch { /* ignore corrupt data */ }
   };
 
-  const resetGame = () => {
-    if (window.confirm(`Reset all players to ${startingLife} life and clear all counters?`)) {
-      scheduleBroadcast();
-      setPlayers(prev => prev.map(p => ({
-        ...p, life: startingLife, tax: 0, taxPartner: 0,
-        commanderDamage: {}, isMonarch: false, hasInitiative: false,
-        cityBlessing: false, poison: 0, rad: 0,
-        tokens: { treasure: 0, food: 0, clue: 0, blood: 0 },
-      })));
-      setHistory([`Game reset! All life set to ${startingLife}.`]);
-    }
-  };
+  const resetGame = () => setShowResetConfirm(true);
 
   /** Shared reset logic used by both "End & Record" confirm and "Skip & Reset". */
   const doReset = (recorded: boolean) => {
@@ -752,7 +707,12 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   };
 
   const getGridStyle = () => {
-    if (playerCount === 2) return { gridTemplateColumns: "1fr 1fr" };
+    if (isMobile) {
+      // 1-column for duels (full-width cards), 2-column for 3+ players
+      return playerCount <= 2
+        ? { gridTemplateColumns: "1fr" }
+        : { gridTemplateColumns: "1fr 1fr" };
+    }
     if (playerCount <= 4) return { gridTemplateColumns: "1fr 1fr" };
     if (playerCount <= 6) return { gridTemplateColumns: "1fr 1fr 1fr" };
     return { gridTemplateColumns: "1fr 1fr 1fr 1fr" };
@@ -1183,6 +1143,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                       value={joinCodeInput}
                       onChange={e => setJoinCodeInput(e.target.value.toUpperCase().slice(0, 4))}
                       onKeyDown={e => { if (e.key === "Enter") handleJoinRoom(); }}
+                      autoCapitalize="characters"
+                      inputMode="text"
+                      spellCheck={false}
+                      autoCorrect="off"
                       style={{ flex: 1, minWidth: 0, padding: "6px 10px", fontSize: "0.8rem", letterSpacing: "1px", fontWeight: 700 }}
                     />
                     <button
@@ -1239,33 +1203,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
         {/* Day / Night Global Banner */}
         {activeCounters.dayNight && dayNightState !== "none" && (
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "16px",
-            padding: "10px 24px", borderRadius: "10px", flexShrink: 0,
-            background: dayNightState === "day"
-              ? "linear-gradient(135deg, rgba(234,179,8,0.12) 0%, rgba(251,191,36,0.06) 100%)"
-              : "linear-gradient(135deg, rgba(139,92,246,0.14) 0%, rgba(99,102,241,0.07) 100%)",
-            border: `1px solid ${dayNightState === "day" ? "rgba(234,179,8,0.3)" : "rgba(139,92,246,0.3)"}`,
-          }}>
-            {dayNightState === "day" ? <Sun size={20} color="#eab308" /> : <Moon size={20} color="#8b5cf6" />}
-            <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
-              It is currently&nbsp;
-              <span style={{ color: dayNightState === "day" ? "#eab308" : "#8b5cf6" }}>
-                {dayNightState === "day" ? "Day ☀️" : "Night 🌙"}
-              </span>
-            </span>
-            <button
-              onClick={cycleDayNight}
-              style={{
-                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)",
-                borderRadius: "8px", padding: "5px 14px", color: "#fff", cursor: "pointer",
-                fontSize: "0.8rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px",
-              }}
-            >
-              {dayNightState === "day" ? <Moon size={13} /> : <Sun size={13} />}
-              Flip to {dayNightState === "day" ? "Night" : "Day"}
-            </button>
-          </div>
+          <DayNightBanner
+            state={dayNightState as "day" | "night"}
+            onCycle={cycleDayNight}
+          />
         )}
 
         {/* ── Player Grid ── */}
@@ -1361,6 +1302,32 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           onSkip={() => { setShowEndGame(false); doReset(false); }}
           onCancel={() => setShowEndGame(false)}
         />
+      )}
+
+      {/* ── Reset Confirm ── replaces window.confirm() for iOS PWA compatibility */}
+      {showResetConfirm && (
+        <BottomSheet onClose={() => setShowResetConfirm(false)} zIndex={300} maxWidth="380px" padding="24px">
+          <h3 style={{ margin: "0 0 8px", fontSize: "1.1rem", fontWeight: 600 }}>Reset Game?</h3>
+          <p style={{ margin: "0 0 20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            All players will be set back to {startingLife} life and counters cleared. This cannot be undone.
+          </p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => setShowResetConfirm(false)}
+              className="glass-button"
+              style={{ flex: 1 }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { setShowResetConfirm(false); doReset(false); }}
+              className="glass-button"
+              style={{ flex: 1, background: "rgba(244,63,94,0.1)", borderColor: "rgba(244,63,94,0.25)", color: "#f43f5e" }}
+            >
+              Reset
+            </button>
+          </div>
+        </BottomSheet>
       )}
 
     </div>

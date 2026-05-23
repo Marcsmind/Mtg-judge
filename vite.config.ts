@@ -16,7 +16,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
 
       // Static assets to precache (app shell)
-      includeAssets: ['favicon.svg', 'pwa-icon.svg'],
+      includeAssets: ['favicon.svg', 'pwa-icon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
 
       manifest: {
         name: 'Nexus Judge',
@@ -30,23 +30,35 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'pwa-icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
             purpose: 'any',
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
           {
             src: 'pwa-icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
-            purpose: 'maskable',
+            purpose: 'any',
           },
         ],
       },
 
       workbox: {
         // Precache all compiled JS / CSS / HTML / fonts / icons
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
 
         runtimeCaching: [
           {
