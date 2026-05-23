@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles, HelpCircle, MoreHorizontal } from "lucide-react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles, HelpCircle, MoreHorizontal, ChevronLeft } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 import { BottomSheet } from "./BottomSheet";
 import { useMobile } from "../hooks/useMobile";
@@ -90,9 +90,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
         {/* "More" drawer */}
         {moreOpen && (
           <BottomSheet onClose={() => setMoreOpen(false)} zIndex={300} maxWidth="400px" padding="20px">
-            <div style={{ marginBottom: "16px", fontWeight: 700, fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-              More
-            </div>
+            {/* Back button — replaces the old "More" heading */}
+            <button
+              onClick={() => setMoreOpen(false)}
+              style={{
+                display: "flex", alignItems: "center", gap: "5px",
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--text-muted)", fontSize: "0.82rem", fontWeight: 500,
+                padding: "0 0 14px 0", transition: "color 0.15s ease",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = "var(--text-primary)"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "var(--text-muted)"; }}
+            >
+              <ChevronLeft size={15} />
+              <span>Back</span>
+            </button>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginBottom: "16px" }}>
               {moreItems.map(item => {
                 const Icon = item.icon;
@@ -103,16 +115,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
                     onClick={() => { setActiveTab(item.id); setMoreOpen(false); }}
                     style={{
                       display: "flex", flexDirection: "column", alignItems: "center",
-                      justifyContent: "center", gap: "5px", padding: "10px 6px",
+                      justifyContent: "center", gap: "3px", padding: "6px 4px",
                       background: isActive ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
                       border: `1px solid ${isActive ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
-                      borderRadius: "10px", cursor: "pointer",
+                      borderRadius: "8px", cursor: "pointer",
                       color: isActive ? "var(--accent-purple)" : "var(--text-secondary)",
-                      fontSize: "0.7rem", fontWeight: isActive ? 700 : 500,
+                      fontSize: "0.55rem", fontWeight: isActive ? 700 : 500,
                       transition: "all 0.15s ease",
                     }}
                   >
-                    <Icon size={18} />
+                    <Icon size={20} />
                     <span>{item.label}</span>
                   </button>
                 );
@@ -122,16 +134,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
                 onClick={() => { openCodex(); setMoreOpen(false); }}
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center",
-                  justifyContent: "center", gap: "5px", padding: "10px 6px",
+                  justifyContent: "center", gap: "3px", padding: "6px 4px",
                   background: "rgba(6,182,212,0.06)",
                   border: "1px solid rgba(6,182,212,0.2)",
-                  borderRadius: "10px", cursor: "pointer",
+                  borderRadius: "8px", cursor: "pointer",
                   color: "var(--accent-cyan)",
-                  fontSize: "0.7rem", fontWeight: 500,
+                  fontSize: "0.55rem", fontWeight: 500,
                   transition: "all 0.15s ease",
                 }}
               >
-                <Search size={18} />
+                <Search size={20} />
                 <span>Card Codex</span>
               </button>
               {/* Settings */}
@@ -139,16 +151,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
                 onClick={() => { setActiveTab("settings"); setMoreOpen(false); }}
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center",
-                  justifyContent: "center", gap: "5px", padding: "10px 6px",
+                  justifyContent: "center", gap: "3px", padding: "6px 4px",
                   background: activeTab === "settings" ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
                   border: `1px solid ${activeTab === "settings" ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
-                  borderRadius: "10px", cursor: "pointer",
+                  borderRadius: "8px", cursor: "pointer",
                   color: activeTab === "settings" ? "var(--accent-purple)" : "var(--text-secondary)",
-                  fontSize: "0.7rem", fontWeight: activeTab === "settings" ? 700 : 500,
+                  fontSize: "0.55rem", fontWeight: activeTab === "settings" ? 700 : 500,
                   transition: "all 0.15s ease",
                 }}
               >
-                <Settings size={18} />
+                <Settings size={20} />
                 <span>Settings</span>
               </button>
             </div>

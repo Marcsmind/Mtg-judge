@@ -461,7 +461,7 @@ h1, h2, h3, h4, h5 {
   /* Sidebar → fixed bottom tab bar — 6 evenly-spaced items, no horizontal scroll */
   .app-container > aside {
     width: 100% !important;
-    height: calc(64px + env(safe-area-inset-bottom)) !important;
+    height: calc(52px + env(safe-area-inset-bottom)) !important;
     margin: 0 !important;
     border-radius: 0 !important;
     flex-direction: row !important;
@@ -505,7 +505,7 @@ h1, h2, h3, h4, h5 {
 
   /* Main content: pad below the tab bar + safe area */
   .main-content {
-    padding-bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
   }
 
   /* Hide brand logo and nav labels on mobile tab bar */

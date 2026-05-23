@@ -1136,30 +1136,29 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                   Configure Supabase in .env to enable live sync
                 </span>
               ) : !roomConnected ? (
-                <>
-                  {/* Optional room name */}
-                  <input
-                    type="text"
-                    className="glass-input"
-                    placeholder="Room name (optional)"
-                    value={roomName}
-                    onChange={e => setRoomName(e.target.value.slice(0, 24))}
-                    style={{ width: "130px", padding: "5px 9px", fontSize: "0.75rem" }}
-                  />
-
-                  {/* Create Room */}
-                  <button
-                    onClick={handleCreateRoom}
-                    disabled={roomLoading}
-                    className="glass-button"
-                    style={{ padding: "6px 12px", fontSize: "0.8rem", background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)" }}
-                  >
-                    <Wifi size={13} color="var(--accent-purple)" />
-                    <span>{roomLoading ? "Connecting…" : "Create Room"}</span>
-                  </button>
-
-                  {/* Join Room */}
-                  <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1, minWidth: 0 }}>
+                  {/* Row 1: Room name + Create */}
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <input
+                      type="text"
+                      className="glass-input"
+                      placeholder="Room name (optional)"
+                      value={roomName}
+                      onChange={e => setRoomName(e.target.value.slice(0, 24))}
+                      style={{ flex: 1, minWidth: 0, padding: "5px 9px", fontSize: "0.75rem" }}
+                    />
+                    <button
+                      onClick={handleCreateRoom}
+                      disabled={roomLoading}
+                      className="glass-button"
+                      style={{ flexShrink: 0, padding: "6px 12px", fontSize: "0.8rem", background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)" }}
+                    >
+                      <Wifi size={13} color="var(--accent-purple)" />
+                      <span>{roomLoading ? "Connecting…" : "Create Room"}</span>
+                    </button>
+                  </div>
+                  {/* Row 2: Room code + Join */}
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                     <input
                       type="text"
                       className="glass-input"
@@ -1167,18 +1166,18 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                       value={joinCodeInput}
                       onChange={e => setJoinCodeInput(e.target.value.toUpperCase().slice(0, 4))}
                       onKeyDown={e => { if (e.key === "Enter") handleJoinRoom(); }}
-                      style={{ width: "96px", padding: "6px 10px", fontSize: "0.8rem", letterSpacing: "1px", fontWeight: 700 }}
+                      style={{ flex: 1, minWidth: 0, padding: "6px 10px", fontSize: "0.8rem", letterSpacing: "1px", fontWeight: 700 }}
                     />
                     <button
                       onClick={() => handleJoinRoom()}
                       disabled={joinCodeInput.trim().length < 4 || roomLoading}
                       className="glass-button"
-                      style={{ padding: "6px 10px", fontSize: "0.8rem" }}
+                      style={{ flexShrink: 0, padding: "6px 10px", fontSize: "0.8rem" }}
                     >
                       Join
                     </button>
                   </div>
-                </>
+                </div>
               ) : (
                 /* Connected state */
                 <>

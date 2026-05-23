@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Copy, Check, Bookmark, BookmarkCheck } from "lucide-react";
+import { Copy, Check, Bookmark, BookmarkCheck, RotateCcw } from "lucide-react";
 import { MTG_KEYWORDS } from "../../constants/mtgKeywords";
 import type { ScryfallCard } from "../../services/scryfall";
 
@@ -17,6 +17,7 @@ interface ChatMessageProps {
   onGoToSettings?: () => void;
   onBookmark?: () => void;
   isBookmarked?: boolean;
+  onReprompt?: (content: string, taggedCards?: ScryfallCard[]) => void;
 }
 
 // ── Confidence badge colours ──────────────────────────────────────────────────
@@ -48,6 +49,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onGoToSettings,
   onBookmark,
   isBookmarked = false,
+  onReprompt,
 }) => {
   const isUser = message.role === "user";
 
@@ -323,6 +325,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               {isUser ? message.content : messageBody}
             </ReactMarkdown>
           </div>
+
+          {/* Re-use button — only on user messages */}
+          {isUser && onReprompt && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "6px" }}>
+              <button
+                onClick={() => onReprompt(message.content, message.taggedCards)}
+                title="Re-use this prompt"
+                aria-label="Re-use this prompt"
+                style={{
+                  display: "flex", alignItems: "center", gap: "4px",
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text-muted)", fontSize: "0.7rem", padding: "3px 6px",
+                  borderRadius: "6px", opacity: 0.6, transition: "all 0.15s ease",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = "0.6"; e.currentTarget.style.background = "none"; }}
+              >
+                <RotateCcw size={11} />
+                <span>Re-use</span>
+              </button>
+            </div>
+          )}
 
           {/* Confidence badge — only on AI messages that include the indicator */}
           {!isUser && confidenceLevel && (

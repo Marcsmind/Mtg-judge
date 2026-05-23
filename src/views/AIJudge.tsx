@@ -432,6 +432,11 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
             onGoToSettings={goToSettings}
             onBookmark={msg.role === "model" ? () => handleBookmark(index) : undefined}
             isBookmarked={msg.role === "model" && favorites.some(f => f.answer === msg.content)}
+            onReprompt={msg.role === "user" ? (content, cards) => {
+              setQuery(content);
+              if (cards && cards.length > 0) setTaggedCards(cards);
+              setTimeout(() => inputRef.current?.focus(), 0);
+            } : undefined}
           />
         ))}
 

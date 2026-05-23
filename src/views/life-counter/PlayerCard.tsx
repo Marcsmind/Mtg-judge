@@ -5,7 +5,7 @@
  * All state lives in LifeCounter; PlayerCard is purely presentational and
  * communicates back via callback props.
  */
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, Minus, ShieldAlert, Crown, Skull, Radiation,
   Swords, Star, Coins, Shield, Wand2,
@@ -115,6 +115,23 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     return () => { if (firstTimerRef.current) clearTimeout(firstTimerRef.current); };
   }, [isFirst]);
 
+  // ── Long-press life adjustment ────────────────────────────────────────────
+  const holdTimerRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startHold = useCallback((delta: number) => {
+    holdTimerRef.current = setTimeout(() => {
+      holdIntervalRef.current = setInterval(() => {
+        adjustLife(p.id, delta);
+      }, 120);
+    }, 400);
+  }, [adjustLife, p.id]);
+
+  const stopHold = useCallback(() => {
+    if (holdTimerRef.current)   { clearTimeout(holdTimerRef.current);   holdTimerRef.current   = null; }
+    if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
+  }, []);
+
   // ── Commander modals ──────────────────────────────────────────────────────
   const [setCmdOpen, setSetCmdOpen]       = useState(false);
   const [previewOpen, setPreviewOpen]     = useState(false);
@@ -172,26 +189,6 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           }}
         >
           <Star size={10} fill="#eab308" color="#eab308" /> Goes First
-        </div>
-      )}
-
-      {/* ── Active Turn Badge ── */}
-      {isActiveTurn && (
-        <div
-          aria-label="This player's turn"
-          style={{
-            position: "absolute", top: "8px", left: "50%", transform: "translateX(-50%)",
-            background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.5)",
-            borderRadius: "20px", padding: "3px 10px",
-            display: showFirstBadge ? "none" : "flex",
-            alignItems: "center", gap: "5px",
-            fontSize: "0.68rem", fontWeight: 700, color: "var(--accent-purple)",
-            zIndex: 20, whiteSpace: "nowrap",
-            boxShadow: "0 0 14px rgba(139,92,246,0.35)",
-            pointerEvents: "none",
-          }}
-        >
-          ▶ Active
         </div>
       )}
 
@@ -462,76 +459,95 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
       )}
 
-      {/* ── LIFE TOTAL ── */}
-      <div className="lc-life-section" style={{ display: "flex", justifyContent: "center", alignItems: "center", flex: 1, paddingTop: "2px" }}>
-        <button
-          className="lc-life-small-adj"
-          onClick={() => adjustLife(p.id, -5)}
-          aria-label={`Subtract 5 life from ${p.name}`}
-          title="−5 life"
-          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", fontSize: "1rem", fontWeight: 700, cursor: "pointer", padding: "8px 18px", transition: "color 0.1s", letterSpacing: "0.5px" }}
-          onMouseEnter={e => e.currentTarget.style.color = "#fff"}
-          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.55)"}
-        >
-          −5
-        </button>
-
-        <button
-          className="lc-life-btn lc-life-btn-minus"
-          onClick={() => adjustLife(p.id, -1)}
-          aria-label={`Subtract 1 life from ${p.name}`}
+      {/* ── LIFE TOTAL — split left/right zones ── */}
+      <div
+        className="lc-life-section"
+        style={{ display: "flex", flex: 1, alignItems: "stretch", minHeight: "80px", position: "relative" }}
+      >
+        {/* Left zone: subtract life */}
+        <div
+          role="button"
+          aria-label={`Subtract 1 life from ${p.name} (hold to keep subtracting)`}
+          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
+          onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+          onPointerLeave={e => { e.currentTarget.style.background = "rgba(244,63,94,0.04)"; stopHold(); }}
+          onPointerEnter={e => { e.currentTarget.style.background = "rgba(244,63,94,0.10)"; }}
+          onContextMenu={e => e.preventDefault()}
           style={{
-            background: "rgba(0,0,0,0.35)", border: "none", borderRadius: "50%",
-            width: "42px", height: "42px", display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", cursor: "pointer", transition: "background 0.15s", flexShrink: 0,
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.6)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.35)"}
-        >
-          <Minus size={20} />
-        </button>
-
-        <span
-          className="lc-life-number"
-          style={{
-            fontSize: "clamp(3.8rem, 5.5vw, 7rem)",
-            fontWeight: 900, fontFamily: "'Outfit', sans-serif",
-            minWidth: "100px", textAlign: "center",
-            textShadow: `0 0 40px ${playerTheme.accent}50, 0 4px 16px rgba(0,0,0,0.6)`,
-            lineHeight: 1, letterSpacing: "-3px",
-            filter: p.life < 10 ? "drop-shadow(0 0 8px rgba(239,68,68,0.7))" : "none",
-            color: p.life <= 0 ? "#ef4444" : p.life < 10 ? "#fca5a5" : "#fff",
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: "6px",
+            cursor: "pointer", userSelect: "none", touchAction: "none",
+            borderRadius: "8px 0 0 8px",
+            background: "rgba(244,63,94,0.04)",
+            transition: "background 0.12s ease",
           }}
         >
-          {p.life}
-        </span>
+          <Minus size={18} color="var(--accent-rose)" style={{ opacity: 0.7, pointerEvents: "none" }} />
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); adjustLife(p.id, -5); }}
+            aria-label={`Subtract 5 life from ${p.name}`}
+            style={{
+              fontSize: "0.62rem", padding: "2px 6px",
+              background: "rgba(244,63,94,0.10)", border: "1px solid rgba(244,63,94,0.25)",
+              borderRadius: "4px", color: "var(--accent-rose)",
+              cursor: "pointer", fontWeight: 700,
+            }}
+          >−5</button>
+        </div>
 
-        <button
-          className="lc-life-btn lc-life-btn-plus"
-          onClick={() => adjustLife(p.id, 1)}
-          aria-label={`Add 1 life to ${p.name}`}
+        {/* Center: life number */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          minWidth: "80px", pointerEvents: "none",
+        }}>
+          <span
+            className="lc-life-number"
+            style={{
+              fontSize: "clamp(3.8rem, 5.5vw, 7rem)",
+              fontWeight: 900, fontFamily: "'Outfit', sans-serif",
+              textAlign: "center",
+              textShadow: `0 0 40px ${playerTheme.accent}50, 0 4px 16px rgba(0,0,0,0.6)`,
+              lineHeight: 1, letterSpacing: "-3px",
+              filter: p.life < 10 ? "drop-shadow(0 0 8px rgba(239,68,68,0.7))" : "none",
+              color: p.life <= 0 ? "#ef4444" : p.life < 10 ? "#fca5a5" : "#fff",
+            }}
+          >
+            {p.life}
+          </span>
+        </div>
+
+        {/* Right zone: add life */}
+        <div
+          role="button"
+          aria-label={`Add 1 life to ${p.name} (hold to keep adding)`}
+          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
+          onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+          onPointerLeave={e => { e.currentTarget.style.background = "rgba(52,211,153,0.04)"; stopHold(); }}
+          onPointerEnter={e => { e.currentTarget.style.background = "rgba(52,211,153,0.12)"; }}
+          onContextMenu={e => e.preventDefault()}
           style={{
-            background: "rgba(0,0,0,0.35)", border: "none", borderRadius: "50%",
-            width: "42px", height: "42px", display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", cursor: "pointer", transition: "background 0.15s", flexShrink: 0,
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: "6px",
+            cursor: "pointer", userSelect: "none", touchAction: "none",
+            borderRadius: "0 8px 8px 0",
+            background: "rgba(52,211,153,0.04)",
+            transition: "background 0.12s ease",
           }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.6)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.35)"}
         >
-          <Plus size={20} />
-        </button>
-
-        <button
-          className="lc-life-small-adj"
-          onClick={() => adjustLife(p.id, 5)}
-          aria-label={`Add 5 life to ${p.name}`}
-          title="+5 life"
-          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", fontSize: "1rem", fontWeight: 700, cursor: "pointer", padding: "8px 18px", transition: "color 0.1s", letterSpacing: "0.5px" }}
-          onMouseEnter={e => e.currentTarget.style.color = "#fff"}
-          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.55)"}
-        >
-          +5
-        </button>
+          <Plus size={18} color="var(--accent-emerald)" style={{ opacity: 0.7, pointerEvents: "none" }} />
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); adjustLife(p.id, 5); }}
+            aria-label={`Add 5 life to ${p.name}`}
+            style={{
+              fontSize: "0.62rem", padding: "2px 6px",
+              background: "rgba(52,211,153,0.10)", border: "1px solid rgba(52,211,153,0.25)",
+              borderRadius: "4px", color: "var(--accent-emerald)",
+              cursor: "pointer", fontWeight: 700,
+            }}
+          >+5</button>
+        </div>
       </div>
 
       {/* ── Poison + Rad Counters ── */}
