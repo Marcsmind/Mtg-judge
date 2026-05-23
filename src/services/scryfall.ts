@@ -113,19 +113,27 @@ export async function autocompleteCard(query: string, signal?: AbortSignal): Pro
 export async function searchCardsWithImages(query: string, signal?: AbortSignal): Promise<ScryfallCard[]> {
   if (!query || query.trim().length < 2) return [];
   try {
-    // We use the search endpoint to get full card data including images.
-    // Note: The search endpoint might error if the query isn't valid yet,
-    // so we handle 404 gracefully.
+    // 1. Get exact prefix matches from autocomplete (fast & accurate)
+    const names = await autocompleteCard(query, signal);
+    if (!names || names.length === 0) return [];
+
+    // 2. Take top 10 results and fetch their full card data in one query
+    const topNames = names.slice(0, 10);
+    const exactQuery = topNames.map(n => `!"${n}"`).join(" or ");
+    
     const res = await fetch(
-      `https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}`,
+      `https://api.scryfall.com/cards/search?q=${encodeURIComponent(exactQuery)}`,
       { signal }
     );
-    if (!res.ok) {
-      if (res.status === 404) return []; // Partial query, no matches yet
-      return [];
-    }
+    if (!res.ok) return [];
+    
     const data = await res.json();
-    return (data.data || []).slice(0, 15); // Return top 15 results
+    const cards: ScryfallCard[] = data.data || [];
+
+    // 3. Sort cards to match the original autocomplete order
+    return cards.sort((a, b) => {
+      return topNames.indexOf(a.name) - topNames.indexOf(b.name);
+    });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") return [];
     console.error("Scryfall search with images failed:", err);

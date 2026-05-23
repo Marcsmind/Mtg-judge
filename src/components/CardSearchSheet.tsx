@@ -71,6 +71,7 @@ export const CardSearchSheet: React.FC<CardSearchSheetProps> = ({ onClose, onTag
             className="glass-input"
             placeholder="Search card name... (e.g. Sol Ring)"
             value={query}
+            autoFocus
             onChange={(e) => setQuery(e.target.value)}
             style={{ width: "100%", paddingLeft: "40px", fontSize: "16px", height: "48px" }}
           />
