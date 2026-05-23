@@ -616,7 +616,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           placeholder={
             apiKey
               ? "Ask a rules question… (e.g. If my commander is phased out…)"
-              : "Mock Mode: Tag cards to see their text, or add API Key in settings"
+              : "Mock Mode: Tag cards (Add API Key)"
           }
           value={query}
           onChange={(e) => { setQuery(e.target.value); autoResize(e.target); }}

@@ -480,6 +480,11 @@ h1, h2, h3, h4, h5 {
     overflow-y: hidden !important;
   }
 
+  /* Hide the bottom nav bar when a text input is focused (keyboard is open) */
+  body:has(input:focus, textarea:focus) .app-container > aside {
+    display: none !important;
+  }
+
   /* Nav items: column layout (icon on top, hidden label below) */
   .app-container > aside nav,
   .app-container > aside .sidebar-footer {

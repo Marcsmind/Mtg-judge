@@ -109,6 +109,30 @@ export async function autocompleteCard(query: string, signal?: AbortSignal): Pro
   }
 }
 
+// ── Search with Images (used for Bottom Sheet search preview) ────────────────
+export async function searchCardsWithImages(query: string, signal?: AbortSignal): Promise<ScryfallCard[]> {
+  if (!query || query.trim().length < 2) return [];
+  try {
+    // We use the search endpoint to get full card data including images.
+    // Note: The search endpoint might error if the query isn't valid yet,
+    // so we handle 404 gracefully.
+    const res = await fetch(
+      `https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}`,
+      { signal }
+    );
+    if (!res.ok) {
+      if (res.status === 404) return []; // Partial query, no matches yet
+      return [];
+    }
+    const data = await res.json();
+    return (data.data || []).slice(0, 15); // Return top 15 results
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") return [];
+    console.error("Scryfall search with images failed:", err);
+    return [];
+  }
+}
+
 // Fuzzy search (fetches exact card details, accommodating slight typos)
 // Results are cached locally for 7 days — repeated lookups are instant + work offline.
 export async function searchCardFuzzy(query: string): Promise<ScryfallCard | null> {

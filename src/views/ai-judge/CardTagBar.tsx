@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Search, X, Trash2 } from "lucide-react";
 import { getCardImage } from "../../services/scryfall";
 import type { ScryfallCard } from "../../services/scryfall";
+import { CardSearchSheet } from "../../components/CardSearchSheet";
 
 interface CardTagBarProps {
   taggedCards: ScryfallCard[];
-  cardSearch: string;
+  cardSearch: string; // Deprecated by CardSearchSheet but kept for compat
   setCardSearch: (s: string) => void;
   suggestions: string[];
   cardLoading: boolean;
@@ -17,102 +18,44 @@ interface CardTagBarProps {
 
 export const CardTagBar: React.FC<CardTagBarProps> = ({
   taggedCards,
-  cardSearch,
-  setCardSearch,
-  suggestions,
-  cardLoading,
   onTagCard,
   onRemoveTag,
   onClearAll,
-  dropdownRef,
 }) => {
+  const [showSearchSheet, setShowSearchSheet] = useState(false);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      {/* Card search input + autocomplete dropdown */}
-      <div style={{ display: "flex", gap: "12px", alignItems: "center", width: "100%" }}>
-        <div style={{ flex: 1, position: "relative" }} ref={dropdownRef}>
-          <div style={{ position: "relative" }}>
-            <input
-              type="text"
-              className="glass-input"
-              placeholder="Search card name to tag context... (e.g. Sol Ring)"
-              value={cardSearch}
-              onChange={(e) => setCardSearch(e.target.value)}
-              disabled={cardLoading}
-              aria-label="Search for a card to add as context"
-              aria-autocomplete="list"
-              aria-expanded={suggestions.length > 0}
-              aria-haspopup="listbox"
-              role="combobox"
-              style={{ width: "100%", paddingLeft: "36px", fontSize: "16px" }}
-            />
-            <Search
-              size={14}
-              color="var(--text-muted)"
-              style={{
-                position: "absolute",
-                left: "12px",
-                top: "50%",
-                transform: "translateY(-50%)",
-              }}
-            />
-          </div>
-
-          {/* Autocomplete suggestions */}
-          {suggestions.length > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                bottom: "calc(100% + 4px)",
-                left: 0,
-                width: "100%",
-                background: "var(--bg-dark)",
-                border: "1px solid var(--border-color)",
-                borderRadius: "8px",
-                boxShadow: "0 -8px 24px rgba(0, 0, 0, 0.5)",
-                maxHeight: "180px",
-                overflowY: "auto",
-                zIndex: 90,
-              }}
-              role="listbox"
-            >
-              {suggestions.map((name, i) => (
-                <div
-                  key={i}
-                  role="option"
-                  aria-selected={false}
-                  tabIndex={0}
-                  onClick={() => onTagCard(name)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") onTagCard(name);
-                  }}
-                  style={{
-                    padding: "8px 12px",
-                    cursor: "pointer",
-                    fontSize: "0.85rem",
-                    color: "var(--text-secondary)",
-                    transition: "all 0.15s ease",
-                    borderBottom:
-                      i < suggestions.length - 1
-                        ? "1px solid rgba(255,255,255,0.03)"
-                        : "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)";
-                    e.currentTarget.style.color = "var(--text-primary)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "var(--text-secondary)";
-                  }}
-                >
-                  {name}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Search Input trigger - opens the Bottom Sheet */}
+      <div 
+        onClick={() => setShowSearchSheet(true)}
+        style={{ cursor: "text", position: "relative" }}
+      >
+        <input
+          type="text"
+          className="glass-input"
+          placeholder="Search card name to tag context... (e.g. Sol Ring)"
+          readOnly
+          style={{ width: "100%", paddingLeft: "36px", fontSize: "16px", pointerEvents: "none" }}
+        />
+        <Search
+          size={14}
+          color="var(--text-muted)"
+          style={{
+            position: "absolute",
+            left: "12px",
+            top: "50%",
+            transform: "translateY(-50%)",
+          }}
+        />
       </div>
+
+      {showSearchSheet && (
+        <CardSearchSheet
+          onClose={() => setShowSearchSheet(false)}
+          onTagCard={onTagCard}
+        />
+      )}
 
       {/* Tagged card badges */}
       {taggedCards.length > 0 && (
