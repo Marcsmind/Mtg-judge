@@ -172,19 +172,19 @@ export const CardCodex: React.FC<CardCodexProps> = ({
         position: "fixed",
         top: 0,
         right: 0,
-        width: "520px",
-        maxWidth: "90vw",
+        width: "100%",
+        maxWidth: "100vw",
         height: "100vh",
         background: "rgba(10, 8, 16, 0.92)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
-        borderLeft: "1px solid var(--border-color)",
-        boxShadow: "-10px 0 40px rgba(0, 0, 0, 0.6)",
+        borderLeft: "none",
         zIndex: 100,
         display: "flex",
         flexDirection: "column",
         animation: "slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         padding: "24px",
+        paddingTop: "calc(24px + env(safe-area-inset-top))",
       }}
     >
       <style>{`
@@ -211,11 +211,16 @@ export const CardCodex: React.FC<CardCodexProps> = ({
           onClick={onClose}
           aria-label="Close Card Codex"
           style={{
-            background: "none",
-            border: "none",
-            color: "var(--text-secondary)",
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "50%",
+            width: "32px",
+            height: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--text-primary)",
             cursor: "pointer",
-            padding: "4px",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
           onMouseLeave={(e) =>

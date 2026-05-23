@@ -34,7 +34,7 @@ export const CardTagBar: React.FC<CardTagBarProps> = ({
         <input
           type="text"
           className="glass-input"
-          placeholder="Search card name to tag context... (e.g. Sol Ring)"
+          placeholder="Search card name to tag... (e.g. Sol Ring)"
           readOnly
           style={{ width: "100%", paddingLeft: "36px", fontSize: "16px", pointerEvents: "none" }}
         />

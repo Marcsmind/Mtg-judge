@@ -8,11 +8,11 @@ import { DiceAndCoins } from "./views/DiceAndCoins";
 import { TurnOrder } from "./views/TurnOrder";
 import { QuickRules } from "./views/QuickRules";
 import { Leaderboard } from "./views/Leaderboard";
-// Lazily loaded — heavy views split into separate chunks
-const AIJudge    = lazy(() => import("./views/AIJudge").then(m => ({ default: m.AIJudge })));
+import { AIJudge } from "./views/AIJudge";
 const DeckBuilder = lazy(() => import("./views/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
 const GameNight  = lazy(() => import("./views/GameNight").then(m => ({ default: m.GameNight })));
 const AppGuide   = lazy(() => import("./views/AppGuide").then(m => ({ default: m.AppGuide })));
+const MoreMenu   = lazy(() => import("./views/MoreMenu").then(m => ({ default: m.MoreMenu })));
 import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
@@ -25,6 +25,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>("judge");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [codexOpen, setCodexOpen] = useState<boolean>(false);
+  const [judgeOpen, setJudgeOpen] = useState<boolean>(false);
   const [codexSearch, setCodexSearch] = useState<string>("");
   // Initialize from localStorage directly — avoids setState-in-effect lint warnings
   const [apiKey, setApiKey] = useState<string>(
@@ -134,7 +135,7 @@ function App() {
 
   const renderActiveView = () => {
     switch (activeTab) {
-      case "judge":
+      case "judge": // Fallback for desktop view
         return (
           <AIJudge
             apiKey={apiKey}
@@ -197,8 +198,11 @@ function App() {
             setTheme={setTheme}
             authUser={authUser}
             onLinkGoogle={linkGoogleAccount}
+            onNavigate={(tab) => setActiveTab(tab)}
           />
         );
+      case "more":
+        return <MoreMenu onNavigate={(tab) => setActiveTab(tab)} />;
       case "guide":
         return <AppGuide onNavigate={(tab) => setActiveTab(tab)} />;
       default:
@@ -219,6 +223,7 @@ function App() {
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        openJudge={() => setJudgeOpen(true)}
         openCodex={() => setCodexOpen(true)}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleSidebar}
@@ -241,6 +246,32 @@ function App() {
         onClose={() => { setCodexOpen(false); setCodexSearch(""); }}
         initialSearch={codexSearch}
       />
+
+      {/* Slide-Up AI Judge Overlay */}
+      {judgeOpen && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, width: "100%", height: "100%", zIndex: 100, background: "var(--bg-deep)", display: "flex", flexDirection: "column",
+          animation: "slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}>
+          <style>{`
+            @keyframes slideUp {
+              from { transform: translateY(100%); }
+              to   { transform: translateY(0); }
+            }
+          `}</style>
+          <AIJudge
+            apiKey={apiKey}
+            geminiModel={geminiModel}
+            openCodex={() => setCodexOpen(true)}
+            openCodexWith={(term: string) => { setCodexSearch(term); setCodexOpen(true); }}
+            goToSettings={() => { setJudgeOpen(false); setActiveTab("settings"); }}
+            onClose={() => setJudgeOpen(false)}
+            isModal={true}
+          />
+        </div>
+      )}
     </div>
   );
 }

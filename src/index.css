@@ -72,20 +72,13 @@ body {
   overscroll-behavior: none; /* prevent iOS rubber-band bounce near nav bar */
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar (Hidden for native app feel) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  display: none !important;
 }
-::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-purple);
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 /* Glassmorphism Styles */
@@ -190,7 +183,9 @@ body {
 /* Layout Classes */
 .app-container {
   display: flex;
-  min-height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
 }
 
 .main-content {
@@ -198,8 +193,9 @@ body {
   padding: 24px;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Typography styles */
@@ -456,6 +452,7 @@ h1, h2, h3, h4, h5 {
 
   .app-container {
     flex-direction: column;
+    padding-top: env(safe-area-inset-top) !important;
   }
 
   /* Sidebar → fixed bottom tab bar — 6 evenly-spaced items, no horizontal scroll */
@@ -510,6 +507,7 @@ h1, h2, h3, h4, h5 {
 
   /* Main content: pad below the tab bar + safe area */
   .main-content {
+    padding: 16px !important;
     padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
   }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2 } from "lucide-react";
+import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2, BookOpen, HelpCircle, ExternalLink } from "lucide-react";
 import { THEMES } from "../constants/themes";
 import type { ThemeId } from "../constants/themes";
 import { upsertProfile, getDisplayName } from "../services/auth";
@@ -14,9 +14,10 @@ interface SettingsPanelProps {
   setTheme?: (t: ThemeId) => void;
   authUser?: AuthUser | null;
   onLinkGoogle?: () => void;
+  onNavigate?: (tab: any) => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, onLinkGoogle }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, onLinkGoogle, onNavigate }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
 
@@ -510,6 +511,40 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
           </div>
         </form>
 
+      </div>
+
+      {/* ── App Resources ── */}
+      <div className="glass-panel" style={{ padding: "24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+          <Info size={22} color="var(--accent-cyan)" />
+          <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0 }}>App Resources</h2>
+        </div>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
+          <button
+            onClick={() => onNavigate && onNavigate("rules")}
+            className="glass-button"
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", background: "rgba(255,255,255,0.02)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <BookOpen size={20} color="var(--accent-purple)" />
+              <span style={{ fontSize: "1rem", fontWeight: 500 }}>Quick Rules Reference</span>
+            </div>
+            <ExternalLink size={18} color="var(--text-muted)" />
+          </button>
+
+          <button
+            onClick={() => onNavigate && onNavigate("guide")}
+            className="glass-button"
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", background: "rgba(255,255,255,0.02)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <HelpCircle size={20} color="var(--accent-cyan)" />
+              <span style={{ fontSize: "1rem", fontWeight: 500 }}>App Guide & Tutorials</span>
+            </div>
+            <ExternalLink size={18} color="var(--text-muted)" />
+          </button>
+        </div>
       </div>
     </div>
   );

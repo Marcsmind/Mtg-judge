@@ -48,6 +48,8 @@ interface AIJudgeProps {
   openCodex: () => void;
   openCodexWith?: (term: string) => void;
   goToSettings?: () => void;
+  onClose?: () => void;
+  isModal?: boolean;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -58,6 +60,8 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
   openCodex,
   openCodexWith,
   goToSettings,
+  onClose,
+  isModal,
 }) => {
   const isMobile = useMobile(768);
   const [query, setQuery] = useState("");
@@ -341,39 +345,70 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
 
   return (
     <div
+      className="view-container"
       style={{
         display: "flex",
         flexDirection: "column",
-        height: "calc(100vh - 48px)",
+        height: "100%",
+        maxHeight: "100%",
+        overflow: "hidden",
+        maxWidth: isModal ? "100%" : "900px",
+        padding: isModal ? "16px" : undefined,
         margin: "0 auto",
         width: "100%",
-        maxWidth: "900px",
       }}
     >
       {/* Top Header */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          flexDirection: "column",
+          gap: "12px",
           borderBottom: "1px solid var(--border-color)",
           paddingBottom: "16px",
           marginBottom: "16px",
+          flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <Scale size={28} color="var(--accent-purple)" />
-          <div>
-            <h2 style={{ fontSize: "1.8rem", fontWeight: 700 }}>
-              AI Rules Judge
-            </h2>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-              Certified Commander rules analysis. Tag cards to provide
-              ground-truth oracle texts.
-            </p>
-          </div>
+        {/* Row 1: Title and Close */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ fontSize: "1.6rem", fontWeight: 700, margin: 0 }}>
+            AI Rules Judge
+          </h2>
+          {/* Modal Close Button */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="glass-button"
+              aria-label="Close AI Judge"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "50%",
+                width: "32px",
+                height: "32px",
+                padding: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-primary)",
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          )}
         </div>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+
+        {/* Row 2: Icon and Subtext */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+          <Scale size={20} color="var(--accent-purple)" style={{ flexShrink: 0, marginTop: "2px" }} />
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", margin: 0, lineHeight: 1.4 }}>
+            Certified Commander rules analysis. Tag cards to provide ground-truth oracle texts.
+          </p>
+        </div>
+
+        {/* Row 3: Action Buttons */}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "4px" }}>
           {/* Saved Rulings button */}
           <button
             onClick={() => setShowFavorites(true)}
@@ -403,7 +438,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
               }}
             >
               <Trash2 size={14} />
-              <span>Clear Chat</span>
+              <span>Clear</span>
             </button>
           )}
         </div>
@@ -416,6 +451,8 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           flex: 1,
           padding: "20px",
           overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+          minHeight: 0,
           display: "flex",
           flexDirection: "column",
           gap: "20px",
@@ -615,7 +652,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           className="glass-input"
           placeholder={
             apiKey
-              ? "Ask a rules question… (e.g. If my commander is phased out…)"
+              ? "Ask a rules question..."
               : "Mock Mode: Tag cards (Add API Key)"
           }
           value={query}
@@ -644,10 +681,15 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           className="glass-button"
           disabled={queryLoading || !query.trim()}
           style={{
+            alignSelf: "flex-end",
+            height: "44px",
             background: "var(--accent-purple)",
             borderColor: "var(--accent-purple)",
             color: "#ffffff",
-            padding: "14px 20px",
+            padding: "0 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
           <Send size={16} />

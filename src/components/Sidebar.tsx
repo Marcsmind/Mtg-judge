@@ -1,38 +1,32 @@
-import React, { useState } from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, BookOpen, Menu, Wand2, Trophy, Sparkles, HelpCircle, MoreHorizontal, ChevronLeft } from "lucide-react";
+import React from "react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, Menu, Wand2, Trophy, Sparkles, MoreHorizontal } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
-import { BottomSheet } from "./BottomSheet";
 import { useMobile } from "../hooks/useMobile";
 
 interface SidebarProps {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
+  openJudge: () => void;
   openCodex: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }
 
-// Primary tabs always shown in the mobile bottom bar (5 + "More" = 6 items)
-const PRIMARY_IDS: TabId[] = ["judge", "life", "gamenight", "dice", "deck"];
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openCodex, collapsed, onToggleCollapsed }) => {
+
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openJudge, openCodex, collapsed, onToggleCollapsed }) => {
   const isMobile = useMobile(768);
-  const [moreOpen, setMoreOpen] = useState(false);
 
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: "judge",       label: "AI Judge",      icon: Scale       },
     { id: "life",        label: "Life Counter",  icon: Heart       },
     { id: "gamenight",   label: "Game Night",    icon: Sparkles    },
     { id: "dice",        label: "Dice & Coins",  icon: Dices       },
+    { id: "more",        label: "Menu",          icon: MoreHorizontal },
     { id: "turns",       label: "Turn Order",    icon: Shuffle     },
     { id: "deck",        label: "Deck Builder",  icon: Wand2       },
-    { id: "leaderboard", label: "Leaderboard",   icon: Trophy      },
-    { id: "rules",       label: "Quick Rules",   icon: BookOpen    },
-    { id: "guide",       label: "App Guide",     icon: HelpCircle  },
+    { id: "leaderboard", label: "Stats",         icon: Trophy      },
   ];
-
-  const primaryItems = navItems.filter(i => PRIMARY_IDS.includes(i.id));
-  const moreItems    = navItems.filter(i => !PRIMARY_IDS.includes(i.id));
 
   // ── Mobile: bottom tab bar ──────────────────────────────────────────────────
   if (isMobile) {
@@ -66,11 +60,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
     return (
       <aside className="glass-panel" style={{ /* CSS media query handles layout */ }}>
         <nav role="navigation" aria-label="Main navigation" style={{ display: "flex", flex: 1 }}>
-          {primaryItems.map(item => makeTabBtn(item, () => setActiveTab(item.id)))}
-          {/* "More" button — opens bottom drawer */}
+          {/* 1. Judge */}
           <button
-            onClick={() => setMoreOpen(true)}
-            aria-label="More navigation options"
+            onClick={() => openJudge()}
+            aria-label="AI Judge"
             style={{
               flex: 1, display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center",
@@ -82,90 +75,57 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
               cursor: "pointer", transition: "all 0.15s ease",
             }}
           >
+            <Scale size={20} />
+            <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>Judge</span>
+          </button>
+
+          {/* 2. Life */}
+          {makeTabBtn(navItems.find(i => i.id === "life")!, () => setActiveTab("life"))}
+
+          {/* 3. Game Night */}
+          {makeTabBtn(navItems.find(i => i.id === "gamenight")!, () => setActiveTab("gamenight"))}
+
+          {/* 4. Codex */}
+          <button
+            onClick={() => openCodex()}
+            aria-label="Card Codex"
+            style={{
+              flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              gap: "3px", padding: "6px 4px",
+              background: "transparent",
+              border: "none", borderRadius: "8px",
+              color: "var(--accent-cyan)",
+              fontSize: "0.55rem", fontWeight: 500,
+              cursor: "pointer", transition: "all 0.15s ease",
+            }}
+          >
+            <Search size={20} />
+            <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>Codex</span>
+          </button>
+
+          {/* 5. Dice */}
+          {makeTabBtn(navItems.find(i => i.id === "dice")!, () => setActiveTab("dice"))}
+
+          {/* 6. More / Menu */}
+          <button
+            onClick={() => setActiveTab("more")}
+            aria-label="More Menu"
+            style={{
+              flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              gap: "3px", padding: "6px 4px",
+              background: activeTab === "more" ? "rgba(139,92,246,0.12)" : "transparent",
+              border: "none", borderRadius: "8px",
+              color: activeTab === "more" ? "var(--accent-purple)" : "var(--text-muted)",
+              fontSize: "0.55rem", fontWeight: activeTab === "more" ? 700 : 500,
+              cursor: "pointer", transition: "all 0.15s ease",
+            }}
+          >
             <MoreHorizontal size={20} />
-            <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>More</span>
+            <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>Menu</span>
           </button>
         </nav>
-
-        {/* "More" drawer */}
-        {moreOpen && (
-          <BottomSheet onClose={() => setMoreOpen(false)} zIndex={300} maxWidth="400px" padding="20px">
-            {/* Back button — replaces the old "More" heading */}
-            <button
-              onClick={() => setMoreOpen(false)}
-              style={{
-                display: "flex", alignItems: "center", gap: "5px",
-                background: "none", border: "none", cursor: "pointer",
-                color: "var(--text-muted)", fontSize: "0.82rem", fontWeight: 500,
-                padding: "0 0 14px 0", transition: "color 0.15s ease",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = "var(--text-primary)"; }}
-              onMouseLeave={e => { e.currentTarget.style.color = "var(--text-muted)"; }}
-            >
-              <ChevronLeft size={15} />
-              <span>Back</span>
-            </button>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginBottom: "16px" }}>
-              {moreItems.map(item => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => { setActiveTab(item.id); setMoreOpen(false); }}
-                    style={{
-                      display: "flex", flexDirection: "column", alignItems: "center",
-                      justifyContent: "center", gap: "3px", padding: "6px 4px",
-                      background: isActive ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
-                      border: `1px solid ${isActive ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
-                      borderRadius: "8px", cursor: "pointer",
-                      color: isActive ? "var(--accent-purple)" : "var(--text-secondary)",
-                      fontSize: "0.55rem", fontWeight: isActive ? 700 : 500,
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    <Icon size={20} />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-              {/* Card Codex */}
-              <button
-                onClick={() => { openCodex(); setMoreOpen(false); }}
-                style={{
-                  display: "flex", flexDirection: "column", alignItems: "center",
-                  justifyContent: "center", gap: "3px", padding: "6px 4px",
-                  background: "rgba(6,182,212,0.06)",
-                  border: "1px solid rgba(6,182,212,0.2)",
-                  borderRadius: "8px", cursor: "pointer",
-                  color: "var(--accent-cyan)",
-                  fontSize: "0.55rem", fontWeight: 500,
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <Search size={20} />
-                <span>Card Codex</span>
-              </button>
-              {/* Settings */}
-              <button
-                onClick={() => { setActiveTab("settings"); setMoreOpen(false); }}
-                style={{
-                  display: "flex", flexDirection: "column", alignItems: "center",
-                  justifyContent: "center", gap: "3px", padding: "6px 4px",
-                  background: activeTab === "settings" ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${activeTab === "settings" ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
-                  borderRadius: "8px", cursor: "pointer",
-                  color: activeTab === "settings" ? "var(--accent-purple)" : "var(--text-secondary)",
-                  fontSize: "0.55rem", fontWeight: activeTab === "settings" ? 700 : 500,
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <Settings size={20} />
-                <span>Settings</span>
-              </button>
-            </div>
-          </BottomSheet>
-        )}
       </aside>
     );
   }
