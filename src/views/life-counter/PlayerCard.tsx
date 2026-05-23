@@ -339,44 +339,6 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           onFocus={e => e.target.style.borderBottomColor = playerTheme.accent}
           onBlur={e => e.target.style.borderBottomColor = "transparent"}
         />
-        {/* Commander wand
-            - Commander set    → open preview modal; canEdit = isLocalPlayer
-            - No commander     → open editor only when isLocalPlayer; no-op for others     */}
-        <button
-          onClick={() => {
-            if (commanderName) {
-              setPreviewOpen(true);
-            } else if (isLocalPlayer && onSetCommander) {
-              setSetCmdOpen(true);
-            }
-            // other player + no commander → intentional no-op
-          }}
-          aria-label={commanderName ? `View ${p.name}'s commander: ${commanderName}` : (isLocalPlayer ? `Set commander for ${p.name}` : `${p.name} has no commander set`)}
-          title={commanderName ? `Commander: ${commanderName}` : (isLocalPlayer ? "Set commander" : "No commander set")}
-          className="touch-icon-btn"
-          style={{
-            background: commanderName ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)",
-            border: `1px solid ${commanderName ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)"}`,
-            borderRadius: "6px", padding: "3px 5px",
-            cursor: (commanderName || isLocalPlayer) ? "pointer" : "default",
-            flexShrink: 0, display: "flex", alignItems: "center",
-            opacity: commanderName ? 1 : (isLocalPlayer ? 0.5 : 0.2),
-            transition: "all 0.15s ease",
-          }}
-          onMouseEnter={e => {
-            if (!commanderName && !isLocalPlayer) return;
-            e.currentTarget.style.opacity = "1";
-            e.currentTarget.style.background = "rgba(139,92,246,0.2)";
-            e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)";
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.opacity = commanderName ? "1" : (isLocalPlayer ? "0.5" : "0.2");
-            e.currentTarget.style.background = commanderName ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)";
-            e.currentTarget.style.borderColor = commanderName ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)";
-          }}
-        >
-          <Wand2 size={13} color={commanderName ? "var(--accent-purple)" : "var(--text-muted)"} />
-        </button>
         {/* "Me" pill — tap to claim / unclaim this seat */}
         {claimSeat && (
           <button
@@ -411,6 +373,62 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           title="Cycle Color"
         />
       </div>
+
+      {/* ── Commander Strip — dedicated row below header, clear of monarch/initiative badge ── */}
+      {(commanderName || isLocalPlayer) && (
+        <div style={{
+          paddingRight: (activeCounters.monarch || activeCounters.initiative) ? "44px" : "0",
+          paddingTop: "2px",
+          paddingBottom: "2px",
+          minHeight: "22px",
+        }}>
+          {commanderName ? (
+            <button
+              onClick={() => setPreviewOpen(true)}
+              aria-label={`View ${p.name}'s commander: ${commanderName}`}
+              title={`Commander: ${commanderName}`}
+              className="touch-icon-btn"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                background: "rgba(139,92,246,0.10)",
+                border: "1px solid rgba(139,92,246,0.28)",
+                borderRadius: "6px", padding: "2px 8px 2px 5px",
+                cursor: "pointer", maxWidth: "100%",
+                transition: "background 0.15s ease",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(139,92,246,0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(139,92,246,0.10)"; }}
+            >
+              <Wand2 size={11} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
+              <span style={{
+                fontSize: "0.7rem", fontWeight: 600,
+                color: "var(--accent-purple)",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                maxWidth: "120px",
+              }}>
+                {commanderName}
+              </span>
+            </button>
+          ) : isLocalPlayer ? (
+            <button
+              onClick={() => onSetCommander && setSetCmdOpen(true)}
+              aria-label={`Set commander for ${p.name}`}
+              title="Set commander"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "4px",
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--text-muted)", fontSize: "0.68rem", padding: "2px 0",
+                opacity: 0.6, transition: "opacity 0.15s ease",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "0.6"}
+            >
+              <Wand2 size={10} />
+              <span>+ Set commander</span>
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {/* ── Commander Preview Modal (read-only by default; edit button when isLocalPlayer) ── */}
       {previewOpen && commanderName && (

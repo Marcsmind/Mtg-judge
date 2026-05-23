@@ -1092,9 +1092,29 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               </span>
 
               {roomError && (
-                <span style={{ fontSize: "0.75rem", color: "var(--accent-rose)", fontWeight: 600 }}>
-                  ⚠️ {roomError}
-                </span>
+                roomError.toLowerCase().includes("reconnect") ? (
+                  // "Tap to reconnect" — make the whole message a real tap target
+                  <button
+                    onClick={() => handleJoinRoom(roomCode ?? undefined)}
+                    style={{
+                      fontSize: "0.75rem", color: "var(--accent-rose)", fontWeight: 600,
+                      background: "rgba(244,63,94,0.10)",
+                      border: "1px solid rgba(244,63,94,0.3)",
+                      borderRadius: "8px", padding: "4px 10px",
+                      cursor: "pointer",
+                      display: "inline-flex", alignItems: "center", gap: "4px",
+                      transition: "background 0.15s ease",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(244,63,94,0.18)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "rgba(244,63,94,0.10)"}
+                  >
+                    ⚠️ {roomError}
+                  </button>
+                ) : (
+                  <span style={{ fontSize: "0.75rem", color: "var(--accent-rose)", fontWeight: 600 }}>
+                    ⚠️ {roomError}
+                  </span>
+                )
               )}
 
               {!isSupabaseConfigured ? (
