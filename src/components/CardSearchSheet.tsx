@@ -27,7 +27,9 @@ export const CardSearchSheet: React.FC<CardSearchSheetProps> = ({ onClose, onTag
 
   useEffect(() => {
     if (query.trim().length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
+       
       setLoading(false);
       return;
     }
