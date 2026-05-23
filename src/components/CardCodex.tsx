@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { X, Search, BookOpen, Layers, Clock, Tag } from "lucide-react";
+import { useMobile } from "../hooks/useMobile";
 import {
   autocompleteCard,
   searchCardFuzzy,
@@ -23,6 +24,7 @@ export const CardCodex: React.FC<CardCodexProps> = ({
   onClose,
   initialSearch,
 }) => {
+  const isMobile = useMobile(768);
   const [activeTab, setActiveTab] = useState<TabId>("search");
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -30,6 +32,7 @@ export const CardCodex: React.FC<CardCodexProps> = ({
   const [selectedCard, setSelectedCard] = useState<ScryfallCard | null>(null);
   const [rulings, setRulings] = useState<ScryfallRuling[]>([]);
   const [error, setError] = useState("");
+  const [imageZoomed, setImageZoomed] = useState(false);
 
   const dropdownRef = useRef<HTMLFormElement>(null);
   // AbortController ref — cancels the previous autocomplete fetch when a new keystroke arrives
@@ -82,11 +85,27 @@ export const CardCodex: React.FC<CardCodexProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialSearch]);
 
-  // Close on Escape key
+  // Reset zoom when the panel closes
+  useEffect(() => {
+    if (!isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setImageZoomed(false);
+    }
+  }, [isOpen]);
+
+  // Close on Escape key — dismisses lightbox first, then the panel
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        // imageZoomed is read from the ref snapshot in the closure;
+        // use functional setter to read current value
+        setImageZoomed(prev => {
+          if (prev) return false; // dismiss lightbox first
+          onClose();
+          return false;
+        });
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -606,6 +625,8 @@ export const CardCodex: React.FC<CardCodexProps> = ({
                     <img
                       src={getCardImage(selectedCard)}
                       alt={selectedCard.name}
+                      onClick={() => setImageZoomed(true)}
+                      title="Tap to zoom"
                       style={{
                         width: "100%",
                         maxWidth: "200px",
@@ -613,7 +634,11 @@ export const CardCodex: React.FC<CardCodexProps> = ({
                         boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
                         objectFit: "contain",
                         border: "1px solid rgba(255,255,255,0.05)",
+                        cursor: "zoom-in",
+                        transition: "transform 0.15s ease",
                       }}
+                      onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.03)")}
+                      onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
                     />
                   </div>
                   <div
@@ -926,6 +951,62 @@ export const CardCodex: React.FC<CardCodexProps> = ({
           </>
         )}
       </div>
+
+      {/* ── Mobile close button — thumb-reachable at the bottom of the panel ── */}
+      {isMobile && (
+        <div style={{
+          flexShrink: 0,
+          borderTop: "1px solid var(--border-color)",
+          padding: "12px 0 calc(12px + env(safe-area-inset-bottom))",
+          marginTop: "8px",
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              width: "100%", padding: "14px",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "12px",
+              color: "var(--text-secondary)",
+              fontSize: "0.95rem", fontWeight: 600,
+              cursor: "pointer",
+              display: "flex", alignItems: "center",
+              justifyContent: "center", gap: "8px",
+            }}
+          >
+            <X size={16} /> Close
+          </button>
+        </div>
+      )}
+
+      {/* ── Card art lightbox overlay ── */}
+      {imageZoomed && selectedCard && (
+        <div
+          onClick={() => setImageZoomed(false)}
+          role="dialog"
+          aria-label={`Full-size view of ${selectedCard.name}`}
+          aria-modal="true"
+          style={{
+            position: "fixed", inset: 0, zIndex: 500,
+            background: "rgba(0,0,0,0.92)", backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "zoom-out",
+          }}
+        >
+          <img
+            src={getCardImage(selectedCard)}
+            alt={selectedCard.name}
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: "94vw", maxHeight: "94vh",
+              borderRadius: "16px", objectFit: "contain",
+              boxShadow: "0 20px 80px rgba(0,0,0,0.8)",
+              cursor: "default",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 };

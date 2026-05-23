@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
             <div style={{ marginBottom: "16px", fontWeight: 700, fontSize: "0.9rem", color: "var(--text-secondary)" }}>
               More
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", marginBottom: "16px" }}>
               {moreItems.map(item => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -103,16 +103,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
                     onClick={() => { setActiveTab(item.id); setMoreOpen(false); }}
                     style={{
                       display: "flex", flexDirection: "column", alignItems: "center",
-                      justifyContent: "center", gap: "8px", padding: "16px 8px",
+                      justifyContent: "center", gap: "5px", padding: "10px 6px",
                       background: isActive ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
                       border: `1px solid ${isActive ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
-                      borderRadius: "12px", cursor: "pointer",
+                      borderRadius: "10px", cursor: "pointer",
                       color: isActive ? "var(--accent-purple)" : "var(--text-secondary)",
-                      fontSize: "0.75rem", fontWeight: isActive ? 700 : 500,
+                      fontSize: "0.7rem", fontWeight: isActive ? 700 : 500,
                       transition: "all 0.15s ease",
                     }}
                   >
-                    <Icon size={22} />
+                    <Icon size={18} />
                     <span>{item.label}</span>
                   </button>
                 );
@@ -122,16 +122,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
                 onClick={() => { openCodex(); setMoreOpen(false); }}
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center",
-                  justifyContent: "center", gap: "8px", padding: "16px 8px",
+                  justifyContent: "center", gap: "5px", padding: "10px 6px",
                   background: "rgba(6,182,212,0.06)",
                   border: "1px solid rgba(6,182,212,0.2)",
-                  borderRadius: "12px", cursor: "pointer",
+                  borderRadius: "10px", cursor: "pointer",
                   color: "var(--accent-cyan)",
-                  fontSize: "0.75rem", fontWeight: 500,
+                  fontSize: "0.7rem", fontWeight: 500,
                   transition: "all 0.15s ease",
                 }}
               >
-                <Search size={22} />
+                <Search size={18} />
                 <span>Card Codex</span>
               </button>
               {/* Settings */}
@@ -139,16 +139,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
                 onClick={() => { setActiveTab("settings"); setMoreOpen(false); }}
                 style={{
                   display: "flex", flexDirection: "column", alignItems: "center",
-                  justifyContent: "center", gap: "8px", padding: "16px 8px",
+                  justifyContent: "center", gap: "5px", padding: "10px 6px",
                   background: activeTab === "settings" ? "rgba(139,92,246,0.14)" : "rgba(255,255,255,0.04)",
                   border: `1px solid ${activeTab === "settings" ? "rgba(139,92,246,0.4)" : "var(--border-color)"}`,
-                  borderRadius: "12px", cursor: "pointer",
+                  borderRadius: "10px", cursor: "pointer",
                   color: activeTab === "settings" ? "var(--accent-purple)" : "var(--text-secondary)",
-                  fontSize: "0.75rem", fontWeight: activeTab === "settings" ? 700 : 500,
+                  fontSize: "0.7rem", fontWeight: activeTab === "settings" ? 700 : 500,
                   transition: "all 0.15s ease",
                 }}
               >
-                <Settings size={22} />
+                <Settings size={18} />
                 <span>Settings</span>
               </button>
             </div>
