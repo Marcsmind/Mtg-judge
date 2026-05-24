@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Crown, Swords, User } from "lucide-react";
+import { Crown, Swords, User, Scale } from "lucide-react";
 import type { Player } from "../../types/game";
 
 interface TableCenterProps {
@@ -34,11 +34,41 @@ export const TableCenter: React.FC<TableCenterProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (!hasMonarchMechanic && !hasInitiativeMechanic) return null;
-
   return (
-    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "8px", justifyContent: "center" }}>
+    <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: "8px", width: "100%", maxWidth: "800px", margin: "0 auto 8px auto" }}>
       
+      {/* ── Quick Ask Judge Bar ── */}
+      {players.length <= 2 && (
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))}
+          style={{
+            display: "flex", alignItems: "center", gap: "12px",
+            background: "rgba(255, 255, 255, 0.05)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            borderRadius: "100px",
+            padding: "8px 16px",
+            flex: "1 1 200px",
+            minWidth: "200px",
+            cursor: "pointer",
+            color: "var(--text-secondary)",
+            fontSize: "0.95rem",
+            transition: "all 0.2s ease",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+            e.currentTarget.style.borderColor = "var(--accent-purple)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+            e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
+          }}
+        >
+          <Scale size={18} color="var(--accent-purple)" />
+          <span>Ask the AI Judge...</span>
+        </button>
+      )}
+
       {/* ── Monarch Banner ── */}
       {hasMonarchMechanic && (
         <div ref={monarchRef} style={{ position: "relative" }}>

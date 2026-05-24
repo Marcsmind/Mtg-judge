@@ -11,13 +11,14 @@
  * Player interface definitions that previously lived in each file.
  */
 
-export type TokenKey = "treasure" | "food" | "clue" | "blood";
+export type TokenKey = "treasure" | "food" | "clue" | "blood" | "rad";
 
 export interface PlayerTokens {
   treasure: number;
   food: number;
   clue: number;
   blood: number;
+  rad: number;
 }
 
 export interface Player {
@@ -60,7 +61,6 @@ export type DayNightState = "none" | "day" | "night";
 export interface ActiveCounters {
   monarch: boolean;
   poison: boolean;
-  rad: boolean;
   dayNight: boolean;
   initiative: boolean;
   cityBlessing: boolean;

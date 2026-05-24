@@ -24,9 +24,10 @@ import type { LobbyPlayer } from "./types/game";
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>("life");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [codexOpen, setCodexOpen] = useState<boolean>(false);
-  const [judgeOpen, setJudgeOpen] = useState<boolean>(false);
-  const [codexSearch, setCodexSearch] = useState<string>("");
+  const [codexOpen, setCodexOpen] = useState(false);
+  const [judgeOpen, setJudgeOpen] = useState(false);
+  const [codexSearch, setCodexSearch] = useState("");
+
   // Initialize from localStorage directly — avoids setState-in-effect lint warnings
   const [apiKey, setApiKey] = useState<string>(
     () => localStorage.getItem(STORAGE_KEYS.GEMINI_KEY) || ""
@@ -59,6 +60,13 @@ function App() {
     initAuth().then(user => { if (user) setAuthUser(user); });
     const { unsubscribe } = onAuthStateChange(user => setAuthUser(user));
     return unsubscribe;
+  }, []);
+
+  // ── Global Event Listeners ──
+  useEffect(() => {
+    const handleOpenJudge = () => setJudgeOpen(true);
+    window.addEventListener("open-ai-judge", handleOpenJudge);
+    return () => window.removeEventListener("open-ai-judge", handleOpenJudge);
   }, []);
   const setTheme = (t: ThemeId) => {
     setThemeState(t);
@@ -248,19 +256,26 @@ function App() {
 
       {/* Slide-Up AI Judge Overlay */}
       {judgeOpen && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 100, background: "var(--bg-deep)", display: "flex", flexDirection: "column",
-          animation: "slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
-          boxSizing: "border-box",
-          paddingTop: "env(safe-area-inset-top)",
-          paddingBottom: "env(safe-area-inset-bottom)",
-        }}>
+        <div 
+          className="desktop-split-panel" 
+          style={{
+            position: "fixed", inset: 0, zIndex: 100, background: "var(--bg-deep)", display: "flex", flexDirection: "column",
+            animation: "slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            boxSizing: "border-box",
+            paddingTop: "env(safe-area-inset-top)",
+            paddingBottom: "env(safe-area-inset-bottom)",
+            transition: "top 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            overflowY: "hidden",
+            overscrollBehavior: "none",
+          }}
+        >
           <style>{`
             @keyframes slideUp {
               from { transform: translateY(100%); }
               to   { transform: translateY(0); }
             }
           `}</style>
+
           <AIJudge
             apiKey={apiKey}
             geminiModel={geminiModel}

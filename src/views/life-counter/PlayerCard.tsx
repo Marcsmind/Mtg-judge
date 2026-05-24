@@ -7,8 +7,8 @@
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Plus, Minus, ShieldAlert, Skull, Radiation,
-  Star, Coins, Shield, Wand2,
+  ShieldAlert, Skull,
+  Star, Coins, Shield, Wand2, Crown
 } from "lucide-react";
 import type { Player, ActiveCounters, TokenKey } from "../../types/game";
 import type { SavedDeck } from "../../types/deck";
@@ -17,16 +17,16 @@ import { CommanderPreviewModal } from "./CommanderPreviewModal";
 import { searchCardFuzzy } from "../../services/scryfall";
 
 // ── MTG-themed emoji avatar presets ──────────────────────────────────────────
-const AVATAR_PRESETS = ["🐉", "🧙", "🏰", "⚔️", "💀", "🌿", "🔥", "💧"];
 
 // ── Color theme shape (matches LifeCounter's `colors` map) ───────────────────
 interface ColorTheme { bg: string; accent: string; border: string; }
 
-const TOKEN_TYPES: { key: TokenKey; label: string; emoji: string; color: string }[] = [
-  { key: "treasure", label: "Treasure", emoji: "🪙", color: "#eab308" },
-  { key: "food",     label: "Food",     emoji: "🍎", color: "#10b981" },
+const TOKEN_TYPES: { key: TokenKey; label: string; shortLabel?: string; emoji: string; color: string }[] = [
+  { key: "treasure", label: "Treasure", emoji: "💰", color: "#eab308" },
+  { key: "food",     label: "Food",     emoji: "🍔", color: "#10b981" },
   { key: "clue",     label: "Clue",     emoji: "🔍", color: "#06b6d4" },
   { key: "blood",    label: "Blood",    emoji: "🩸", color: "#f43f5e" },
+  { key: "rad",      label: "Radiation",shortLabel: "Rad", emoji: "☢️", color: "#84cc16" },
 ];
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -40,15 +40,11 @@ interface PlayerCardProps {
   // Callbacks
   adjustLife:           (id: number, delta: number) => void;
   adjustPoison:         (id: number, delta: number) => void;
-  adjustRad:            (id: number, delta: number) => void;
-  adjustToken:          (id: number, key: TokenKey, delta: number) => void;
-  adjustTax:            (id: number, isPartner: boolean, delta: number) => void;
-  togglePartner:        (id: number) => void;
   renamePlayer:         (id: number, name: string) => void;
-  setAvatar:            (id: number, emoji: string) => void;
+  setAvatar?:            (id: number, emoji: string) => void;
   toggleCityBlessing:   (id: number) => void;
-  togglePlayerTokenType:(id: number, key: TokenKey) => void;
   togglePlayerTokensPanel:(id: number) => void;
+  togglePlayerTaxPanel?: (id: number) => void;
   setActiveDamageEditor:(id: number) => void;
   revivePlayer:         (id: number) => void;
   isFirst?:             boolean;   // "Goes First" star — auto-dismisses after 10 s
@@ -68,15 +64,11 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   colors,
   adjustLife,
   adjustPoison,
-  adjustRad,
-  adjustToken,
-  adjustTax,
-  togglePartner,
   renamePlayer,
-  setAvatar,
+  // setAvatar intentionally omitted — avatar picker removed
   toggleCityBlessing,
-  togglePlayerTokenType,
   togglePlayerTokensPanel,
+  togglePlayerTaxPanel,
   setActiveDamageEditor,
   revivePlayer,
   isFirst = false,
@@ -87,7 +79,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   isActiveTurn = false,
   isLocalPlayer = true,
 }) => {
-  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+
   const [commanderArt, setCommanderArt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -224,71 +216,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
       )}
 
-      {/* ── Header Row: Avatar + Name + Color Dot ── */}
+      {/* ── Header Row: Name ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingRight: (activeCounters.monarch || activeCounters.initiative) ? "44px" : "0", gap: "6px" }}>
-        {/* Avatar button / picker */}
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <button
-            onClick={() => setAvatarPickerOpen(o => !o)}
-            aria-label={`Avatar for ${p.name}`}
-            title="Choose avatar emoji"
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              fontSize: p.avatar ? "1.3rem" : "0.85rem",
-              lineHeight: 1, padding: "2px",
-              color: p.avatar ? "inherit" : "var(--text-muted)",
-              opacity: p.avatar ? 1 : 0.45,
-              transition: "opacity 0.15s",
-            }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "1"}
-            onMouseLeave={e => e.currentTarget.style.opacity = p.avatar ? "1" : "0.45"}
-          >
-            {p.avatar || "🎭"}
-          </button>
-          {/* Avatar picker dropdown */}
-          {avatarPickerOpen && (
-            <div style={{
-              position: "absolute", top: "calc(100% + 4px)", left: 0,
-              background: "var(--bg-dark)", border: "1px solid var(--border-color)",
-              borderRadius: "10px", padding: "6px 8px",
-              display: "flex", flexWrap: "wrap", gap: "4px",
-              zIndex: 20, boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-              maxWidth: "160px",
-            }}>
-              {AVATAR_PRESETS.map(emoji => (
-                <button
-                  key={emoji}
-                  onClick={() => { setAvatar(p.id, p.avatar === emoji ? "" : emoji); setAvatarPickerOpen(false); }}
-                  style={{
-                    background: p.avatar === emoji ? "rgba(139,92,246,0.2)" : "transparent",
-                    border: `1px solid ${p.avatar === emoji ? "rgba(139,92,246,0.5)" : "transparent"}`,
-                    borderRadius: "6px", padding: "4px 6px", cursor: "pointer", fontSize: "1.2rem",
-                    transition: "background 0.1s",
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
-                  onMouseLeave={e => e.currentTarget.style.background = p.avatar === emoji ? "rgba(139,92,246,0.2)" : "transparent"}
-                >
-                  {emoji}
-                </button>
-              ))}
-              {p.avatar && (
-                <button
-                  onClick={() => { setAvatar(p.id, ""); setAvatarPickerOpen(false); }}
-                  style={{
-                    background: "transparent", border: "1px solid transparent",
-                    borderRadius: "6px", padding: "4px 6px", cursor: "pointer",
-                    fontSize: "0.6rem", color: "var(--text-muted)", fontWeight: 600,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.color = "var(--accent-rose)"}
-                  onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
         <input
           type="text"
           value={p.name}
@@ -303,7 +232,6 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           onFocus={e => e.target.style.borderBottomColor = playerTheme.accent}
           onBlur={e => e.target.style.borderBottomColor = "transparent"}
         />
-
       </div>
 
       {/* ── Commander Strip — dedicated row below header, clear of monarch/initiative badge ── */}
@@ -405,19 +333,20 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           aria-label={`Subtract 1 life from ${p.name} (hold to keep subtracting)`}
           onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { e.currentTarget.style.background = "rgba(244,63,94,0.04)"; stopHold(); }}
-          onPointerEnter={e => { e.currentTarget.style.background = "rgba(244,63,94,0.10)"; }}
+          onPointerLeave={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.25"); stopHold(); }}
+          onPointerEnter={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.8"); }}
           onContextMenu={e => e.preventDefault()}
           style={{
             flex: 1, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", gap: "6px",
+            alignItems: "center", justifyContent: "center",
             cursor: "pointer", userSelect: "none", touchAction: "none",
-            borderRadius: "8px 0 0 8px",
-            background: "rgba(244,63,94,0.04)",
-            transition: "background 0.12s ease",
           }}
         >
-
+          <span className="lc-adj-icon" style={{
+            fontSize: "1.6rem", fontWeight: 300, color: "#fff",
+            opacity: 0.25, lineHeight: 1, userSelect: "none",
+            transition: "opacity 0.12s ease",
+          }}>−</span>
         </div>
 
         {/* Center: life number */}
@@ -447,24 +376,26 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           aria-label={`Add 1 life to ${p.name} (hold to keep adding)`}
           onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { e.currentTarget.style.background = "rgba(52,211,153,0.04)"; stopHold(); }}
-          onPointerEnter={e => { e.currentTarget.style.background = "rgba(52,211,153,0.12)"; }}
+          onPointerLeave={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.25"); stopHold(); }}
+          onPointerEnter={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.8"); }}
           onContextMenu={e => e.preventDefault()}
           style={{
             flex: 1, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", gap: "6px",
+            alignItems: "center", justifyContent: "center",
             cursor: "pointer", userSelect: "none", touchAction: "none",
-            borderRadius: "0 8px 8px 0",
-            background: "rgba(52,211,153,0.04)",
-            transition: "background 0.12s ease",
           }}
         >
-
+          <span className="lc-adj-icon" style={{
+            fontSize: "1.6rem", fontWeight: 300, color: "#fff",
+            opacity: 0.25, lineHeight: 1, userSelect: "none",
+            transition: "opacity 0.12s ease",
+          }}>+</span>
         </div>
       </div>
 
+
       {/* ── Poison + Rad Counters ── */}
-      {(activeCounters.poison || activeCounters.rad) && (
+      {activeCounters.poison && (
         <div style={{ display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
           {activeCounters.poison && (
             <div style={{
@@ -486,39 +417,22 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
             </div>
           )}
 
-          {activeCounters.rad && (
-            <div style={{
-              display: "flex", alignItems: "center",
-              background: "rgba(0,0,0,0.38)",
-              border: "1.5px solid rgba(249,115,22,0.4)",
-              borderRadius: "12px", padding: "5px 4px",
-            }}>
-              <button onClick={() => adjustRad(p.id, -1)} aria-label={`Remove 1 rad from ${p.name}`} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: "2px 8px", fontSize: "1.1rem", fontWeight: 700, lineHeight: 1 }}>−</button>
-              <div style={{ display: "flex", alignItems: "center", gap: "7px", minWidth: "48px", justifyContent: "center" }}>
-                <Radiation size={18} color="#f97316" />
-                <span style={{ fontSize: "1.5rem", fontWeight: 900, color: "#fff", minWidth: "26px", textAlign: "center", lineHeight: 1 }}>
-                  {p.rad ?? 0}
-                </span>
-              </div>
-              <button onClick={() => adjustRad(p.id, 1)} aria-label={`Add 1 rad to ${p.name}`} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: "2px 8px", fontSize: "1.1rem", fontWeight: 700, lineHeight: 1 }}>+</button>
-            </div>
-          )}
+
         </div>
       )}
 
-      {/* ── Enabled Token Counters ── */}
-      {p.enabledTokens.length > 0 && (
-        <div style={{ display: "flex", gap: "4px", justifyContent: "center", flexWrap: "wrap" }}>
-          {TOKEN_TYPES.filter(t => p.enabledTokens.includes(t.key)).map(({ key, emoji, color }) => (
+      {/* ── Active Token Badges ── */}
+      {TOKEN_TYPES.some(t => (p.tokens?.[t.key] ?? 0) > 0) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", justifyContent: "center" }}>
+          {TOKEN_TYPES.filter(t => (p.tokens?.[t.key] ?? 0) > 0).map(({ key, emoji, color }) => (
             <div key={key} style={{
-              display: "flex", alignItems: "center", gap: "1px",
-              background: "rgba(0,0,0,0.35)", border: `1px solid ${color}38`,
-              borderRadius: "9px", padding: "2px 3px",
+              background: "rgba(0,0,0,0.4)", border: `1px solid ${color}70`,
+              borderRadius: "8px", padding: "4px 8px", fontSize: "0.85rem",
+              color: color, display: "flex", gap: "5px", alignItems: "center",
+              justifyContent: "center"
             }}>
-              <button onClick={() => adjustToken(p.id, key, -1)} aria-label={`Remove ${key} token from ${p.name}`} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "1px 5px", fontSize: "0.85rem", fontWeight: 700, lineHeight: 1 }}>−</button>
-              <span style={{ fontSize: "0.9rem" }}>{emoji}</span>
-              <span style={{ fontSize: "0.9rem", fontWeight: 800, color: "#fff", minWidth: "16px", textAlign: "center" }}>{p.tokens?.[key] ?? 0}</span>
-              <button onClick={() => adjustToken(p.id, key, 1)} aria-label={`Add ${key} token to ${p.name}`} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "1px 5px", fontSize: "0.85rem", fontWeight: 700, lineHeight: 1 }}>+</button>
+              <span style={{ fontSize: "1rem", lineHeight: 1 }}>{emoji}</span>
+              <span style={{ fontWeight: 800, color: "#fff", fontSize: "0.85rem", lineHeight: 1 }}>{p.tokens[key]}</span>
             </div>
           ))}
         </div>
@@ -566,112 +480,83 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
       )}
 
-      {/* Token Type Picker */}
-      {p.tokensOpen && (
-        <div style={{
-          background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: "8px", padding: "6px 8px",
-          display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "center",
-          position: "relative", zIndex: 16,
-        }}>
-          {TOKEN_TYPES.map(({ key, label, emoji, color }) => {
-            const isEnabled = p.enabledTokens.includes(key);
-            return (
-              <button
-                key={key}
-                onClick={() => togglePlayerTokenType(p.id, key)}
-                style={{
-                  background: isEnabled ? `${color}18` : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${isEnabled ? `${color}50` : "rgba(255,255,255,0.08)"}`,
-                  borderRadius: "7px", padding: "3px 8px", cursor: "pointer",
-                  color: isEnabled ? color : "var(--text-muted)",
-                  fontSize: "0.68rem", fontWeight: isEnabled ? 700 : 500,
-                  display: "flex", alignItems: "center", gap: "4px",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <span style={{ fontSize: "0.85rem" }}>{emoji}</span>
-                {label}
-              </button>
-            );
-          })}
+
+      {/* Commander Tax Badges */}
+      {(p.tax > 0 || (p.partnerMode && p.taxPartner > 0)) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", justifyContent: "center" }}>
+          {p.tax > 0 && (
+            <div style={{
+              background: "rgba(0,0,0,0.4)", border: "1px solid rgba(168,85,247,0.5)",
+              borderRadius: "6px", padding: "2px 8px", fontSize: "0.7rem",
+              color: "var(--accent-purple)", display: "flex", gap: "5px", alignItems: "center",
+            }}>
+              <span>Tax</span>
+              <span style={{ fontWeight: 800, color: "#fff" }}>{p.tax}</span>
+            </div>
+          )}
+          {p.partnerMode && p.taxPartner > 0 && (
+            <div style={{
+              background: "rgba(0,0,0,0.4)", border: "1px solid rgba(168,85,247,0.5)",
+              borderRadius: "6px", padding: "2px 8px", fontSize: "0.7rem",
+              color: "var(--accent-purple)", display: "flex", gap: "5px", alignItems: "center",
+            }}>
+              <span>Partner Tax</span>
+              <span style={{ fontWeight: 800, color: "#fff" }}>{p.taxPartner}</span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Bottom Row: Tax | Tokens + Cmd Dmg */}
-      <div className="lc-bottom-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "9px", gap: "4px" }}>
 
-        {/* Tax (left) */}
-        <div className="lc-tax-section" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 700, letterSpacing: "0.5px" }}>TAX:</span>
-            <button
-              onClick={() => togglePartner(p.id)}
-              style={{
-                fontSize: "0.68rem", border: "none",
-                background: p.partnerMode ? "var(--accent-purple)" : "rgba(255,255,255,0.05)",
-                color: p.partnerMode ? "#fff" : "var(--text-muted)",
-                padding: "2px 8px", borderRadius: "10px", cursor: "pointer", fontWeight: 700,
-              }}
-            >Partner</button>
-          </div>
-          <div style={{ display: "flex", gap: p.partnerMode ? "8px" : "0", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(0,0,0,0.2)", borderRadius: "6px", padding: "3px 7px" }}>
-              <button onClick={() => adjustTax(p.id, false, -2)} aria-label="Decrease commander tax" style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Minus size={12} /></button>
-              <span style={{ fontSize: "1.05rem", fontWeight: 700, minWidth: "22px", textAlign: "center", color: "#fff" }}>{p.tax}</span>
-              <button onClick={() => adjustTax(p.id, false, 2)} aria-label="Increase commander tax" style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Plus size={12} /></button>
-            </div>
-            {p.partnerMode && (
-              <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(0,0,0,0.2)", borderRadius: "6px", padding: "3px 7px" }}>
-                <button onClick={() => adjustTax(p.id, true, -2)} aria-label="Decrease partner tax" style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Minus size={12} /></button>
-                <span style={{ fontSize: "1.05rem", fontWeight: 700, minWidth: "22px", textAlign: "center", color: "#fff" }}>{p.taxPartner}</span>
-                <button onClick={() => adjustTax(p.id, true, 2)} aria-label="Increase partner tax" style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", display: "flex", padding: "2px 3px" }}><Plus size={12} /></button>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Tokens + Cmd Dmg grouped */}
-        <div className="lc-bottom-secondary" style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-          <button
-            onClick={() => togglePlayerTokensPanel(p.id)}
-            style={{
-              background: p.tokensOpen ? "rgba(234,179,8,0.12)" : p.enabledTokens.length > 0 ? "rgba(234,179,8,0.06)" : "rgba(255,255,255,0.04)",
-              border: `1px solid ${p.tokensOpen ? "rgba(234,179,8,0.4)" : p.enabledTokens.length > 0 ? "rgba(234,179,8,0.2)" : "rgba(255,255,255,0.08)"}`,
-              borderRadius: "8px", padding: "7px 10px", cursor: "pointer",
-              color: p.tokensOpen || p.enabledTokens.length > 0 ? "#eab308" : "var(--text-muted)",
-              fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "5px",
-              transition: "all 0.15s ease", flexShrink: 0,
-            }}
-          >
-            <Coins size={12} color={p.tokensOpen || p.enabledTokens.length > 0 ? "#eab308" : "var(--text-muted)"} />
-            <span className="lc-btn-label">Tokens{p.enabledTokens.length > 0 ? ` (${p.enabledTokens.length})` : ""}</span>
-          </button>
+      {/* Bottom Row: Tax | Tokens | Cmd Dmg */}
+      <div className="lc-bottom-row" style={{ display: "flex", flexDirection: "row", justifyContent: "center", alignItems: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "9px", gap: "12px" }}>
+        
+        <button
+          onClick={() => togglePlayerTaxPanel?.(p.id)}
+          aria-label="Commander Tax"
+          style={{
+            background: p.tax > 0 || p.taxPartner > 0 ? "rgba(168,85,247,0.12)" : "rgba(255,255,255,0.04)",
+            border: `1px solid ${p.tax > 0 || p.taxPartner > 0 ? "rgba(168,85,247,0.3)" : "rgba(255,255,255,0.08)"}`,
+            borderRadius: "8px", padding: "8px", color: p.tax > 0 || p.taxPartner > 0 ? "var(--accent-purple)" : "var(--text-muted)",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 0.15s ease", flexShrink: 0,
+          }}
+        >
+          <Crown size={18} color={p.tax > 0 || p.taxPartner > 0 ? "var(--accent-purple)" : "var(--text-muted)"} />
+        </button>
 
-          <button
-            onClick={() => setActiveDamageEditor(p.id)}
-            style={{
-              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "8px", padding: "7px 10px", color: "var(--text-primary)",
-              fontSize: "0.72rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px",
-              transition: "background 0.15s", flexShrink: 0,
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-            onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-          >
-            <Shield size={13} color="var(--accent-cyan)" />
-            <span className="lc-btn-label">Cmd Dmg</span>
-          </button>
-        </div>
+        <button
+          onClick={() => togglePlayerTokensPanel(p.id)}
+          aria-label="Tokens"
+          style={{
+            background: Object.values(p.tokens ?? {}).some(v => v > 0) ? "rgba(234,179,8,0.12)" : "rgba(255,255,255,0.04)",
+            border: `1px solid ${Object.values(p.tokens ?? {}).some(v => v > 0) ? "rgba(234,179,8,0.4)" : "rgba(255,255,255,0.08)"}`,
+            borderRadius: "8px", padding: "8px", cursor: "pointer",
+            color: Object.values(p.tokens ?? {}).some(v => v > 0) ? "#eab308" : "var(--text-muted)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 0.15s ease", flexShrink: 0,
+          }}
+        >
+          <Coins size={18} color={Object.values(p.tokens ?? {}).some(v => v > 0) ? "#eab308" : "var(--text-muted)"} />
+        </button>
+
+        <button
+          onClick={() => setActiveDamageEditor(p.id)}
+          aria-label="Commander Damage"
+          style={{
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "8px", padding: "8px", color: "var(--text-primary)",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "background 0.15s", flexShrink: 0,
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+        >
+          <Shield size={18} color="var(--accent-cyan)" />
+        </button>
       </div>
 
-      {/* Close avatar picker on outside click */}
-      {avatarPickerOpen && (
-        <div
-          style={{ position: "fixed", inset: 0, zIndex: 19 }}
-          onClick={() => setAvatarPickerOpen(false)}
-        />
-      )}
 
       {/* Close token picker on outside click / tap */}
       {p.tokensOpen && (

@@ -165,7 +165,7 @@ export const CardCodex: React.FC<CardCodexProps> = ({
 
   return (
     <div
-      className="card-codex-panel"
+      className="card-codex-panel desktop-split-panel"
       style={{
         position: "fixed",
         top: 0,

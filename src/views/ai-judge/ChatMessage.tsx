@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Copy, Check, Bookmark, BookmarkCheck, RotateCcw } from "lucide-react";
+import { Copy, Check, Bookmark, BookmarkCheck, RotateCcw, X } from "lucide-react";
 import { MTG_KEYWORDS } from "../../constants/mtgKeywords";
+import { searchCardFuzzy } from "../../services/scryfall";
 import type { ScryfallCard } from "../../services/scryfall";
 
 interface Message {
@@ -84,6 +86,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     y: number;
   } | null>(null);
 
+  // ── Card preview state ──
+  const [cardPreview, setCardPreview] = useState<{
+    name: string;
+    cardObj: ScryfallCard | null;
+    loading: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const fetchCardPreview = useCallback(async (name: string, x: number, y: number) => {
+    setCardPreview({ name, cardObj: null, loading: true, x, y });
+    try {
+      const card = await searchCardFuzzy(name);
+      setCardPreview(prev => (prev?.name === name ? { ...prev, cardObj: card, loading: false } : prev));
+    } catch {
+      setCardPreview(prev => (prev?.name === name ? { ...prev, loading: false } : prev));
+    }
+  }, []);
+
   // ── react-markdown component overrides ─────────────────────────────────────
   // IMPORTANT: wrapped in useMemo so the `strong` function reference is stable
   // across renders.  Without this, react-markdown sees a new component type on
@@ -158,10 +179,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         );
       }
 
-      // 3. Card name → click to open Card Codex
+      // 3. Card name → click to open floating preview
       return (
         <strong
-          onClick={() => onOpenCodex(text)}
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            // Don't open codex immediately, show floating preview
+            fetchCardPreview(text, rect.left, rect.top - 10);
+          }}
           style={{
             color: "var(--accent-cyan)",
             cursor: "pointer",
@@ -169,7 +194,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             fontWeight: 700,
             transition: "color 0.15s ease",
           }}
-          title={`Click to look up "${text}" in the Card Codex`}
+          title={`Click to preview "${text}"`}
           onMouseEnter={(e) => (e.currentTarget.style.color = "#67e8f9")}
           onMouseLeave={(e) =>
             (e.currentTarget.style.color = "var(--accent-cyan)")
@@ -179,7 +204,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </strong>
       );
     },
-  }), [onOpenCodex, onGoToSettings]);
+  }), [onOpenCodex, onGoToSettings, fetchCardPreview]);
 
   return (
     <>
@@ -221,6 +246,89 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             {tooltip.text}
           </div>
         </div>
+      )}
+
+      {/* Card Preview tooltip portal */}
+      {cardPreview && typeof document !== "undefined" && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+          onClick={() => setCardPreview(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "relative",
+              background: "rgba(16, 12, 28, 0.95)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "16px",
+              padding: "16px",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.8)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              maxWidth: "320px",
+              width: "90%",
+              animation: "popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            }}
+          >
+            <style>{`
+              @keyframes popIn {
+                from { opacity: 0; transform: scale(0.95) translateY(10px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
+              }
+            `}</style>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-primary)" }}>{cardPreview.name}</h3>
+              <button
+                onClick={() => setCardPreview(null)}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", minHeight: "200px", alignItems: "center" }}>
+              {cardPreview.loading ? (
+                <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <RotateCcw size={14} style={{ animation: "spin 1s linear infinite" }} /> Fetching card...
+                </div>
+              ) : cardPreview.cardObj ? (
+                <img
+                  src={cardPreview.cardObj.image_uris?.normal || cardPreview.cardObj.card_faces?.[0]?.image_uris?.normal}
+                  alt={cardPreview.name}
+                  style={{ width: "100%", maxWidth: "240px", borderRadius: "10px", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}
+                />
+              ) : (
+                <div style={{ color: "var(--accent-rose)", fontSize: "0.85rem" }}>Card not found.</div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+              <button
+                onClick={() => {
+                  onOpenCodex(cardPreview.cardObj?.name || cardPreview.name);
+                  setCardPreview(null);
+                }}
+                className="glass-button"
+                style={{ flex: 1, padding: "10px", background: "var(--accent-cyan)", color: "#000", fontWeight: 700, border: "none" }}
+              >
+                Open in Codex
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Message bubble */}

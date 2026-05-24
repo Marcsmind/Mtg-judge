@@ -1,11 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  RefreshCw, Users,
-  Crown, Skull, Radiation, Swords, Star,
-  Settings2, Check, Moon,
-  Save, Menu, Undo2,
-  Play, Square, RotateCcw, Timer, Wifi, WifiOff, Copy, Trophy, Clock
-} from "lucide-react";
+import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Users, Scale, WifiOff, Copy, Timer, Square, Play, Crown, Skull, Swords, Star } from "lucide-react";
 import { useMobile } from "../hooks/useMobile";
 import { useGameTimer } from "../hooks/useGameTimer";
 import { loadDecks, recordDeckResult } from "../services/decks";
@@ -15,11 +9,13 @@ import { useMultiplayer } from "../hooks/useMultiplayer";
 import { clearPersistedState } from "../services/multiplayerSync";
 import type { Player, ActiveCounters, DayNightState, TokenKey, LobbyPlayer } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
-import { GameHistoryLedger } from "./life-counter/GameHistoryLedger";
+import { HistoryModal } from "./life-counter/HistoryModal";
 import { CommanderDamageModal } from "./life-counter/CommanderDamageModal";
 import { SaveGameModal, MAX_SLOTS } from "./life-counter/SaveGameModal";
 import type { GameSnapshot } from "./life-counter/SaveGameModal";
 import { GameSummaryModal } from "./life-counter/GameSummaryModal";
+import { TokenModal } from "./life-counter/TokenModal";
+import { TaxModal } from "./life-counter/TaxModal";
 import { EndGameModal } from "./life-counter/EndGameModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
 import { DayNightBanner } from "./life-counter/DayNightBanner";
@@ -55,7 +51,6 @@ const MECHANICS_CONFIG: { key: keyof ActiveCounters; label: string; Icon: React.
   { key: "monarch",      label: "Monarch",         Icon: Crown,     color: "#eab308", desc: "One player holds the crown" },
   { key: "initiative",   label: "The Initiative",  Icon: Swords,    color: "#06b6d4", desc: "Venture into the Undercity" },
   { key: "poison",       label: "Poison (Infect)",  Icon: Skull,     color: "#10b981", desc: "10 counters = loss" },
-  { key: "rad",          label: "Radiation",        Icon: Radiation, color: "#f97316", desc: "Fallout rad counters" },
   { key: "cityBlessing", label: "City's Blessing",  Icon: Star,      color: "#eab308", desc: "Ascend: 10+ permanents" },
   { key: "dayNight",     label: "Day / Night",      Icon: Moon,      color: "#8b5cf6", desc: "Transform day/night cards" },
   // "tokens" removed — tokens are now per-player toggles, not a global mechanic
@@ -80,7 +75,7 @@ function createPlayer(index: number, life: number): Player {
     cityBlessing: false,
     poison: 0,
     rad: 0,
-    tokens: { treasure: 0, food: 0, clue: 0, blood: 0 },
+    tokens: { treasure: 0, food: 0, clue: 0, blood: 0, rad: 0 },
     enabledTokens: [],
     tokensOpen: false,
   };
@@ -130,7 +125,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   });
 
   const [activeCounters, setActiveCounters] = useState<ActiveCounters>(() => {
-    const defaults: ActiveCounters = { monarch: false, poison: false, rad: false, dayNight: false, initiative: false, cityBlessing: false, tokens: false };
+    const defaults: ActiveCounters = { monarch: false, poison: false, dayNight: false, initiative: false, cityBlessing: false, tokens: false };
     const s = localStorage.getItem(STORAGE_KEYS.ACTIVE_COUNTERS);
     if (s) { try { return { ...defaults, ...JSON.parse(s) }; } catch { /* corrupt localStorage — use defaults */ } }
     return defaults;
@@ -181,6 +176,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
   const [activeDamageEditor, setActiveDamageEditor] = useState<number | null>(null);
   const [showCountersMenu, setShowCountersMenu] = useState(false);
+  const [tokenPlayer, setTokenPlayer] = useState<number | null>(null);
+  const [taxPlayer, setTaxPlayer] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // ── Mobile breakpoint ──
@@ -189,42 +186,16 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // ── Saved decks (for SetCommanderModal "From My Decks" picker) ──
   const [savedDecks] = useState<SavedDeck[]>(() => loadDecks());
 
-  // ── Collapsible game history ──
-  const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.HISTORY_COLLAPSED);
-      // Default collapsed on narrow screens
-      if (saved !== null) return saved === "true";
-      return window.innerWidth < 900;
-    } catch { return false; }
-  });
-  const toggleHistory = () => setHistoryCollapsed(prev => {
-    const next = !prev;
-    localStorage.setItem(STORAGE_KEYS.HISTORY_COLLAPSED, String(next));
-    return next;
-  });
-
-  // ── Mobile history visibility (opt-in; no side panel by default on phones) ──
-  const [historyVisible, setHistoryVisible] = useState(false);
-
-  // ── Collapsible control bar (START / player-count / mechanics row) ──
-  const [controlsCollapsed, setControlsCollapsed] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.CONTROLS_COLLAPSED);
-      if (saved !== null) return saved === "true";
-      return window.innerWidth < 768; // default hidden on phone
-    } catch { return false; }
-  });
-  const toggleControls = () => setControlsCollapsed(prev => {
-    const next = !prev;
-    localStorage.setItem(STORAGE_KEYS.CONTROLS_COLLAPSED, String(next));
-    return next;
-  });
+  // ── Modals ──
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showControlsModal, setShowControlsModal] = useState(false);
 
   // ── Save-game modal + slots ──
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showEndGame, setShowEndGame] = useState(false);
+
+  // Modals
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [savedGames, setSavedGames] = useState<(GameSnapshot | null)[]>(() => {
     try {
@@ -425,7 +396,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
       ...p, life: startingLife, tax: 0, taxPartner: 0,
       commanderDamage: {}, isMonarch: false, hasInitiative: false,
       cityBlessing: false, poison: 0, rad: 0,
-      tokens: { treasure: 0, food: 0, clue: 0, blood: 0 },
+      tokens: { treasure: 0, food: 0, clue: 0, blood: 0, rad: 0 },
     })));
     setHistory([`Game reset! ${recorded ? "(recorded to leaderboard) " : ""}All life set to ${startingLife}.`]);
   };
@@ -597,15 +568,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     setPlayers(prev => prev.map(p => p.id !== playerId ? p : { ...p, poison: next }));
   };
 
-  const adjustRad = (playerId: number, amount: number) => {
-    const player = players.find(p => p.id === playerId);
-    if (!player) return;
-    scheduleBroadcast();
-    pushUndo(players);
-    const next = Math.max(0, (player.rad ?? 0) + amount);
-    addLog(`${player.name} Rad: ${amount > 0 ? "+" : ""}${amount} → ${next}`);
-    setPlayers(prev => prev.map(p => p.id !== playerId ? p : { ...p, rad: next }));
-  };
+
 
   const adjustToken = (playerId: number, key: TokenKey, amount: number) => {
     scheduleBroadcast();
@@ -649,22 +612,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     });
   };
 
-  // ── Per-player token actions ──
-  const togglePlayerTokenType = (playerId: number, key: TokenKey) => {
-    setPlayers(prev => prev.map(p => {
-      if (p.id !== playerId) return p;
-      const enabled = p.enabledTokens.includes(key)
-        ? p.enabledTokens.filter(k => k !== key)
-        : [...p.enabledTokens, key];
-      return { ...p, enabledTokens: enabled };
-    }));
-  };
 
-  const togglePlayerTokensPanel = (playerId: number) => {
-    setPlayers(prev => prev.map(p =>
-      p.id === playerId ? { ...p, tokensOpen: !p.tokensOpen } : p
-    ));
-  };
+
 
   const getGridStyle = () => {
     if (isMobile) {
@@ -701,13 +650,13 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflow: "hidden", minWidth: 0 }}>
 
         {/* ── Title Row (always visible) ── */}
-        <div style={{ display: "flex", alignItems: "center", paddingBottom: "8px", borderBottom: controlsCollapsed ? "1px solid var(--border-color)" : "none", flexShrink: 0, gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", paddingBottom: "8px", borderBottom: showControlsModal ? "1px solid var(--border-color)" : "none", flexShrink: 0, gap: "8px" }}>
           {/* Heading — takes remaining space */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
             <Users size={20} color="var(--accent-purple)" />
             <div>
               <h2 style={{ fontSize: "1.1rem", fontWeight: 700, lineHeight: 1.1 }}>Life Counter</h2>
-              {!controlsCollapsed && <p style={{ color: "var(--text-secondary)", fontSize: "0.72rem" }}>Commander &amp; variant formats</p>}
+              {!showControlsModal && <p style={{ color: "var(--text-secondary)", fontSize: "0.72rem" }}>Commander &amp; variant formats</p>}
             </div>
           </div>
 
@@ -776,94 +725,90 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             >
               {timerRunning ? <Square size={11} /> : <Play size={11} />}
             </button>
-            {/* Reset */}
-            <button
-              onClick={resetTimer}
-              aria-label="Reset timer"
-              title="Reset timer"
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                color: "var(--text-muted)", display: "flex", alignItems: "center", padding: "5px 4px",
-                transition: "color 0.15s ease",
-              }}
-              onMouseEnter={e => e.currentTarget.style.color = "var(--text-secondary)"}
-              onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
-            >
-              <RotateCcw size={11} />
-            </button>
           </div>
 
-          {/* Undo button */}
-          <button
-            onClick={handleUndo}
-            disabled={undoStack.length === 0}
-            aria-label="Undo last action"
-            title={undoStack.length > 0 ? `Undo last action (Ctrl+Z) — ${undoStack.length} step${undoStack.length > 1 ? "s" : ""} available` : "Nothing to undo"}
-            className="touch-icon-btn"
-            style={{
-              display: "flex", alignItems: "center", gap: "5px",
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: "8px", padding: "7px 10px",
-              color: undoStack.length > 0 ? "var(--text-secondary)" : "var(--text-muted)",
-              cursor: undoStack.length > 0 ? "pointer" : "not-allowed",
-              fontSize: "0.72rem", fontWeight: 600,
-              opacity: undoStack.length > 0 ? 1 : 0.4,
-              transition: "all 0.15s ease", flexShrink: 0,
-            }}
-          >
-            <Undo2 size={14} />
-            <span className="lc-controls-label">Undo</span>
-          </button>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            {/* AI Judge (Top Bar) - Only show if > 2 players */}
+            {players.length > 2 && (
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))}
+                aria-label="Ask AI Judge"
+                title="Ask AI Judge"
+                className="touch-icon-btn"
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "8px", padding: "7px 10px",
+                  color: "var(--accent-purple)",
+                  cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
+                  transition: "all 0.15s ease", flexShrink: 0,
+                }}
+              >
+                <Scale size={14} />
+              </button>
+            )}
 
-          {/* History toggle — mobile only */}
-          {isMobile && (
+            {/* History & Undo button */}
             <button
-              onClick={() => setHistoryVisible(v => !v)}
-              aria-pressed={historyVisible}
-              aria-label={historyVisible ? "Hide game history" : "Show game history"}
-              title={historyVisible ? "Hide history" : "Show history"}
+              onClick={() => setShowHistoryModal(true)}
+              aria-label="Game History & Undo"
+              title="Game History & Undo"
               className="touch-icon-btn"
               style={{
                 display: "flex", alignItems: "center", gap: "6px",
-                background: historyVisible ? "rgba(6,182,212,0.12)" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${historyVisible ? "rgba(6,182,212,0.3)" : "rgba(255,255,255,0.08)"}`,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: "8px", padding: "7px 10px",
-                color: historyVisible ? "var(--accent-cyan)" : "var(--text-muted)",
+                color: "var(--accent-cyan)",
                 cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
                 transition: "all 0.15s ease", flexShrink: 0,
               }}
             >
-              <Clock size={14} />
-              <span className="lc-controls-label">History</span>
+              <History size={14} />
             </button>
-          )}
 
-          {/* Controls toggle — hamburger, top-right */}
-          <button
-            onClick={toggleControls}
-            aria-label={controlsCollapsed ? "Show game controls" : "Hide game controls"}
-            title={controlsCollapsed ? "Show controls" : "Hide controls"}
-            className="touch-icon-btn"
-            style={{
-              display: "flex", alignItems: "center", gap: "6px",
-              background: controlsCollapsed ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.04)",
-              border: `1px solid ${controlsCollapsed ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.08)"}`,
-              borderRadius: "8px", padding: "7px 10px",
-              color: controlsCollapsed ? "var(--accent-purple)" : "var(--text-muted)",
-              cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
-              transition: "all 0.15s ease", flexShrink: 0,
-            }}
-          >
-            <Menu size={14} />
-            <span className="lc-controls-label">{controlsCollapsed ? "Controls" : "Hide"}</span>
-          </button>
+            {/* Controls toggle — hamburger */}
+            <button
+              onClick={() => setShowControlsModal(true)}
+              aria-label="Game Settings"
+              title="Game Settings"
+              className="touch-icon-btn"
+              style={{
+                display: "flex", alignItems: "center", gap: "6px",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "8px", padding: "7px 10px",
+                color: "var(--text-secondary)",
+                cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
+                transition: "all 0.15s ease", flexShrink: 0,
+              }}
+            >
+              <Menu size={14} />
+            </button>
+          </div>
         </div>
 
-        {/* ── Collapsible Control Bar ── */}
-        {!controlsCollapsed && (
-          <div style={{ display: "flex", flexDirection: "column", borderBottom: "1px solid var(--border-color)", paddingBottom: "12px", flexShrink: 0, gap: "10px" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", alignItems: "center" }}>
+        {/* ── Modals for Settings and History ── */}
+        {showHistoryModal && (
+          <HistoryModal
+            history={history}
+            onUndo={() => { handleUndo(); setShowHistoryModal(false); }}
+            canUndo={undoStack.length > 0}
+            onClose={() => setShowHistoryModal(false)}
+          />
+        )}
+
+        {showControlsModal && (
+          <BottomSheet onClose={() => setShowControlsModal(false)} zIndex={300} padding="24px" maxWidth="500px">
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", color: "var(--text-primary)" }}>
+              <div style={{ background: "rgba(255,255,255,0.1)", padding: "8px", borderRadius: "12px", display: "flex" }}>
+                <Settings2 size={24} color="var(--text-secondary)" />
+              </div>
+              <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800 }}>Game Setup</h2>
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
               {/* Starting Life Selector */}
               <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "3px", gap: "1px" }}>
@@ -1164,7 +1109,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 </>
               )}
             </div>
-          </div>
+          </BottomSheet>
         )}
 
         {/* Day / Night Global Banner */}
@@ -1217,15 +1162,11 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 colors={colors}
                 adjustLife={adjustLife}
                 adjustPoison={adjustPoison}
-                adjustRad={adjustRad}
-                adjustToken={adjustToken}
-                adjustTax={adjustTax}
-                togglePartner={togglePartner}
                 renamePlayer={renamePlayer}
                 setAvatar={setAvatar}
                 toggleCityBlessing={toggleCityBlessing}
-                togglePlayerTokenType={togglePlayerTokenType}
-                togglePlayerTokensPanel={togglePlayerTokensPanel}
+                togglePlayerTokensPanel={setTokenPlayer}
+                togglePlayerTaxPanel={setTaxPlayer}
                 setActiveDamageEditor={setActiveDamageEditor}
                 revivePlayer={revivePlayer}
                 isFirst={firstPlayerName !== null && p.name === firstPlayerName}
@@ -1256,11 +1197,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           />
         );
       })()}
-
-      {/* ── Side Ledger — always on desktop; opt-in on mobile via History button ── */}
-      {(!isMobile || historyVisible) && (
-        <GameHistoryLedger history={history} collapsed={historyCollapsed} onToggle={toggleHistory} />
-      )}
 
       {/* ── Save / Load Game Modal ── */}
       {showSaveModal && (
@@ -1316,6 +1252,25 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             </button>
           </div>
         </BottomSheet>
+      )}
+
+      {tokenPlayer !== null && (
+        <TokenModal
+          targetPlayerId={tokenPlayer}
+          players={players}
+          onClose={() => setTokenPlayer(null)}
+          adjustToken={adjustToken}
+        />
+      )}
+
+      {taxPlayer !== null && (
+        <TaxModal
+          targetPlayerId={taxPlayer}
+          players={players}
+          onClose={() => setTaxPlayer(null)}
+          adjustTax={adjustTax}
+          togglePartner={togglePartner}
+        />
       )}
 
     </div>

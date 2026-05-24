@@ -328,6 +328,22 @@ h1, h2, h3, h4, h5 {
   }
 }
 
+/* Desktop Split Screen Layout */
+@media (min-width: 1024px) {
+  .desktop-split-panel {
+    position: relative !important;
+    inset: auto !important;
+    width: 380px !important;
+    min-width: 380px !important;
+    height: 100dvh !important;
+    border-left: 1px solid var(--border-color) !important;
+    animation: none !important;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.5) !important;
+    z-index: 50 !important;
+  }
+}
+
+
 /* ── Life Counter — mobile layout ────────────────────────────────────────── */
 
 /* Mobile grid — columns controlled by getGridStyle() inline style in LifeCounter.tsx */
@@ -347,36 +363,12 @@ h1, h2, h3, h4, h5 {
     min-height: 180px;
   }
 
-  /* Life section stacks vertically: − on top, number center, + on bottom */
+  /* Life section stays as a row: − on left, number center, + on right */
   .lc-life-section {
-    flex-direction: column !important;
+    flex-direction: row !important;
     flex: 1 !important;
     padding: 0 !important;
     gap: 0 !important;
-  }
-
-  /* − button: full-width touch zone at top */
-  .lc-life-btn-minus {
-    width: 100% !important;
-    height: auto !important;
-    border-radius: 0 !important;
-    background: rgba(0,0,0,0.2) !important;
-    border-bottom: 1px solid rgba(255,255,255,0.05) !important;
-    padding: 14px 0 !important;
-    justify-content: center !important;
-    flex-shrink: 0 !important;
-  }
-
-  /* + button: full-width touch zone at bottom */
-  .lc-life-btn-plus {
-    width: 100% !important;
-    height: auto !important;
-    border-radius: 0 !important;
-    background: rgba(0,0,0,0.2) !important;
-    border-top: 1px solid rgba(255,255,255,0.05) !important;
-    padding: 14px 0 !important;
-    justify-content: center !important;
-    flex-shrink: 0 !important;
   }
 
   /* Life number: centred, bigger on phone */
@@ -400,34 +392,6 @@ h1, h2, h3, h4, h5 {
     display: none !important;
   }
 
-  /* ── Bottom row on mobile: TAX on top, Tokens+CmdDmg below ─── */
-  .lc-bottom-row {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 5px !important;
-  }
-
-  .lc-tax-section {
-    width: 100%;
-  }
-
-  .lc-bottom-secondary {
-    width: 100% !important;
-    justify-content: stretch !important;
-    gap: 5px !important;
-  }
-
-  /* Tokens + Cmd Dmg each fill half the row */
-  .lc-bottom-secondary > button {
-    flex: 1 !important;
-    justify-content: center !important;
-    padding: 8px 6px !important;
-  }
-
-  /* Hide text labels inside Tokens / Cmd Dmg on very narrow cards, keep icons */
-  .lc-btn-label {
-    display: none !important;
-  }
 }
 
 /* Dice roll stage animation */

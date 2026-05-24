@@ -32,6 +32,7 @@ export function parseSavedPlayer(raw: any, fallbackLife: number): Player {
       food:     raw.tokens?.food     ?? 0,
       clue:     raw.tokens?.clue     ?? 0,
       blood:    raw.tokens?.blood    ?? 0,
+      rad:      raw.tokens?.rad      ?? 0,
     },
     enabledTokens:  Array.isArray(raw.enabledTokens) ? raw.enabledTokens : [],
     tokensOpen:     raw.tokensOpen ?? false,

@@ -41,8 +41,7 @@ interface GameNightProps {
 
 // Empty ActiveCounters placeholder used in pre-game broadcasts (no game state yet)
 const EMPTY_COUNTERS: ActiveCounters = {
-  monarch: false, poison: false, rad: false,
-  dayNight: false, initiative: false, cityBlessing: false, tokens: false,
+  monarch: false, poison: false, dayNight: false, initiative: false, cityBlessing: false, tokens: false,
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -179,34 +178,39 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
     if (!code || !isSupabaseConfigured) return;
     setRoomLoading(true);
     setRoomError(null);
-    const ok = await joinSyncRoom(
-      code,
-      s => handleRemoteUpdateRef.current(s),
-      () => undefined,
-    );
-    if (ok) {
-      const selfPlayer: LobbyPlayer = {
-        deviceId:      getDeviceId(),
-        playerName:    localStorage.getItem(STORAGE_KEYS.DISPLAY_NAME) || "Player",
-        colorName:     "blue",
-        commanderName: "",
-        isHost:        false,
-        isReady:       false,
-      };
-      setRoomCode(code);
-      setRoomConnected(true);
-      setRoomRole("guest");
-      setLobbyPlayers([selfPlayer]);
-      setPhase("lobby");
-      localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-      localStorage.setItem("nexus_judge_room_role", "guest");
-      // Announce self so the host can merge us into the canonical lobby list
-      broadcastState(code, buildLobbyBroadcast([selfPlayer], selfPlayer.playerName));
-    } else {
-      setRoomError("Room not found — double-check the code and try again.");
+    try {
+      const ok = await joinSyncRoom(
+        code,
+        s => handleRemoteUpdateRef.current(s),
+        () => undefined,
+      );
+      if (ok) {
+        const selfPlayer: LobbyPlayer = {
+          deviceId:      getDeviceId(),
+          playerName:    localStorage.getItem(STORAGE_KEYS.DISPLAY_NAME) || "Player",
+          colorName:     "blue",
+          commanderName: "",
+          isHost:        false,
+          isReady:       false,
+        };
+        setRoomCode(code);
+        setRoomConnected(true);
+        setRoomRole("guest");
+        setLobbyPlayers([selfPlayer]);
+        setPhase("lobby");
+        localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
+        localStorage.setItem("nexus_judge_room_role", "guest");
+        // Announce self so the host can merge us into the canonical lobby list
+        broadcastState(code, buildLobbyBroadcast([selfPlayer], selfPlayer.playerName));
+      } else {
+        setRoomError("Room not found — double-check the code and try again.");
+      }
+      if (!overrideCode) setJoinCodeInput("");
+    } catch {
+      setRoomError("Could not join room. Check your connection and try again.");
+    } finally {
+      setRoomLoading(false);
     }
-    setRoomLoading(false);
-    if (!overrideCode) setJoinCodeInput("");
   };
 
   const handleLeaveRoom = () => {

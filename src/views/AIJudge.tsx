@@ -79,6 +79,11 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
 
   const [cardSearch, setCardSearch] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  
+  // ── Mention Autocomplete State ──
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionSuggestions, setMentionSuggestions] = useState<string[]>([]);
+  const mentionAbortRef = useRef<AbortController | null>(null);
 
   const [taggedCards, setTaggedCards] = useState<ScryfallCard[]>(() => {
     try {
@@ -169,6 +174,21 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     }, 300);
     return () => clearTimeout(delayDebounce);
   }, [cardSearch]);
+
+  // ── Mention Autocomplete debounce ──
+  useEffect(() => {
+    const delayDebounce = setTimeout(async () => {
+      if (mentionQuery && mentionQuery.trim().length >= 2) {
+        mentionAbortRef.current?.abort();
+        mentionAbortRef.current = new AbortController();
+        const list = await autocompleteCard(mentionQuery, mentionAbortRef.current.signal);
+        setMentionSuggestions(list);
+      } else {
+        setMentionSuggestions([]);
+      }
+    }, 300);
+    return () => clearTimeout(delayDebounce);
+  }, [mentionQuery]);
 
   // ── Tag a card — fetch oracle text + rulings for RAG context ──
   const handleTagCard = useCallback(
@@ -454,6 +474,8 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           padding: "20px",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          touchAction: "pan-y",
           minHeight: 0,
           display: "flex",
           flexDirection: "column",
@@ -646,6 +668,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           gap: "10px",
           width: "100%",
           marginBottom: "12px",
+          position: "relative",
         }}
       >
         <textarea
@@ -658,7 +681,20 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
               : "Mock Mode: Tag cards (Add API Key)"
           }
           value={query}
-          onChange={(e) => { setQuery(e.target.value); autoResize(e.target); }}
+          onChange={(e) => { 
+            const val = e.target.value;
+            setQuery(val); 
+            autoResize(e.target);
+            
+            const cursor = e.target.selectionStart;
+            const textBeforeCursor = val.slice(0, cursor);
+            const match = textBeforeCursor.match(/@([a-zA-Z0-9 ',.-]*)$/);
+            if (match) {
+              setMentionQuery(match[1]);
+            } else {
+              setMentionQuery(null);
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -697,6 +733,64 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           <Send size={16} />
           <span>Ask</span>
         </button>
+
+        {/* ── Mention Autocomplete Dropdown ── */}
+        {mentionQuery !== null && mentionSuggestions.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "100%",
+              left: 0,
+              background: "rgba(10, 8, 16, 0.95)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "12px",
+              marginBottom: "8px",
+              padding: "4px",
+              zIndex: 100,
+              boxShadow: "0 -4px 24px rgba(0,0,0,0.4)",
+              maxHeight: "200px",
+              overflowY: "auto",
+              width: "calc(100% - 100px)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+            }}
+          >
+            {mentionSuggestions.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  const cursor = inputRef.current?.selectionStart || query.length;
+                  const textBeforeCursor = query.slice(0, cursor);
+                  const textAfterCursor = query.slice(cursor);
+                  // Replace the @query part with the full card name
+                  const newTextBefore = textBeforeCursor.replace(/@([a-zA-Z0-9 ',.-]*)$/, `${s} `);
+                  setQuery(newTextBefore + textAfterCursor);
+                  setMentionQuery(null);
+                  handleTagCard(s);
+                  inputRef.current?.focus();
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  background: "none",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: "0.9rem",
+                  cursor: "pointer",
+                  borderRadius: "6px",
+                  fontFamily: "Outfit, sans-serif",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                onMouseLeave={e => e.currentTarget.style.background = "none"}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
       </form>
       {/* ── Saved Rulings Panel ─────────────────────────────────────────── */}
       {showFavorites && (

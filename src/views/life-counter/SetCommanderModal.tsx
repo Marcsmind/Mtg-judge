@@ -178,7 +178,7 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
 
   return (
     <BottomSheet alwaysCentered={true} onClose={onClose} zIndex={1000} maxWidth="420px" padding="20px">
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px", minHeight: "440px" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
