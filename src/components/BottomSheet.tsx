@@ -54,6 +54,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         overflowY:    "auto",
         zIndex:       zIndex + 1,
         padding,
+        animation:    "sheet-enter-bottom 0.22s cubic-bezier(0.4,0,0.2,1)",
       }
     : {
         position:  "fixed",
@@ -65,6 +66,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         overflowY: "auto",
         zIndex:    zIndex + 1,
         padding,
+        animation: "sheet-enter-center 0.22s cubic-bezier(0.4,0,0.2,1)",
       };
 
   return (

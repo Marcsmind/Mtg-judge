@@ -159,7 +159,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
         setLobbyPlayers([hostPlayer]);
         setPhase("lobby");
         localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-        localStorage.setItem("nexus_judge_room_role", "host");
+        localStorage.setItem(STORAGE_KEYS.ROOM_ROLE, "host");
         // Broadcast initial lobby so guests that join immediately see the host
         broadcastState(code, buildLobbyBroadcast([hostPlayer], hostPlayer.playerName));
         showToast(`Room ${code} created — share this code!`, "success");
@@ -199,7 +199,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
         setLobbyPlayers([selfPlayer]);
         setPhase("lobby");
         localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-        localStorage.setItem("nexus_judge_room_role", "guest");
+        localStorage.setItem(STORAGE_KEYS.ROOM_ROLE, "guest");
         // Announce self so the host can merge us into the canonical lobby list
         broadcastState(code, buildLobbyBroadcast([selfPlayer], selfPlayer.playerName));
       } else {
@@ -222,7 +222,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
     setLobbyPlayers([]);
     setPhase("idle");
     localStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
-    localStorage.removeItem("nexus_judge_room_role");
+    localStorage.removeItem(STORAGE_KEYS.ROOM_ROLE);
   };
 
   // ── Lobby callbacks ───────────────────────────────────────────────────────

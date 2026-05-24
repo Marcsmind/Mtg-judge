@@ -56,7 +56,7 @@ interface PlayerCardProps {
   isLocalPlayer?:       boolean;  // true = this seat belongs to the device; default true (open edit)
 }
 
-export const PlayerCard: React.FC<PlayerCardProps> = ({
+const PlayerCardBase: React.FC<PlayerCardProps> = ({
   p,
   players,
   playerTheme,
@@ -120,6 +120,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     holdTimerRef.current = setTimeout(() => {
       holdIntervalRef.current = setInterval(() => {
         adjustLife(p.id, delta);
+        navigator.vibrate?.([20]);
       }, 120);
     }, 400);
   }, [adjustLife, p.id]);
@@ -333,7 +334,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           aria-label={`Subtract 1 life from ${p.name} (hold to keep subtracting)`}
           onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.25"; stopHold(); }}
+          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; stopHold(); }}
           onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
           onContextMenu={e => e.preventDefault()}
           style={{
@@ -344,7 +345,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         >
           <span className="lc-adj-icon" style={{
             fontSize: "1.6rem", fontWeight: 300, color: "#fff",
-            opacity: 0.25, lineHeight: 1, userSelect: "none",
+            opacity: 0.40, lineHeight: 1, userSelect: "none",
             transition: "opacity 0.12s ease",
           }}>−</span>
         </div>
@@ -376,7 +377,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           aria-label={`Add 1 life to ${p.name} (hold to keep adding)`}
           onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.25"; stopHold(); }}
+          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; stopHold(); }}
           onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
           onContextMenu={e => e.preventDefault()}
           style={{
@@ -387,7 +388,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         >
           <span className="lc-adj-icon" style={{
             fontSize: "1.6rem", fontWeight: 300, color: "#fff",
-            opacity: 0.25, lineHeight: 1, userSelect: "none",
+            opacity: 0.40, lineHeight: 1, userSelect: "none",
             transition: "opacity 0.12s ease",
           }}>+</span>
         </div>
@@ -568,3 +569,5 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     </div>
   );
 };
+
+export const PlayerCard = React.memo(PlayerCardBase);

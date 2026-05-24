@@ -26,6 +26,7 @@ export const STORAGE_KEYS = {
   CONTROLS_COLLAPSED: "nexus_judge_controls_collapsed",
   THEME:              "nexus_judge_theme",
   ROOM_CODE:          "nexus_judge_room_code",
+  ROOM_ROLE:          "nexus_judge_room_role",
   ACCESS_CODE:        "nexus_judge_access_code",
   DISPLAY_NAME:       "nexus_judge_display_name",  // local fallback for lobby pre-fill
   DEVICE_ID:          "nexus_device_id",            // stable random UUID per device

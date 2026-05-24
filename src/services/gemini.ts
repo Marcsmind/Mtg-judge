@@ -2,6 +2,7 @@
 
 import { getCardOracleText } from "./scryfall";
 import type { ScryfallCard, ScryfallRuling } from "./scryfall";
+import { STORAGE_KEYS } from "../constants/storageKeys";
 
 // ── Deck Builder system instruction (completely isolated from the Judge) ───────
 const DECKBUILDER_SYSTEM_INSTRUCTION = `You are Nexus Deckbuilder, an expert Magic: The Gathering Commander deck construction AI.
@@ -155,7 +156,7 @@ async function fetchGemini(model: string, payload: object, apiKey: string): Prom
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
     );
   }
-  const accessCode = localStorage.getItem("nexus_judge_access_code") ?? "";
+  const accessCode = localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) ?? "";
   return fetch("/.netlify/functions/gemini-proxy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

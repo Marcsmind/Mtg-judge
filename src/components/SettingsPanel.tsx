@@ -43,7 +43,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
   };
   const [saved, setSaved] = useState(false);
   const [accessCodeInput, setAccessCodeInput] = useState(
-    () => localStorage.getItem("nexus_judge_access_code") || ""
+    () => localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) || ""
   );
   const [accessCodeSaved, setAccessCodeSaved] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -62,9 +62,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
     e.preventDefault();
     const clean = accessCodeInput.trim().toUpperCase();
     if (clean) {
-      localStorage.setItem("nexus_judge_access_code", clean);
+      localStorage.setItem(STORAGE_KEYS.ACCESS_CODE, clean);
     } else {
-      localStorage.removeItem("nexus_judge_access_code");
+      localStorage.removeItem(STORAGE_KEYS.ACCESS_CODE);
     }
     setAccessCodeInput(clean);
     setAccessCodeSaved(true);
@@ -72,7 +72,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
   };
 
   const handleClearAccessCode = () => {
-    localStorage.removeItem("nexus_judge_access_code");
+    localStorage.removeItem(STORAGE_KEYS.ACCESS_CODE);
     setAccessCodeInput("");
     setAccessCodeSaved(false);
   };
@@ -499,7 +499,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
             <button
               type="submit"
               className="glass-button"
-              disabled={accessCodeInput.trim() === (localStorage.getItem("nexus_judge_access_code") || "")}
+              disabled={accessCodeInput.trim() === (localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) || "")}
               style={{
                 background: accessCodeSaved ? "var(--accent-emerald)" : "rgba(234,179,8,0.15)",
                 borderColor: accessCodeSaved ? "var(--accent-emerald)" : "rgba(234,179,8,0.35)",

@@ -127,7 +127,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     const { players, activeCounters, dayNightState } = options;
     buildSyncStateRef.current = () => ({
       schemaVersion: SYNC_SCHEMA_VERSION,
-      players,
+      players: players.map(p => ({ ...p, tokensOpen: false })),
       activeCounters,
       dayNightState,
       roomName: roomName || undefined,
@@ -217,7 +217,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
           const state = buildSyncStateRef.current();
           const playerName = state.players[myIndex]?.name ?? "Player";
           const role = (
-            localStorage.getItem("nexus_judge_room_role") ?? "guest"
+            localStorage.getItem(STORAGE_KEYS.ROOM_ROLE) ?? "guest"
           ) as "host" | "guest";
           broadcastSeatClaim(code, {
             deviceId: getDeviceId(),
@@ -261,10 +261,9 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       if (c) broadcastState(c, buildSyncStateRef.current());
     });
 
-    // Fix C: optional — receive seat claims from reconnecting peers.
-    // Could show a toast here: showToast(`${claim.playerName} reconnected`, "success");
-    onSeatClaim(code, () => {
-      // Future: surface as a brief reconnect notification in the UI.
+    // Fix C: surface seat claims from reconnecting peers as a brief toast.
+    onSeatClaim(code, (claim) => {
+      showToast(`${claim.playerName} joined`, "success");
     });
   };
 
@@ -288,7 +287,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
         setRoomRole("host");
         showToast(`Room ${code} created — life totals will sync in real time!`, "success");
         localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-        localStorage.setItem("nexus_judge_room_role", "host");
+        localStorage.setItem(STORAGE_KEYS.ROOM_ROLE, "host");
       } else {
         setRoomError("Could not connect. Check your internet and try again.");
       }
@@ -313,13 +312,13 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       roomCodeRef.current = code;
       _registerHandlers(code);
       const role = overrideCode
-        ? (localStorage.getItem("nexus_judge_room_role") as "host" | "guest" | null ?? "guest")
+        ? (localStorage.getItem(STORAGE_KEYS.ROOM_ROLE) as "host" | "guest" | null ?? "guest")
         : "guest";
       setRoomCode(code);
       setRoomConnected(true);
       setRoomRole(role);
       localStorage.setItem(STORAGE_KEYS.ROOM_CODE, code);
-      localStorage.setItem("nexus_judge_room_role", role);
+      localStorage.setItem(STORAGE_KEYS.ROOM_ROLE, role);
     } else if (!overrideCode) {
       // Only show error for manual joins — silent failure is fine for auto-rejoin
       setRoomError("Room not found or connection failed. Check the code and try again.");
@@ -343,7 +342,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     lastAppliedAt.current = 0;
     lastLocalChangeAt.current = 0;
     localStorage.removeItem(STORAGE_KEYS.ROOM_CODE);
-    localStorage.removeItem("nexus_judge_room_role");
+    localStorage.removeItem(STORAGE_KEYS.ROOM_ROLE);
     // NOTE: do NOT call clearPersistedState() here.
     // A player leaving ≠ the game ending. Other players may still be in the room.
     // clearPersistedState() is only called from handleEndGameConfirm() in LifeCounter.tsx.

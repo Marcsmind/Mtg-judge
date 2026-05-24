@@ -207,6 +207,7 @@ h1, h2, h3, h4, h5 {
 .gradient-text {
   background: linear-gradient(135deg, #a78bfa 0%, #06b6d4 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -392,6 +393,49 @@ h1, h2, h3, h4, h5 {
     display: none !important;
   }
 
+}
+
+/* ── BottomSheet entrance animations ─────────────────────────────────────────── */
+@keyframes sheet-enter-center {
+  from { opacity: 0.6; transform: translate(-50%, calc(-50% + 14px)); }
+  to   { opacity: 1;   transform: translate(-50%, -50%); }
+}
+@keyframes sheet-enter-bottom {
+  from { opacity: 0.6; transform: translateY(14px); }
+  to   { opacity: 1;   transform: translateY(0); }
+}
+
+/* ── Landscape layout — mobile devices rotated sideways ──────────────────────── */
+/* Zero portrait impact — these rules only activate in landscape orientation.     */
+@media (max-width: 900px) and (orientation: landscape) {
+  /* Compress the bottom tab bar to a slimmer height */
+  aside.glass-panel {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+  aside.glass-panel nav button {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+    gap: 2px !important;
+  }
+  aside.glass-panel nav button span {
+    font-size: 0.48rem !important;
+  }
+
+  /* Life counter: 2-column grid regardless of player count */
+  .life-counter-player-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* Each player card: shorter min-height to fit 2 rows on screen */
+  .life-counter-player-grid > div {
+    min-height: 130px !important;
+  }
+
+  /* Life number: scale down slightly to stay in cell */
+  .lc-life-number {
+    font-size: clamp(2rem, 10vw, 3.5rem) !important;
+  }
 }
 
 /* Dice roll stage animation */
