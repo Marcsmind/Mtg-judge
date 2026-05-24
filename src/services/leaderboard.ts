@@ -1,6 +1,9 @@
 /**
  * Leaderboard service — record game results and query stats.
  * All functions gracefully no-op when Supabase is not configured.
+ *
+ * DB tables required (see MIGRATION.md):
+ *   profiles, game_sessions, game_participants, player_stats (view)
  */
 
 import { supabase, isSupabaseConfigured } from "./supabase";
@@ -61,6 +64,8 @@ export interface LeaderboardEntry {
 export async function recordGame(params: RecordGameParams): Promise<string | null> {
   if (!isSupabaseConfigured) return null;
 
+  const now = new Date().toISOString();
+
   // 1. Insert the session
   const { data: session, error: sessionErr } = await supabase
     .from("game_sessions")
@@ -69,6 +74,7 @@ export async function recordGame(params: RecordGameParams): Promise<string | nul
       player_count:  params.playerCount,
       starting_life: params.startingLife,
       duration_secs: params.durationSeconds,
+      completed_at:  now,
     })
     .select("id")
     .single();
@@ -163,53 +169,39 @@ export async function getRecentGames(userId: string): Promise<RecentGame[]> {
 
 /**
  * Global leaderboard — top 10 players by win rate (minimum 3 games).
- * Aggregates in JS because PostgREST doesn't support GROUP BY directly.
+ * Queries the `player_stats` DB view (see MIGRATION.md — Migration 4)
+ * instead of fetching all rows and aggregating in JS.
  */
 export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   if (!isSupabaseConfigured) return [];
 
-  const { data: parts, error } = await supabase
-    .from("game_participants")
-    .select("user_id, is_winner")
-    .not("user_id", "is", null);
+  // player_stats view does GROUP BY + HAVING COUNT(*) >= 3 server-side
+  const { data: stats, error } = await supabase
+    .from("player_stats")
+    .select("user_id, total_games, wins, win_rate")
+    .order("win_rate", { ascending: false })
+    .limit(10);
 
-  if (error || !parts) {
-    console.error("[leaderboard] getLeaderboard:", error?.message);
+  if (error || !stats || stats.length === 0) {
+    if (error) console.error("[leaderboard] getLeaderboard:", error.message);
     return [];
   }
-
-  // Aggregate wins + total games per user
-  const agg: Record<string, { wins: number; total: number }> = {};
-  for (const row of parts) {
-    const uid = row.user_id as string;
-    if (!agg[uid]) agg[uid] = { wins: 0, total: 0 };
-    agg[uid].total++;
-    if (row.is_winner) agg[uid].wins++;
-  }
-
-  // Filter to min 3 games, sort by win rate, take top 10
-  const eligible = Object.entries(agg)
-    .filter(([, s]) => s.total >= 3)
-    .sort(([, a], [, b]) => b.wins / b.total - a.wins / a.total)
-    .slice(0, 10);
-
-  if (eligible.length === 0) return [];
 
   // Fetch display names for those users
   const { data: profiles } = await supabase
     .from("profiles")
     .select("id, display_name, avatar_emoji")
-    .in("id", eligible.map(([uid]) => uid));
+    .in("id", stats.map(s => s.user_id));
 
   const profileMap: Record<string, { display_name: string; avatar_emoji: string }> = {};
   for (const p of profiles ?? []) profileMap[p.id] = p;
 
-  return eligible.map(([uid, s]) => ({
-    userId:      uid,
-    displayName: profileMap[uid]?.display_name ?? "Player",
-    avatarEmoji: profileMap[uid]?.avatar_emoji  ?? "",
-    totalGames:  s.total,
-    wins:        s.wins,
-    winRate:     (s.wins / s.total) * 100,
+  return stats.map(s => ({
+    userId:      s.user_id as string,
+    displayName: profileMap[s.user_id as string]?.display_name ?? "Player",
+    avatarEmoji: profileMap[s.user_id as string]?.avatar_emoji  ?? "",
+    totalGames:  s.total_games as number,
+    wins:        s.wins        as number,
+    winRate:     s.win_rate    as number,
   }));
 }
