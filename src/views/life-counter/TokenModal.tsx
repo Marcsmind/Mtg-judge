@@ -3,6 +3,7 @@ import { BottomSheet } from "../../components/BottomSheet";
 import type { Player, TokenKey } from "../../types/game";
 import { Coins } from "lucide-react";
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const TOKEN_TYPES: { key: TokenKey; label: string; emoji: string; color: string }[] = [
   { key: "treasure", label: "Treasure", emoji: "🪙", color: "#eab308" },
   { key: "food",     label: "Food",     emoji: "🍎", color: "#10b981" },

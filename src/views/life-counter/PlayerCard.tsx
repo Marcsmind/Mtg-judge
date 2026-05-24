@@ -333,8 +333,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           aria-label={`Subtract 1 life from ${p.name} (hold to keep subtracting)`}
           onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.25"); stopHold(); }}
-          onPointerEnter={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.8"); }}
+          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.25"; stopHold(); }}
+          onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
           onContextMenu={e => e.preventDefault()}
           style={{
             flex: 1, display: "flex", flexDirection: "column",
@@ -376,8 +376,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           aria-label={`Add 1 life to ${p.name} (hold to keep adding)`}
           onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.25"); stopHold(); }}
-          onPointerEnter={e => { (e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement).style.opacity = "0.8"); }}
+          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.25"; stopHold(); }}
+          onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
           onContextMenu={e => e.preventDefault()}
           style={{
             flex: 1, display: "flex", flexDirection: "column",
