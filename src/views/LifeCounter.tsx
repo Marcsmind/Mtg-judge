@@ -18,6 +18,7 @@ import { TokenModal } from "./life-counter/TokenModal";
 import { TaxModal } from "./life-counter/TaxModal";
 import { EndGameModal } from "./life-counter/EndGameModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
+import { TableView } from "./life-counter/TableView";
 import { DayNightBanner } from "./life-counter/DayNightBanner";
 import { TableCenter } from "./life-counter/TableCenter";
 import { useWakeLock } from "../hooks/useWakeLock";
@@ -1148,39 +1149,64 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           hasInitiativeMechanic={activeCounters.initiative}
         />
 
-        {/* ── Player Grid ── */}
-        <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
-          {players.map((p, idx) => {
-            const playerTheme = colors[p.colorName] || colors.purple;
-            return (
-              <PlayerCard
-                key={p.id}
-                p={p}
-                players={players}
-                playerTheme={playerTheme}
-                activeCounters={activeCounters}
-                colors={colors}
-                adjustLife={adjustLife}
-                adjustPoison={adjustPoison}
-                renamePlayer={renamePlayer}
-                setAvatar={setAvatar}
-                toggleCityBlessing={toggleCityBlessing}
-                togglePlayerTokensPanel={setTokenPlayer}
-                togglePlayerTaxPanel={setTaxPlayer}
-                setActiveDamageEditor={setActiveDamageEditor}
-                revivePlayer={revivePlayer}
-                isFirst={firstPlayerName !== null && p.name === firstPlayerName}
-                isActiveTurn={showFirstFlash && idx === activePlayerIndex}
-                isLocalPlayer={myPlayerIndex === null || idx === myPlayerIndex}
-                commanderName={p.commanderName}
-                onSetCommander={setPlayerCommander}
-                onClearCommander={clearPlayerCommander}
-                savedDecks={savedDecks}
-                lastHeartbeat={roomConnected ? heartbeatTimes.get(idx) : undefined}
-              />
-            );
-          })}
-        </div>
+        {/* ── Player Grid / Table View ── */}
+        {roomConnected && myPlayerIndex !== null ? (
+          <TableView
+            players={players}
+            myIndex={myPlayerIndex}
+            colors={colors}
+            activeCounters={activeCounters}
+            heartbeatTimes={heartbeatTimes}
+            adjustLife={adjustLife}
+            adjustPoison={adjustPoison}
+            renamePlayer={renamePlayer}
+            setAvatar={setAvatar}
+            toggleCityBlessing={toggleCityBlessing}
+            togglePlayerTokensPanel={setTokenPlayer}
+            togglePlayerTaxPanel={setTaxPlayer}
+            setActiveDamageEditor={setActiveDamageEditor}
+            revivePlayer={revivePlayer}
+            firstPlayerName={firstPlayerName}
+            showFirstFlash={showFirstFlash}
+            activePlayerIndex={activePlayerIndex}
+            savedDecks={savedDecks}
+            onSetCommander={setPlayerCommander}
+            onClearCommander={clearPlayerCommander}
+          />
+        ) : (
+          <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
+            {players.map((p, idx) => {
+              const playerTheme = colors[p.colorName] || colors.purple;
+              return (
+                <PlayerCard
+                  key={p.id}
+                  p={p}
+                  players={players}
+                  playerTheme={playerTheme}
+                  activeCounters={activeCounters}
+                  colors={colors}
+                  adjustLife={adjustLife}
+                  adjustPoison={adjustPoison}
+                  renamePlayer={renamePlayer}
+                  setAvatar={setAvatar}
+                  toggleCityBlessing={toggleCityBlessing}
+                  togglePlayerTokensPanel={setTokenPlayer}
+                  togglePlayerTaxPanel={setTaxPlayer}
+                  setActiveDamageEditor={setActiveDamageEditor}
+                  revivePlayer={revivePlayer}
+                  isFirst={firstPlayerName !== null && p.name === firstPlayerName}
+                  isActiveTurn={showFirstFlash && idx === activePlayerIndex}
+                  isLocalPlayer={myPlayerIndex === null || idx === myPlayerIndex}
+                  commanderName={p.commanderName}
+                  onSetCommander={setPlayerCommander}
+                  onClearCommander={clearPlayerCommander}
+                  savedDecks={savedDecks}
+                  lastHeartbeat={roomConnected ? heartbeatTimes.get(idx) : undefined}
+                />
+              );
+            })}
+          </div>
+        )}
 
       </div>
 
