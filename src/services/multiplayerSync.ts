@@ -165,29 +165,50 @@ export async function subscribeWithRetry(
 // ── Create room ───────────────────────────────────────────────────────────────
 
 /**
- * Creates (or re-joins) a room channel. Delegates to subscribeWithRetry.
- * Returns true on success, false after all retries fail.
+ * Creates a room channel with a single attempt (max 10 s timeout).
+ * Fast-fails so the UI doesn't hang — the caller shows an error and lets the
+ * user retry manually. Mid-session drops are handled by subscribeWithRetry
+ * via the onDropped callback registered inside _subscribeToRoom.
  */
 export async function createRoom(
   roomCode: string,
   onUpdate: (state: SyncState) => void,
   onStatusChange?: (status: ConnectionStatus) => void,
 ): Promise<boolean> {
-  return subscribeWithRetry(roomCode, onUpdate, onStatusChange);
+  try {
+    await _subscribeToRoom(roomCode, onUpdate, () => {
+      subscribeWithRetry(roomCode, onUpdate, onStatusChange);
+    });
+    onStatusChange?.("connected");
+    return true;
+  } catch {
+    onStatusChange?.("failed");
+    return false;
+  }
 }
 
 // ── Join room ────────────────────────────────────────────────────────────────
 
 /**
- * Joins an existing room. Delegates to subscribeWithRetry.
- * Returns true on success, false after all retries fail.
+ * Joins an existing room with a single attempt (max 10 s timeout).
+ * Same rationale as createRoom — fast-fail for initial handshake, let
+ * subscribeWithRetry handle mid-session reconnects via onDropped.
  */
 export async function joinRoom(
   code: string,
   onUpdate: (state: SyncState) => void,
   onStatusChange?: (status: ConnectionStatus) => void,
 ): Promise<boolean> {
-  return subscribeWithRetry(code, onUpdate, onStatusChange);
+  try {
+    await _subscribeToRoom(code, onUpdate, () => {
+      subscribeWithRetry(code, onUpdate, onStatusChange);
+    });
+    onStatusChange?.("connected");
+    return true;
+  } catch {
+    onStatusChange?.("failed");
+    return false;
+  }
 }
 
 // ── Broadcast state ──────────────────────────────────────────────────────────
