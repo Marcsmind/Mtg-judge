@@ -189,7 +189,8 @@ export async function createRoom(
     });
     onStatusChange?.("connected");
     return true;
-  } catch {
+  } catch (err) {
+    console.error("[mp] createRoom failed:", err);
     onStatusChange?.("failed");
     return false;
   }
@@ -455,11 +456,11 @@ async function _subscribeToRoom(
   let wasSubscribed = false;
 
   await new Promise<void>((resolve, reject) => {
-    // 10-second hard timeout — prevents the UI from hanging forever if
+    // 8-second hard timeout — prevents the UI from hanging forever if
     // Supabase never calls the callback (network drop, config issue, etc.)
     const timeout = setTimeout(
-      () => reject(new Error("Connection timed out after 10 seconds")),
-      10_000
+      () => reject(new Error("Connection timed out after 8 seconds")),
+      8_000
     );
 
     channel.subscribe((status) => {
@@ -467,8 +468,7 @@ async function _subscribeToRoom(
         clearTimeout(timeout);
         wasSubscribed = true;
         resolve();
-      }
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
         if (!wasSubscribed) {
           // Failed during initial handshake — reject so the retry loop can handle it
           clearTimeout(timeout);

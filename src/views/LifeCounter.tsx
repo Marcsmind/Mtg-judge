@@ -25,6 +25,7 @@ import { useWakeLock } from "../hooks/useWakeLock";
 import { recordGame } from "../services/leaderboard";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { parseSavedPlayer } from "../utils/playerUtils";
+import { getDeviceId } from "../services/auth";
 import { useToast } from "../components/Toast";
 import { BottomSheet } from "../components/BottomSheet";
 
@@ -154,6 +155,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
       }
       // Fresh game start: initialize from lobby roster.
       const sorted = [...mpInitLobbyPlayers].sort((a, b) => a.colorName.localeCompare(b.colorName));
+      // Record which player seat belongs to this device so TableView knows "my card"
+      const myIdx = sorted.findIndex(lp => lp.deviceId === getDeviceId());
+      if (myIdx >= 0) localStorage.setItem(STORAGE_KEYS.MY_PLAYER_INDEX, String(myIdx));
       return sorted.map((lp, i) => ({
         ...createPlayer(i, sl),
         name: lp.playerName,
@@ -446,6 +450,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
       clearPersistedState(roomCode).catch(() => { /* non-critical */ });
     }
 
+    localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX);
     setShowEndGame(false);
     doReset(Boolean(isSupabaseConfigured && userId));
   };
@@ -1100,7 +1105,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
                   {/* Leave */}
                   <button
-                    onClick={handleLeaveRoom}
+                    onClick={() => { localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX); handleLeaveRoom(); }}
                     className="glass-button"
                     style={{ padding: "6px 12px", fontSize: "0.8rem", background: "rgba(244,63,94,0.1)", borderColor: "rgba(244,63,94,0.25)", color: "var(--accent-rose)" }}
                   >
