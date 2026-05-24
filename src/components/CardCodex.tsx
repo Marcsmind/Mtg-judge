@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { X, Search, BookOpen, Layers, Clock, Tag } from "lucide-react";
-import { useMobile } from "../hooks/useMobile";
 import {
   autocompleteCard,
   searchCardFuzzy,
@@ -24,7 +23,6 @@ export const CardCodex: React.FC<CardCodexProps> = ({
   onClose,
   initialSearch,
 }) => {
-  const isMobile = useMobile(768);
   const [activeTab, setActiveTab] = useState<TabId>("search");
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -957,32 +955,7 @@ export const CardCodex: React.FC<CardCodexProps> = ({
         )}
       </div>
 
-      {/* ── Mobile close button — thumb-reachable at the bottom of the panel ── */}
-      {isMobile && (
-        <div style={{
-          flexShrink: 0,
-          borderTop: "1px solid var(--border-color)",
-          padding: "12px 0 calc(12px + env(safe-area-inset-bottom))",
-          marginTop: "8px",
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              width: "100%", padding: "14px",
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "12px",
-              color: "var(--text-secondary)",
-              fontSize: "0.95rem", fontWeight: 600,
-              cursor: "pointer",
-              display: "flex", alignItems: "center",
-              justifyContent: "center", gap: "8px",
-            }}
-          >
-            <X size={16} /> Close
-          </button>
-        </div>
-      )}
+
 
       {/* ── Card art lightbox overlay ── */}
       {imageZoomed && selectedCard && (

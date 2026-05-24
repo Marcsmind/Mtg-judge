@@ -155,7 +155,7 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
   };
 
   return (
-    <BottomSheet onClose={onClose} zIndex={1000} maxWidth="420px" padding="20px">
+    <BottomSheet alwaysCentered={true} onClose={onClose} zIndex={1000} maxWidth="420px" padding="20px">
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -256,10 +256,10 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
                 <div
                   onMouseLeave={() => setPreviewCard(null)}
                   style={{
-                    position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 40,
+                    position: "relative", marginTop: "4px", zIndex: 40,
                     background: "var(--bg-dark)", border: "1px solid var(--border-color)",
                     borderRadius: "10px", overflow: "hidden",
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
                   }}
                 >
                   {suggestions.map((name, i) => (

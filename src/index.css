@@ -250,6 +250,18 @@ h1, h2, h3, h4, h5 {
   100% { transform: rotate3d(1, 1, 1, 720deg) scale(1); }
 }
 
+/* "Goes First" banner — fades in, holds, then fades out over 3 s */
+@keyframes first-player-flash {
+  0%   { opacity: 0; transform: translateY(-8px) scale(0.94); }
+  12%  { opacity: 1; transform: translateY(0)    scale(1); }
+  72%  { opacity: 1; transform: translateY(0)    scale(1); }
+  100% { opacity: 0; transform: translateY(-5px) scale(0.97); }
+}
+.first-player-flash {
+  animation: first-player-flash 3s ease-out forwards;
+  pointer-events: none;
+}
+
 .anim-die {
   animation: shake-die 0.6s linear infinite;
 }

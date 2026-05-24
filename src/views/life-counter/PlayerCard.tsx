@@ -7,13 +7,14 @@
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Plus, Minus, ShieldAlert, Crown, Skull, Radiation,
-  Swords, Star, Coins, Shield, Wand2,
+  Plus, Minus, ShieldAlert, Skull, Radiation,
+  Star, Coins, Shield, Wand2,
 } from "lucide-react";
 import type { Player, ActiveCounters, TokenKey } from "../../types/game";
 import type { SavedDeck } from "../../types/deck";
 import { SetCommanderModal } from "./SetCommanderModal";
 import { CommanderPreviewModal } from "./CommanderPreviewModal";
+import { searchCardFuzzy } from "../../services/scryfall";
 
 // ── MTG-themed emoji avatar presets ──────────────────────────────────────────
 const AVATAR_PRESETS = ["🐉", "🧙", "🏰", "⚔️", "💀", "🌿", "🔥", "💧"];
@@ -44,12 +45,7 @@ interface PlayerCardProps {
   adjustTax:            (id: number, isPartner: boolean, delta: number) => void;
   togglePartner:        (id: number) => void;
   renamePlayer:         (id: number, name: string) => void;
-  cycleColor:           (id: number) => void;
   setAvatar:            (id: number, emoji: string) => void;
-  assignMonarch:        (id: number) => void;
-  releaseMonarch:       () => void;
-  assignInitiative:     (id: number) => void;
-  releaseInitiative:    () => void;
   toggleCityBlessing:   (id: number) => void;
   togglePlayerTokenType:(id: number, key: TokenKey) => void;
   togglePlayerTokensPanel:(id: number) => void;
@@ -62,7 +58,6 @@ interface PlayerCardProps {
   savedDecks?:          SavedDeck[];
   isActiveTurn?:        boolean;  // turn tracker — highlights the active player
   isLocalPlayer?:       boolean;  // true = this seat belongs to the device; default true (open edit)
-  claimSeat?:           () => void; // tap "Me" to claim / unclaim this seat
 }
 
 export const PlayerCard: React.FC<PlayerCardProps> = ({
@@ -78,12 +73,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   adjustTax,
   togglePartner,
   renamePlayer,
-  cycleColor,
   setAvatar,
-  assignMonarch,
-  releaseMonarch,
-  assignInitiative,
-  releaseInitiative,
   toggleCityBlessing,
   togglePlayerTokenType,
   togglePlayerTokensPanel,
@@ -96,9 +86,24 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   savedDecks = [],
   isActiveTurn = false,
   isLocalPlayer = true,
-  claimSeat,
 }) => {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [commanderArt, setCommanderArt] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (commanderName) {
+      searchCardFuzzy(commanderName).then(card => {
+        if (active && card?.image_uris?.art_crop) {
+          setCommanderArt(card.image_uris.art_crop);
+        }
+      });
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCommanderArt(null);
+    }
+    return () => { active = false; };
+  }, [commanderName]);
 
   // ── "Goes First" badge — shows briefly then auto-dismisses ───────────────
   const [showFirstBadge, setShowFirstBadge] = useState(isFirst);
@@ -158,7 +163,10 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   return (
     <div
       style={{
-        background: playerTheme.bg, borderRadius: "14px",
+        background: commanderArt 
+          ? `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.85)), url(${commanderArt}) center/cover no-repeat`
+          : playerTheme.bg, 
+        borderRadius: "14px",
         border: `1.5px solid ${p.isMonarch ? "#eab308" : isDefeated ? "rgba(239,68,68,0.6)" : isActiveTurn ? "var(--accent-purple)" : playerTheme.border}`,
         padding: "12px 14px", display: "flex", flexDirection: "column", gap: "4px",
         boxShadow: p.isMonarch
@@ -192,47 +200,6 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         </div>
       )}
 
-      {/* ── Monarch Badge ── */}
-      {activeCounters.monarch && (
-        <button
-          onClick={() => p.isMonarch ? releaseMonarch() : assignMonarch(p.id)}
-          aria-label={p.isMonarch ? "Release Monarch crown" : `Crown ${p.name} as Monarch`}
-          title={p.isMonarch ? "Click to release the crown" : "Click to crown this player"}
-          style={{
-            position: "absolute", top: "40px", right: activeCounters.initiative ? "52px" : "10px",
-            zIndex: 10, width: "36px", height: "36px", borderRadius: "50%",
-            background: p.isMonarch ? "rgba(234,179,8,0.25)" : "rgba(255,255,255,0.05)",
-            border: `1.5px solid ${p.isMonarch ? "#eab308" : "rgba(255,255,255,0.1)"}`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-            boxShadow: p.isMonarch ? "0 0 14px rgba(234,179,8,0.55)" : "none",
-            transition: "all 0.2s ease",
-          }}
-        >
-          <Crown size={18} color={p.isMonarch ? "#eab308" : "rgba(255,255,255,0.2)"} />
-        </button>
-      )}
-
-      {/* ── Initiative Badge ── */}
-      {activeCounters.initiative && (
-        <button
-          onClick={() => p.hasInitiative ? releaseInitiative() : assignInitiative(p.id)}
-          aria-label={p.hasInitiative ? "Release the Initiative" : `Assign the Initiative to ${p.name}`}
-          title={p.hasInitiative ? "Click to release the Initiative" : "Click to assign the Initiative"}
-          style={{
-            position: "absolute", top: "40px", right: "10px",
-            zIndex: 10, width: "36px", height: "36px", borderRadius: "50%",
-            background: p.hasInitiative ? "rgba(6,182,212,0.25)" : "rgba(255,255,255,0.05)",
-            border: `1.5px solid ${p.hasInitiative ? "#06b6d4" : "rgba(255,255,255,0.1)"}`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-            boxShadow: p.hasInitiative ? "0 0 14px rgba(6,182,212,0.55)" : "none",
-            transition: "all 0.2s ease",
-          }}
-        >
-          <Swords size={17} color={p.hasInitiative ? "#06b6d4" : "rgba(255,255,255,0.2)"} />
-        </button>
-      )}
 
       {/* ── Defeated Overlay ── */}
       {isDefeated && (
@@ -336,39 +303,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           onFocus={e => e.target.style.borderBottomColor = playerTheme.accent}
           onBlur={e => e.target.style.borderBottomColor = "transparent"}
         />
-        {/* "Me" pill — tap to claim / unclaim this seat */}
-        {claimSeat && (
-          <button
-            onClick={claimSeat}
-            aria-label={isLocalPlayer ? "This is your seat (tap to unclaim)" : "Claim this seat as yours"}
-            title={isLocalPlayer ? "Your seat — tap to unclaim" : "Claim this seat"}
-            className="touch-icon-btn"
-            style={{
-              background: isLocalPlayer ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.04)",
-              border: `1px solid ${isLocalPlayer ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.1)"}`,
-              borderRadius: "12px", padding: "2px 7px", cursor: "pointer", flexShrink: 0,
-              display: "flex", alignItems: "center", gap: "3px",
-              fontSize: "0.6rem", fontWeight: 700,
-              color: isLocalPlayer ? "var(--accent-purple)" : "var(--text-muted)",
-              transition: "all 0.15s ease",
-            }}
-          >
-            👤 {isLocalPlayer ? "Me" : "Me?"}
-          </button>
-        )}
-        <button
-          onClick={() => cycleColor(p.id)}
-          aria-label={`Cycle color for ${p.name}`}
-          className="touch-icon-btn"
-          style={{
-            width: "18px", height: "18px", borderRadius: "50%", background: playerTheme.accent,
-            border: "2px solid #fff", cursor: "pointer", flexShrink: 0,
-            transition: "transform 0.15s ease",
-          }}
-          onMouseEnter={e => e.currentTarget.style.transform = "scale(1.2)"}
-          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-          title="Cycle Color"
-        />
+
       </div>
 
       {/* ── Commander Strip — dedicated row below header, clear of monarch/initiative badge ── */}
@@ -482,18 +417,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
             transition: "background 0.12s ease",
           }}
         >
-          <Minus size={18} color="var(--accent-rose)" style={{ opacity: 0.7, pointerEvents: "none" }} />
-          <button
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); adjustLife(p.id, -5); }}
-            aria-label={`Subtract 5 life from ${p.name}`}
-            style={{
-              fontSize: "0.62rem", padding: "2px 6px",
-              background: "rgba(244,63,94,0.10)", border: "1px solid rgba(244,63,94,0.25)",
-              borderRadius: "4px", color: "var(--accent-rose)",
-              cursor: "pointer", fontWeight: 700,
-            }}
-          >−5</button>
+
         </div>
 
         {/* Center: life number */}
@@ -535,18 +459,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
             transition: "background 0.12s ease",
           }}
         >
-          <Plus size={18} color="var(--accent-emerald)" style={{ opacity: 0.7, pointerEvents: "none" }} />
-          <button
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); adjustLife(p.id, 5); }}
-            aria-label={`Add 5 life to ${p.name}`}
-            style={{
-              fontSize: "0.62rem", padding: "2px 6px",
-              background: "rgba(52,211,153,0.10)", border: "1px solid rgba(52,211,153,0.25)",
-              borderRadius: "4px", color: "var(--accent-emerald)",
-              cursor: "pointer", fontWeight: 700,
-            }}
-          >+5</button>
+
         </div>
       </div>
 

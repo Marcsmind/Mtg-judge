@@ -12,6 +12,7 @@ import { STORAGE_KEYS } from "../constants/storageKeys";
 import { useAppStore } from "../store/useAppStore";
 import { ChatMessage } from "./ai-judge/ChatMessage";
 import { CardTagBar } from "./ai-judge/CardTagBar";
+import { BottomSheet } from "../components/BottomSheet";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     } catch { return []; }
   });
   const [showFavorites, setShowFavorites] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -272,17 +274,17 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     }
   };
 
-  const handleClearChat = () => {
-    if (window.confirm("Are you sure you want to clear the conversation history?")) {
-      setChatHistory([
-        {
-          role: "model",
-          content: `Chat history cleared. I am ready for your next question! Search and tag cards below to begin.`,
-        },
-      ]);
-      setTaggedCards([]);
-      setRulingsMap({});
-    }
+  const handleClearChat = () => setShowClearConfirm(true);
+
+  const doClearChat = () => {
+    setChatHistory([
+      {
+        role: "model",
+        content: `Chat history cleared. I am ready for your next question! Search and tag cards below to begin.`,
+      },
+    ]);
+    setTaggedCards([]);
+    setRulingsMap({});
   };
 
   // ── Favorites handlers ─────────────────────────────────────────────────────
@@ -817,6 +819,27 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {showClearConfirm && (
+        <BottomSheet onClose={() => setShowClearConfirm(false)} zIndex={300} maxWidth="380px" padding="24px">
+          <h3 style={{ margin: "0 0 8px", fontSize: "1.1rem", fontWeight: 600 }}>Clear Chat?</h3>
+          <p style={{ margin: "0 0 20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            This will remove the entire conversation history and all tagged cards.
+          </p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={() => setShowClearConfirm(false)} className="glass-button" style={{ flex: 1 }}>
+              Cancel
+            </button>
+            <button
+              onClick={() => { setShowClearConfirm(false); doClearChat(); }}
+              className="glass-button"
+              style={{ flex: 1, background: "rgba(244,63,94,0.1)", borderColor: "rgba(244,63,94,0.25)", color: "#f43f5e" }}
+            >
+              Clear
+            </button>
+          </div>
+        </BottomSheet>
       )}
     </div>
   );

@@ -22,6 +22,8 @@ interface BottomSheetProps {
   zIndex?:    number;
   /** Maximum width of the desktop centred modal (default: "520px") */
   maxWidth?:  string;
+  /** Force the modal to stay centered in the middle of the screen even on mobile */
+  alwaysCentered?: boolean;
   /** Inner padding (default: "24px") */
   padding?:   string;
   /** Forwarded to the panel div for accessibility (e.g. role="dialog") */
@@ -36,11 +38,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   zIndex    = 200,
   maxWidth  = "520px",
   padding   = "24px",
+  alwaysCentered = true,
   ...panelAriaProps
 }) => {
   const isMobile = useMobile(768);
 
-  const panelStyle: React.CSSProperties = isMobile
+  const panelStyle: React.CSSProperties = (isMobile && !alwaysCentered)
     ? {
         position:     "fixed",
         bottom:       0,

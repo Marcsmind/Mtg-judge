@@ -13,7 +13,6 @@ import type { SavedDeck } from "../types/deck";
 import { useAppStore } from "../store/useAppStore";
 import { useMultiplayer } from "../hooks/useMultiplayer";
 import { clearPersistedState } from "../services/multiplayerSync";
-import { getDeviceId } from "../services/auth";
 import type { Player, ActiveCounters, DayNightState, TokenKey, LobbyPlayer } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { GameHistoryLedger } from "./life-counter/GameHistoryLedger";
@@ -24,6 +23,8 @@ import { GameSummaryModal } from "./life-counter/GameSummaryModal";
 import { EndGameModal } from "./life-counter/EndGameModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
 import { DayNightBanner } from "./life-counter/DayNightBanner";
+import { TableCenter } from "./life-counter/TableCenter";
+import { useWakeLock } from "../hooks/useWakeLock";
 import { recordGame } from "../services/leaderboard";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { parseSavedPlayer } from "../utils/playerUtils";
@@ -105,41 +106,48 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
   // ── State ──
   const [startingLife, setStartingLifeState] = useState<number>(() => {
-    const s = localStorage.getItem("nexus_judge_starting_life");
+    const s = localStorage.getItem(STORAGE_KEYS.STARTING_LIFE);
     return s ? parseInt(s, 10) : DEFAULT_LIFE;
   });
 
+  const [wakeLockEnabled, setWakeLockEnabled] = useState<boolean>(() => {
+    const s = localStorage.getItem(STORAGE_KEYS.WAKE_LOCK);
+    return s !== "false"; // Default to true unless explicitly disabled
+  });
+
+  useWakeLock(wakeLockEnabled);
+
   const [playerCount, setPlayerCount] = useState<number>(() => {
     if (mpInitLobbyPlayers && mpInitLobbyPlayers.length > 0) return mpInitLobbyPlayers.length;
-    const s = localStorage.getItem("nexus_judge_player_count");
+    const s = localStorage.getItem(STORAGE_KEYS.PLAYER_COUNT);
     return s ? parseInt(s, 10) : 4;
   });
 
   const [history, setHistory] = useState<string[]>(() => {
-    const s = localStorage.getItem("nexus_judge_life_history");
+    const s = localStorage.getItem(STORAGE_KEYS.LIFE_HISTORY);
     if (s) { try { return JSON.parse(s); } catch { /* corrupt localStorage — use default */ } }
     return [`Game started with ${DEFAULT_LIFE} Life!`];
   });
 
   const [activeCounters, setActiveCounters] = useState<ActiveCounters>(() => {
     const defaults: ActiveCounters = { monarch: false, poison: false, rad: false, dayNight: false, initiative: false, cityBlessing: false, tokens: false };
-    const s = localStorage.getItem("nexus_judge_active_counters");
+    const s = localStorage.getItem(STORAGE_KEYS.ACTIVE_COUNTERS);
     if (s) { try { return { ...defaults, ...JSON.parse(s) }; } catch { /* corrupt localStorage — use defaults */ } }
     return defaults;
   });
 
   const [dayNightState, setDayNightState] = useState<DayNightState>(() => {
-    return (localStorage.getItem("nexus_judge_day_night") as DayNightState) || "none";
+    return (localStorage.getItem(STORAGE_KEYS.DAY_NIGHT) as DayNightState) || "none";
   });
 
   const [players, setPlayers] = useState<Player[]>(() => {
-    const sl = parseInt(localStorage.getItem("nexus_judge_starting_life") || String(DEFAULT_LIFE), 10);
+    const sl = parseInt(localStorage.getItem(STORAGE_KEYS.STARTING_LIFE) || String(DEFAULT_LIFE), 10);
 
     // ── Multiplayer lobby init (only when lobby data is fresh — i.e. no matching saved game) ──
     if (mpInitLobbyPlayers && mpInitLobbyPlayers.length > 0) {
       // If localStorage already has a saved game with the same player count,
       // that means this is a tab-switch remount mid-game — use the live state.
-      const saved = localStorage.getItem("nexus_judge_players");
+      const saved = localStorage.getItem(STORAGE_KEYS.PLAYERS);
       if (saved) {
         try {
           const arr = JSON.parse(saved);
@@ -160,14 +168,14 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     }
 
     // ── Standard localStorage init ────────────────────────────────────────────
-    const s = localStorage.getItem("nexus_judge_players");
+    const s = localStorage.getItem(STORAGE_KEYS.PLAYERS);
     if (s) {
       try {
         const arr = JSON.parse(s);
         if (Array.isArray(arr) && arr.length > 0) return arr.map(p => parseSavedPlayer(p, sl));
       } catch { /* corrupt localStorage — create fresh players */ }
     }
-    const count = parseInt(localStorage.getItem("nexus_judge_player_count") || "4", 10);
+    const count = parseInt(localStorage.getItem(STORAGE_KEYS.PLAYER_COUNT) || "4", 10);
     return Array.from({ length: count }, (_, i) => createPlayer(i, sl));
   });
 
@@ -247,39 +255,31 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // ── firstPlayerName (lobby spin winner — read-only echo of mpInitFirstPlayer) ──
   const firstPlayerName: string | null = mpInitFirstPlayer ?? null;
 
-  // ── Turn tracker ──
-  const [activePlayerIndex, setActivePlayerIndex] = useState<number>(() => {
+  // ── Turn tracker: flash the first player's border + show a banner for 3 s ──
+  const [activePlayerIndex] = useState<number>(() => {
     if (mpInitFirstPlayer && players.length > 0) {
       const idx = players.findIndex(p => p.name === mpInitFirstPlayer);
       return idx >= 0 ? idx : 0;
     }
     return 0;
   });
-  const [turnNumber, setTurnNumber] = useState<number>(1);
+  // showFirstFlash drives both the purple border and the "goes first" banner.
+  // Auto-clears after 3 s; starts false when no first-player was set (non-lobby game).
+  const [showFirstFlash, setShowFirstFlash] = useState<boolean>(!!mpInitFirstPlayer);
+  useEffect(() => {
+    if (!mpInitFirstPlayer) return;
+    const t = setTimeout(() => setShowFirstFlash(false), 3_000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Seat ownership: which player index is "me" on this device ──
-  const [myPlayerIndex, setMyPlayerIndex] = useState<number | null>(() => {
+  const [myPlayerIndex] = useState<number | null>(() => {
     const s = localStorage.getItem(STORAGE_KEYS.MY_PLAYER_INDEX);
     return s !== null ? parseInt(s, 10) : null;
   });
 
-  const claimSeat = (idx: number) => {
-    const next = myPlayerIndex === idx ? null : idx; // tap same seat again to unclaim
-    setMyPlayerIndex(next);
-    if (next !== null) {
-      localStorage.setItem(STORAGE_KEYS.MY_PLAYER_INDEX, String(next));
-      // Fix C: persist seat claim so the reconnect handler can broadcast it
-      // (useMultiplayer reads this from localStorage in the "connected" branch)
-      localStorage.setItem("nexus_judge_seat_claim", JSON.stringify({
-        deviceId: getDeviceId(),
-        playerIndex: next,
-        playerName: players[next]?.name ?? `Player ${next + 1}`,
-      }));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX);
-      localStorage.removeItem("nexus_judge_seat_claim");
-    }
-  };
+
 
   // ── Multiplayer (extracted into useMultiplayer hook) ──
   const {
@@ -297,18 +297,18 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // ── Persistence ──
   const setPlayerNames = useAppStore(s => s.setPlayerNames);
   useEffect(() => {
-    localStorage.setItem("nexus_judge_players", JSON.stringify(players));
-    localStorage.setItem("nexus_judge_player_count", playerCount.toString());
-    localStorage.setItem("nexus_judge_player_names", JSON.stringify(players.map(p => p.name)));
+    localStorage.setItem(STORAGE_KEYS.PLAYERS, JSON.stringify(players));
+    localStorage.setItem(STORAGE_KEYS.PLAYER_COUNT, playerCount.toString());
+    localStorage.setItem(STORAGE_KEYS.PLAYER_NAMES, JSON.stringify(players.map(p => p.name)));
     setPlayerNames(players.map(p => p.name));
   }, [players, playerCount, setPlayerNames]);
 
-  useEffect(() => { localStorage.setItem("nexus_judge_life_history", JSON.stringify(history)); }, [history]);
-  useEffect(() => { localStorage.setItem("nexus_judge_active_counters", JSON.stringify(activeCounters)); }, [activeCounters]);
-  useEffect(() => { localStorage.setItem("nexus_judge_starting_life", startingLife.toString()); }, [startingLife]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.LIFE_HISTORY, JSON.stringify(history)); }, [history]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ACTIVE_COUNTERS, JSON.stringify(activeCounters)); }, [activeCounters]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.STARTING_LIFE, startingLife.toString()); }, [startingLife]);
   useEffect(() => {
-    if (dayNightState !== "none") localStorage.setItem("nexus_judge_day_night", dayNightState);
-    else localStorage.removeItem("nexus_judge_day_night");
+    if (dayNightState !== "none") localStorage.setItem(STORAGE_KEYS.DAY_NIGHT, dayNightState);
+    else localStorage.removeItem(STORAGE_KEYS.DAY_NIGHT);
   }, [dayNightState]);
 
   // Close Mechanics menu on outside click
@@ -351,20 +351,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  // ── Turn tracker handlers ──
-
-  const goNextTurn = () => {
-    const nextIdx = (activePlayerIndex + 1) % players.length;
-    const nextTurn = turnNumber + 1;
-    setActivePlayerIndex(nextIdx);
-    setTurnNumber(nextTurn);
-    addLog(`Turn ${nextTurn} — ${players[nextIdx]?.name ?? "?"}`);
-    scheduleBroadcast();
-  };
-
-  const goPrevTurn = () => {
-    setActivePlayerIndex(prev => (prev - 1 + players.length) % players.length);
-  };
 
   // ── Save-game helpers ─────────────────────────────────────────────────────
 
@@ -428,24 +414,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     setStartingLifeState(life);
     setPlayers(prev => prev.map(p => ({ ...p, life })));
     addLog(`Starting life changed to ${life}. All players updated.`);
-  };
-
-  /** Apply the Turn Order's current player roster (names + chosen colors) to the Life Counter */
-  const handleSyncFromTurnOrder = () => {
-    try {
-      const savedNames  = JSON.parse(localStorage.getItem(STORAGE_KEYS.TURN_PLAYERS)  || "[]") as string[];
-      const savedColors = JSON.parse(localStorage.getItem(STORAGE_KEYS.TURN_COLORS)   || "{}") as Record<string, string>;
-      if (savedNames.length === 0) return;
-      scheduleBroadcast();
-      setPlayerCount(savedNames.length);
-      setPlayers(savedNames.map((name, i) => {
-        const colorName = (savedColors[name] && colorKeys.includes(savedColors[name] as keyof typeof colors))
-          ? savedColors[name] as keyof typeof colors
-          : colorKeys[i % colorKeys.length];
-        return { ...createPlayer(i, startingLife), name, colorName };
-      }));
-      setHistory([`Synced ${savedNames.length} players from Turn Order.`]);
-    } catch { /* ignore corrupt data */ }
   };
 
   const resetGame = () => setShowResetConfirm(true);
@@ -522,14 +490,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     const next = player.life + amount;
     addLog(`${player.name}: ${amount > 0 ? "+" : ""}${amount} life → ${next}`);
     setPlayers(prev => prev.map(p => p.id !== playerId ? p : { ...p, life: next }));
-  };
-
-  const cycleColor = (playerId: number) => {
-    setPlayers(prev => prev.map(p => {
-      if (p.id !== playerId) return p;
-      const next = (colorKeys.indexOf(p.colorName) + 1) % colorKeys.length;
-      return { ...p, colorName: colorKeys[next] };
-    }));
   };
 
   const renamePlayer = (playerId: number, name: string) => {
@@ -624,7 +584,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     scheduleBroadcast();
     pushUndo(players);
     addLog(`${player.name}: ${!player.cityBlessing ? "Gained" : "Lost"} the City's Blessing.`);
-    setPlayers(prev => prev.map(p => p.id !== playerId ? p : { ...p, cityBlessing: !p.cityBlessing }));
+    setPlayers(prev => prev.map(p => p.id !== playerId ? p : { ...p, cityBlessing: !player.cityBlessing }));
   };
 
   const adjustPoison = (playerId: number, amount: number) => {
@@ -926,7 +886,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
               {/* Player Count Selector */}
               <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "3px", gap: "1px" }}>
-                {[2, 3, 4, 5, 6, 8].map(num => (
+                {[2, 3, 4, 5, 6].map(num => (
                   <button
                     key={num}
                     onClick={() => handlePlayerCountChange(num)}
@@ -1004,20 +964,44 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                         </button>
                       );
                     })}
+
+                    <div style={{ width: "100%", height: "1px", background: "var(--border-color)", margin: "4px 0" }} />
+
+                    <button
+                      onClick={() => {
+                        const next = !wakeLockEnabled;
+                        setWakeLockEnabled(next);
+                        localStorage.setItem(STORAGE_KEYS.WAKE_LOCK, String(next));
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        background: wakeLockEnabled ? "rgba(16,185,129,0.1)" : "transparent",
+                        border: `1px solid ${wakeLockEnabled ? "rgba(16,185,129,0.25)" : "transparent"}`,
+                        color: "#fff", cursor: "pointer",
+                        padding: "8px 10px", borderRadius: "9px", textAlign: "left",
+                        transition: "all 0.15s ease", width: "100%",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{
+                          width: "30px", height: "30px", borderRadius: "8px",
+                          background: wakeLockEnabled ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        }}>
+                          <Moon size={15} color={wakeLockEnabled ? "#10b981" : "var(--text-muted)"} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "0.87rem", fontWeight: 600, color: wakeLockEnabled ? "#fff" : "var(--text-secondary)" }}>Keep Screen Awake</div>
+                          <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Prevents phone from locking</div>
+                        </div>
+                      </div>
+                      {wakeLockEnabled && <Check size={14} color="#10b981" style={{ flexShrink: 0 }} />}
+                    </button>
                   </div>
                 )}
               </div>
 
-              {/* Sync from Turn Order */}
-              <button
-                onClick={handleSyncFromTurnOrder}
-                className="glass-button"
-                title="Import player names and colors from the Turn Order tab"
-                style={{ padding: "7px 13px", fontSize: "0.82rem", background: "rgba(255,255,255,0.02)" }}
-              >
-                <RefreshCw size={14} />
-                <span>Sync Turn Order</span>
-              </button>
+
 
               {/* Save / Load Game */}
               <button
@@ -1057,24 +1041,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               </button>
             </div>
 
-            {/* ── Turn Tracker ── */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0", borderTop: "1px solid var(--border-color)" }}>
-              <button
-                onClick={goPrevTurn}
-                className="glass-button touch-icon-btn"
-                style={{ padding: "6px 12px", minWidth: "44px", fontSize: "0.82rem" }}
-                aria-label="Previous player's turn"
-              >‹ Prev</button>
-              <span style={{ flex: 1, textAlign: "center", fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                Turn {turnNumber} · {players[activePlayerIndex]?.name ?? "—"}
-              </span>
-              <button
-                onClick={goNextTurn}
-                className="glass-button touch-icon-btn"
-                style={{ padding: "6px 12px", minWidth: "44px", fontSize: "0.82rem" }}
-                aria-label="Next player's turn"
-              >Next ›</button>
-            </div>
 
             {/* ── Multiplayer Section ── */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
@@ -1209,6 +1175,34 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           />
         )}
 
+        {/* ── "Goes First" flash banner — shows for 3 s on game start, then fades ── */}
+        {showFirstFlash && firstPlayerName && (
+          <div className="first-player-flash" style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+            padding: "10px 28px", borderRadius: "10px", flexShrink: 0,
+            background: "linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(6,182,212,0.10) 100%)",
+            border: "1px solid rgba(139,92,246,0.35)",
+          }}>
+            <span style={{ fontSize: "1.1rem" }}>⭐</span>
+            <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+              <span style={{ color: "var(--accent-purple)" }}>{firstPlayerName}</span>
+              {" "}goes first!
+            </span>
+            <span style={{ fontSize: "1.1rem" }}>⭐</span>
+          </div>
+        )}
+
+        {/* ── Table Center (Monarch / Initiative) ── */}
+        <TableCenter
+          players={players}
+          assignMonarch={assignMonarch}
+          releaseMonarch={releaseMonarch}
+          assignInitiative={assignInitiative}
+          releaseInitiative={releaseInitiative}
+          hasMonarchMechanic={activeCounters.monarch}
+          hasInitiativeMechanic={activeCounters.initiative}
+        />
+
         {/* ── Player Grid ── */}
         <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
           {players.map((p, idx) => {
@@ -1228,21 +1222,15 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 adjustTax={adjustTax}
                 togglePartner={togglePartner}
                 renamePlayer={renamePlayer}
-                cycleColor={cycleColor}
                 setAvatar={setAvatar}
-                assignMonarch={assignMonarch}
-                releaseMonarch={releaseMonarch}
-                assignInitiative={assignInitiative}
-                releaseInitiative={releaseInitiative}
                 toggleCityBlessing={toggleCityBlessing}
                 togglePlayerTokenType={togglePlayerTokenType}
                 togglePlayerTokensPanel={togglePlayerTokensPanel}
                 setActiveDamageEditor={setActiveDamageEditor}
                 revivePlayer={revivePlayer}
                 isFirst={firstPlayerName !== null && p.name === firstPlayerName}
-                isActiveTurn={idx === activePlayerIndex}
+                isActiveTurn={showFirstFlash && idx === activePlayerIndex}
                 isLocalPlayer={myPlayerIndex === null || idx === myPlayerIndex}
-                claimSeat={() => claimSeat(idx)}
                 commanderName={p.commanderName}
                 onSetCommander={setPlayerCommander}
                 onClearCommander={clearPlayerCommander}

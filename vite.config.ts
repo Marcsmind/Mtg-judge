@@ -4,6 +4,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    proxy: {
+      '/.netlify/functions': {
+        target: 'https://mtg-judge.netlify.app',
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     // Vitest runs pure-logic unit tests in a Node environment.
     // React component tests are not included yet (DOM env needed for those).
