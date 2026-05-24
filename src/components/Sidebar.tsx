@@ -78,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
               gap: "3px", padding: "6px 4px",
               background: "transparent",
               border: "none", borderRadius: "8px",
-              color: "var(--accent-cyan)",
+              color: "var(--text-muted)",
               fontSize: "0.55rem", fontWeight: 500,
               cursor: "pointer", transition: "all 0.15s ease",
             }}
@@ -256,7 +256,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
             borderColor: "rgba(255,255,255,0.05)",
           }}
         >
-          <Search size={16} color="var(--accent-cyan)" />
+          <Search size={16} color="var(--text-secondary)" />
           {!collapsed && <span className="sidebar-nav-label">Card Codex</span>}
         </button>
 

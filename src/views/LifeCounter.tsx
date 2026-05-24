@@ -760,7 +760,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: "8px", padding: "7px 10px",
-                color: "var(--accent-cyan)",
+                color: "var(--text-secondary)",
                 cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
                 transition: "all 0.15s ease", flexShrink: 0,
               }}
