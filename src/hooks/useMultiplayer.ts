@@ -30,6 +30,8 @@ import {
   onStateRequest,
   broadcastSeatClaim,
   onSeatClaim,
+  broadcastHeartbeat,
+  onHeartbeat,
   persistState,
   fetchPersistedState,
 } from "../services/multiplayerSync";
@@ -65,6 +67,7 @@ export interface UseMultiplayerReturn {
   roomCopied:        boolean;
   roomError:         string | null;
   roomReconnecting:  boolean;
+  heartbeatTimes:    Map<number, number>;
   scheduleBroadcast: () => void;
   handleCreateRoom:  () => void;
   handleJoinRoom:    (overrideCode?: string) => void;
@@ -87,6 +90,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
   const [roomCopied, setRoomCopied]           = useState(false);
   const [roomError, setRoomError]             = useState<string | null>(null);
   const [roomReconnecting, setRoomReconnecting] = useState(false);
+  const [heartbeatTimes, setHeartbeatTimes]     = useState<Map<number, number>>(() => new Map());
 
   // ── Refs ──
   // Tracks the updatedAt of the last state we applied from remote — prevents
@@ -111,6 +115,9 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     updatedAt: 0,
     updatedBy: "",
   }));
+
+  // Heartbeat interval — broadcasts alive ping every 8 s while foregrounded
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fix A: suppress local broadcasts for 3 s after reconnect while catching up
   // from a peer or DB snapshot (prevents stale local state from overwriting live game).
@@ -249,6 +256,31 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     }, 150);
   };
 
+  // ── Heartbeat helpers ─────────────────────────────────────────────────────
+  const _startHeartbeat = (code: string) => {
+    if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+    const myIndex = parseInt(localStorage.getItem(STORAGE_KEYS.MY_PLAYER_INDEX) ?? "-1", 10);
+    const send = () => {
+      if (document.visibilityState !== "visible") return;
+      const idx = parseInt(localStorage.getItem(STORAGE_KEYS.MY_PLAYER_INDEX) ?? "-1", 10);
+      if (idx < 0 || !roomCodeRef.current) return;
+      broadcastHeartbeat(code, { playerIndex: idx });
+      // Update local player's heartbeat time directly (broadcasts don't echo back to sender)
+      setHeartbeatTimes(prev => new Map(prev).set(idx, Date.now()));
+    };
+    // Set local player immediately on connect, then pulse every 8 s
+    if (myIndex >= 0) setHeartbeatTimes(prev => new Map(prev).set(myIndex, Date.now()));
+    heartbeatIntervalRef.current = setInterval(send, 8_000);
+  };
+
+  const _stopHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    setHeartbeatTimes(new Map());
+  };
+
   // ── Shared post-connect setup ──────────────────────────────────────────────
   // Called by both handleCreateRoom and handleJoinRoom after a successful subscribe.
   // Registers Fix A (state_request responder) and Fix C (seat_claim listener)
@@ -265,6 +297,13 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     onSeatClaim(code, (claim) => {
       showToast(`${claim.playerName} joined`, "success");
     });
+
+    // Presence: update heartbeat time for the peer that just pinged
+    onHeartbeat(code, ({ playerIndex }) => {
+      setHeartbeatTimes(prev => new Map(prev).set(playerIndex, Date.now()));
+    });
+
+    _startHeartbeat(code);
   };
 
   // ── Room actions ──
@@ -331,6 +370,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     // Cancel any in-flight catch-up timer
     if (catchUpTimerRef.current) clearTimeout(catchUpTimerRef.current);
     isCatchingUp.current = false;
+    _stopHeartbeat();
 
     if (roomCode) leaveRoom(roomCode); // also cleans up handler registrations
     roomCodeRef.current = null;
@@ -390,6 +430,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     roomCopied,
     roomError,
     roomReconnecting,
+    heartbeatTimes,
     scheduleBroadcast,
     handleCreateRoom,
     handleJoinRoom,

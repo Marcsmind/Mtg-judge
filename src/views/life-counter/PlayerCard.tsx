@@ -54,6 +54,7 @@ interface PlayerCardProps {
   savedDecks?:          SavedDeck[];
   isActiveTurn?:        boolean;  // turn tracker — highlights the active player
   isLocalPlayer?:       boolean;  // true = this seat belongs to the device; default true (open edit)
+  lastHeartbeat?:       number;   // Date.now() of last received heartbeat; undefined = not in a room
 }
 
 const PlayerCardBase: React.FC<PlayerCardProps> = ({
@@ -78,6 +79,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   savedDecks = [],
   isActiveTurn = false,
   isLocalPlayer = true,
+  lastHeartbeat,
 }) => {
 
   const [commanderArt, setCommanderArt] = useState<string | null>(null);
@@ -153,12 +155,27 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   const cmdDeath   = getCmdDeathReason();
   const isDefeated = isDeadGeneral || !!cmdDeath || isPoisonDead;
 
+  // ── Presence dot ──────────────────────────────────────────────────────────
+  // Tick every 12 s so color stays fresh as heartbeats age — store `now` in
+  // state to avoid calling Date.now() during render (react-hooks/purity rule).
+  const [presenceNow, setPresenceNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (lastHeartbeat === undefined) return;
+    const t = setInterval(() => setPresenceNow(Date.now()), 12_000);
+    return () => clearInterval(t);
+  }, [lastHeartbeat !== undefined]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dotColor = lastHeartbeat === undefined ? null
+    : (presenceNow - lastHeartbeat < 10_000)  ? "#22c55e"  // green  — live
+    : (presenceNow - lastHeartbeat < 30_000)  ? "#eab308"  // yellow — lagging
+    : "#6b7280";                                             // gray   — offline/locked
+
   return (
     <div
       style={{
-        background: commanderArt 
+        background: commanderArt
           ? `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.85)), url(${commanderArt}) center/cover no-repeat`
-          : playerTheme.bg, 
+          : playerTheme.bg,
         borderRadius: "14px",
         border: `1.5px solid ${p.isMonarch ? "#eab308" : isDefeated ? "rgba(239,68,68,0.6)" : isActiveTurn ? "var(--accent-purple)" : playerTheme.border}`,
         padding: "12px 14px", display: "flex", flexDirection: "column", gap: "4px",
@@ -173,6 +190,21 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)",
       }}
     >
+      {/* ── Presence dot — only shown during a multiplayer session ── */}
+      {dotColor && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute", top: "8px", right: "8px",
+            width: "8px", height: "8px", borderRadius: "50%",
+            background: dotColor, opacity: 0.55,
+            boxShadow: `0 0 5px ${dotColor}`,
+            pointerEvents: "none", zIndex: 20,
+            transition: "background 1s ease, box-shadow 1s ease",
+          }}
+        />
+      )}
+
       {/* ── "Goes First" Star Badge — auto-dismisses after 10 s ── */}
       {showFirstBadge && (
         <div

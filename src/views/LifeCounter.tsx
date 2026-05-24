@@ -256,7 +256,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const {
     roomCode, roomConnected, roomRole, roomName, setRoomName,
     joinCodeInput, setJoinCodeInput, roomLoading, roomCopied,
-    roomError, roomReconnecting,
+    roomError, roomReconnecting, heartbeatTimes,
     scheduleBroadcast, handleCreateRoom, handleJoinRoom, handleLeaveRoom, copyRoomCode,
   } = useMultiplayer({
     players, activeCounters, dayNightState, startingLife,
@@ -1176,6 +1176,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 onSetCommander={setPlayerCommander}
                 onClearCommander={clearPlayerCommander}
                 savedDecks={savedDecks}
+                lastHeartbeat={roomConnected ? heartbeatTimes.get(idx) : undefined}
               />
             );
           })}

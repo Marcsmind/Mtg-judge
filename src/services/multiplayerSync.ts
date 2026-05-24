@@ -71,6 +71,12 @@ export interface SeatClaim {
   role:        "host" | "guest";
 }
 
+// ── Presence heartbeat ────────────────────────────────────────────────────────
+/** Broadcast every 8 s to signal the device is still alive and foregrounded. */
+export interface HeartbeatPayload {
+  playerIndex: number;
+}
+
 // ── Connection status type (forwarded to the UI layer) ───────────────────────
 export type ConnectionStatus = "reconnecting" | "connected" | "failed";
 
@@ -96,6 +102,8 @@ const reconnecting: Set<string> = new Set();
 const stateRequestHandlers: Map<string, () => void> = new Map();
 /** Called when a remote device broadcasts `seat_claim`. */
 const seatClaimHandlers: Map<string, (claim: SeatClaim) => void> = new Map();
+/** Called when a remote device broadcasts `heartbeat`. */
+const heartbeatHandlers: Map<string, (hb: HeartbeatPayload) => void> = new Map();
 
 // ── Room code generator ───────────────────────────────────────────────────────
 
@@ -243,6 +251,7 @@ export function leaveRoom(roomCode: string): void {
   // Clean up per-room event handlers
   stateRequestHandlers.delete(roomCode);
   seatClaimHandlers.delete(roomCode);
+  heartbeatHandlers.delete(roomCode);
 }
 
 // ── Fix A: State request / catch-up protocol ─────────────────────────────────
@@ -298,6 +307,24 @@ export function broadcastSeatClaim(roomCode: string, claim: SeatClaim): void {
  */
 export function onSeatClaim(roomCode: string, callback: (claim: SeatClaim) => void): void {
   seatClaimHandlers.set(roomCode, callback);
+}
+
+// ── Presence heartbeat ────────────────────────────────────────────────────────
+
+/** Broadcasts a lightweight alive ping every 8 s so peers can show presence dots. */
+export function broadcastHeartbeat(roomCode: string, payload: HeartbeatPayload): void {
+  const channel = channels.get(roomCode);
+  if (!channel) return;
+  channel.send({
+    type: "broadcast",
+    event: "heartbeat",
+    payload,
+  }).catch(() => {});
+}
+
+/** Registers a callback for incoming heartbeat pings from remote devices. */
+export function onHeartbeat(roomCode: string, callback: (hb: HeartbeatPayload) => void): void {
+  heartbeatHandlers.set(roomCode, callback);
 }
 
 // ── Fix D: Supabase DB persistence ───────────────────────────────────────────
@@ -413,6 +440,15 @@ async function _subscribeToRoom(
     { event: "seat_claim" },
     ({ payload }: { payload: SeatClaim }) => {
       seatClaimHandlers.get(roomCode)?.(payload);
+    },
+  );
+
+  // Presence: a peer sent an alive ping
+  channel.on(
+    "broadcast",
+    { event: "heartbeat" },
+    ({ payload }: { payload: HeartbeatPayload }) => {
+      heartbeatHandlers.get(roomCode)?.(payload);
     },
   );
 
