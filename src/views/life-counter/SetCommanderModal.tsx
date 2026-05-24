@@ -19,32 +19,54 @@ import type { SavedDeck } from "../../types/deck";
 // ── Commander autocomplete hook (same pattern as LobbyPanel) ─────────────────
 
 function useCommanderSuggestions(query: string) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [loading, setLoading]         = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const [suggestions, setSuggestions]         = useState<string[]>([]);
+  const [loading, setLoading]                 = useState(false);
+  const [suggestionCards, setSuggestionCards] = useState<Map<string, ScryfallCard>>(new Map());
+  const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef    = useRef<AbortController | null>(null);
+  const imgAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     abortRef.current?.abort();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (query.length < 2) { setSuggestions([]); return; }
+    if (query.length < 2) { setSuggestions([]); setSuggestionCards(new Map()); return; }
 
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       abortRef.current = new AbortController();
       const results = await autocompleteCard(query, abortRef.current.signal);
-      setSuggestions(results.slice(0, 8));
+      const names = results.slice(0, 8);
+      setSuggestions(names);
       setLoading(false);
+
+      // Background: batch-fetch card images for all suggestions in one request
+      imgAbortRef.current?.abort();
+      imgAbortRef.current = new AbortController();
+      if (names.length > 0) {
+        const q = names.map(n => `!"${n}"`).join(" or ");
+        try {
+          const res = await fetch(
+            `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}`,
+            { signal: imgAbortRef.current.signal }
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          const map = new Map<string, ScryfallCard>();
+          for (const card of (data.data as ScryfallCard[])) map.set(card.name, card);
+          setSuggestionCards(map);
+        } catch { /* ignore abort/network errors */ }
+      }
     }, 300);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       abortRef.current?.abort();
+      imgAbortRef.current?.abort();
     };
   }, [query]);
 
-  return { suggestions, loading };
+  return { suggestions, loading, suggestionCards };
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -76,7 +98,7 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
   const inputRef  = useRef<HTMLDivElement>(null);
   const hoverAbort = useRef<AbortController | null>(null);
 
-  const { suggestions, loading: cmdLoading } = useCommanderSuggestions(cmdInput);
+  const { suggestions, loading: cmdLoading, suggestionCards } = useCommanderSuggestions(cmdInput);
 
   // Pre-load card data if a commander is already set
   useEffect(() => {
@@ -262,27 +284,38 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
                     boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
                   }}
                 >
-                  {suggestions.map((name, i) => (
-                    <button
-                      key={i}
-                      onMouseDown={() => handleSelectSuggestion(name)}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = "rgba(139,92,246,0.12)";
-                        handleSuggestionHover(name);
-                      }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-                      style={{
-                        display: "block", width: "100%", padding: "8px 12px",
-                        background: "transparent", border: "none",
-                        color: "var(--text-primary)", fontSize: "0.88rem", textAlign: "left",
-                        cursor: "pointer", transition: "background 0.1s",
-                        borderBottom: i < suggestions.length - 1 || previewCard
-                          ? "1px solid rgba(255,255,255,0.04)" : "none",
-                      }}
-                    >
-                      {name}
-                    </button>
-                  ))}
+                  {suggestions.map((name, i) => {
+                    const thumb = suggestionCards.get(name);
+                    return (
+                      <button
+                        key={i}
+                        onMouseDown={() => handleSelectSuggestion(name)}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = "rgba(139,92,246,0.12)";
+                          handleSuggestionHover(name);
+                        }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "10px",
+                          width: "100%", padding: thumb ? "6px 12px" : "8px 12px",
+                          background: "transparent", border: "none",
+                          color: "var(--text-primary)", fontSize: "0.88rem", textAlign: "left",
+                          cursor: "pointer", transition: "background 0.1s",
+                          borderBottom: i < suggestions.length - 1 || previewCard
+                            ? "1px solid rgba(255,255,255,0.04)" : "none",
+                        }}
+                      >
+                        {thumb && (
+                          <img
+                            src={getCardImage(thumb)}
+                            alt={name}
+                            style={{ width: "32px", height: "44px", borderRadius: "3px", objectFit: "cover", flexShrink: 0 }}
+                          />
+                        )}
+                        <span>{name}</span>
+                      </button>
+                    );
+                  })}
 
                   {/* Hover preview */}
                   {previewCard && (
