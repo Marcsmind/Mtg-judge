@@ -92,12 +92,14 @@ interface LifeCounterProps {
    *  bumped alongside this prop so the lazy useState initializer runs fresh. */
   mpInitLobbyPlayers?: LobbyPlayer[];
   mpInitFirstPlayer?:  string;       // spin winner — shown with the ⭐ badge briefly
+  onLobbyConsumed?:    () => void;   // called once lobby data is successfully loaded
 }
 
 export const LifeCounter: React.FC<LifeCounterProps> = ({
   userId,
   mpInitLobbyPlayers,
   mpInitFirstPlayer,
+  onLobbyConsumed,
 }) => {
   const { showToast } = useToast();
 
@@ -182,6 +184,14 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     const count = parseInt(localStorage.getItem(STORAGE_KEYS.PLAYER_COUNT) || "4", 10);
     return Array.from({ length: count }, (_, i) => createPlayer(i, sl));
   });
+
+  // Signal back to App.tsx that the lobby data has been consumed into local state
+  useEffect(() => {
+    if (mpInitLobbyPlayers && mpInitLobbyPlayers.length > 0) {
+      onLobbyConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [activeDamageEditor, setActiveDamageEditor] = useState<number | null>(null);
   const [showCountersMenu, setShowCountersMenu] = useState(false);
