@@ -373,6 +373,17 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       setRoomRole(role);
       setRoomLoading(false);
       if (!overrideCode) setJoinCodeInput("");
+      // Request current game state so the guest sees the live layout immediately
+      // (without this, they'd see stale state until the host next broadcasts).
+      sendStateRequest(code);
+      fetchPersistedState(code).then(saved => {
+        if (!saved || saved.schemaVersion !== SYNC_SCHEMA_VERSION) return;
+        if (saved.updatedAt <= lastAppliedAt.current) return;
+        lastAppliedAt.current = saved.updatedAt;
+        options.onRemotePlayers(saved.players);
+        options.onRemoteCounters(saved.activeCounters);
+        options.onRemoteDayNight(saved.dayNightState);
+      });
       return;
     }
 

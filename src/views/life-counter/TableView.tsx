@@ -1,8 +1,8 @@
 /**
  * TableView — multiplayer split layout.
  *
- * "My card" is shown full-size. All opponents are shown as compact tappable
- * tiles that open a detail BottomSheet with full stats.
+ * "My card" is shown full-size at the bottom. All opponents are shown as compact
+ * tappable tiles that open a detail BottomSheet with full stats and life controls.
  *
  * Only rendered when roomConnected && myPlayerIndex !== null.
  * Local solo sessions use the standard symmetric grid.
@@ -15,7 +15,7 @@ import type { SavedDeck } from "../../types/deck";
 import { PlayerCard } from "./PlayerCard";
 import { TOKEN_TYPES } from "./TokenModal";
 import { BottomSheet } from "../../components/BottomSheet";
-import { searchCardFuzzy, getCardImage } from "../../services/scryfall";
+import { searchCardFuzzy } from "../../services/scryfall";
 import { useMobile } from "../../hooks/useMobile";
 
 interface ColorTheme { bg: string; accent: string; border: string; }
@@ -52,11 +52,21 @@ interface DetailSheetProps {
   allPlayers:     Player[];
   theme:          ColorTheme;
   lastHeartbeat:  number | undefined;
+  adjustLife:     (id: number, delta: number) => void;
+  adjustPoison:   (id: number, delta: number) => void;
   onClose:        () => void;
 }
 
+const adjBtn: React.CSSProperties = {
+  width: "52px", height: "52px", borderRadius: "50%",
+  border: "none", fontSize: "1.8rem", fontWeight: 300,
+  background: "rgba(255,255,255,0.08)", color: "#fff",
+  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+  touchAction: "none",
+};
+
 const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
-  player: p, allPlayers, theme, lastHeartbeat, onClose,
+  player: p, allPlayers, theme, lastHeartbeat, adjustLife, adjustPoison, onClose,
 }) => {
   const [cmdArt, setCmdArt] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -71,7 +81,10 @@ const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
     if (!p.commanderName) { setCmdArt(null); return; }
     let active = true;
     searchCardFuzzy(p.commanderName).then(card => {
-      if (active && card) setCmdArt(getCardImage(card));
+      if (!active) return;
+      const url = card?.image_uris?.art_crop
+        ?? card?.card_faces?.[0]?.image_uris?.art_crop;
+      if (url) setCmdArt(url);
     });
     return () => { active = false; };
   }, [p.commanderName]);
@@ -123,7 +136,7 @@ const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
         </div>
       </div>
 
-      {/* Life total */}
+      {/* Life total with +/− controls */}
       <div style={{
         textAlign: "center", padding: "16px 0 12px",
         borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: "14px",
@@ -140,34 +153,62 @@ const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
             DEFEATED
           </div>
         )}
+        <div style={{ display: "flex", gap: "16px", justifyContent: "center", marginTop: "12px" }}>
+          <button
+            onPointerDown={() => adjustLife(p.id, -1)}
+            style={adjBtn}
+            aria-label={`Subtract 1 life from ${p.name}`}
+          >−</button>
+          <button
+            onPointerDown={() => adjustLife(p.id, +1)}
+            style={adjBtn}
+            aria-label={`Add 1 life to ${p.name}`}
+          >+</button>
+        </div>
       </div>
 
       {/* Commander */}
       {p.commanderName && (
         <div style={{
-          display: "flex", gap: "12px", alignItems: "flex-start",
           background: "rgba(255,255,255,0.04)", borderRadius: "10px",
-          padding: "10px 12px", marginBottom: "12px",
+          padding: "10px 12px", marginBottom: "12px", overflow: "hidden",
         }}>
           {cmdArt && (
             <img src={cmdArt} alt={p.commanderName}
-              style={{ width: "52px", height: "38px", objectFit: "cover", borderRadius: "5px", flexShrink: 0 }} />
+              style={{
+                width: "100%", height: "80px",
+                objectFit: "cover", borderRadius: "6px",
+                marginBottom: "8px", display: "block",
+              }} />
           )}
-          <div>
-            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Commander</div>
-            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text-primary)", marginTop: "2px" }}>{p.commanderName}</div>
-          </div>
+          <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Commander</div>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text-primary)", marginTop: "2px" }}>{p.commanderName}</div>
         </div>
       )}
 
-      {/* Status row — poison, rad, monarch */}
-      {((p.poison ?? 0) > 0 || (p.rad ?? 0) > 0 || p.isMonarch || p.hasInitiative || p.cityBlessing) && (
+      {/* Poison counter with +/− */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+        <Skull size={14} color="#a3e635" />
+        <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)", flex: 1 }}>Poison</span>
+        <button
+          onPointerDown={() => adjustPoison(p.id, -1)}
+          style={{ ...adjBtn, width: "36px", height: "36px", fontSize: "1.2rem" }}
+          aria-label={`Remove poison from ${p.name}`}
+        >−</button>
+        <span style={{ fontSize: "1.1rem", fontWeight: 700, minWidth: "24px", textAlign: "center",
+          color: (p.poison ?? 0) >= 10 ? "#ef4444" : "#a3e635" }}>
+          {p.poison ?? 0}
+        </span>
+        <button
+          onPointerDown={() => adjustPoison(p.id, +1)}
+          style={{ ...adjBtn, width: "36px", height: "36px", fontSize: "1.2rem" }}
+          aria-label={`Add poison to ${p.name}`}
+        >+</button>
+      </div>
+
+      {/* Status row — rad, monarch, initiative, city's blessing */}
+      {((p.rad ?? 0) > 0 || p.isMonarch || p.hasInitiative || p.cityBlessing) && (
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
-          {(p.poison ?? 0) > 0 && (
-            <div style={statusPill("#a3e635")}>
-              <Skull size={12} /> {p.poison} poison
-            </div>
-          )}
           {(p.rad ?? 0) > 0 && (
             <div style={statusPill("#84cc16")}>
               ☢️ {p.rad} rad
@@ -250,6 +291,21 @@ interface CompactCardProps {
 const CompactOpponentCard: React.FC<CompactCardProps> = ({
   p, theme, lastHeartbeat, presenceNow, onClick,
 }) => {
+  const [cmdArt, setCmdArt] = useState<string | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!p.commanderName) { setCmdArt(null); return; }
+    let active = true;
+    searchCardFuzzy(p.commanderName).then(card => {
+      if (!active) return;
+      const url = card?.image_uris?.art_crop
+        ?? card?.card_faces?.[0]?.image_uris?.art_crop;
+      if (url) setCmdArt(url);
+    });
+    return () => { active = false; };
+  }, [p.commanderName]);
+
   const dotColor = lastHeartbeat === undefined ? null
     : (presenceNow - lastHeartbeat < 10_000) ? "#22c55e"
     : (presenceNow - lastHeartbeat < 30_000) ? "#eab308"
@@ -262,13 +318,20 @@ const CompactOpponentCard: React.FC<CompactCardProps> = ({
     <button
       onClick={onClick}
       style={{
-        background: theme.bg,
+        background: cmdArt
+          ? undefined
+          : theme.bg,
+        backgroundImage: cmdArt
+          ? `linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0.75)), url(${cmdArt})`
+          : undefined,
+        backgroundSize: cmdArt ? "cover" : undefined,
+        backgroundPosition: cmdArt ? "center" : undefined,
         border: `1.5px solid ${isDefeated ? "rgba(239,68,68,0.5)" : theme.border}`,
         borderRadius: "12px", padding: "10px 8px",
         display: "flex", flexDirection: "column",
         alignItems: "center", gap: "3px",
         cursor: "pointer", position: "relative",
-        width: "100%", minHeight: "90px",
+        width: "100%", height: "100%",
         transition: "filter 0.15s ease",
         boxShadow: isDefeated ? "0 0 12px rgba(239,68,68,0.15) inset" : undefined,
       }}
@@ -371,18 +434,19 @@ export const TableView: React.FC<TableViewProps> = ({
   return (
     <div style={{
       display: "flex",
-      flexDirection: isMobile ? "column" : "row",
+      // column-reverse puts my card at the bottom on mobile without changing DOM order
+      flexDirection: isMobile ? "column-reverse" : "row",
       gap: "12px",
       flex: 1,
       minHeight: 0,
       overflow: "hidden",
     }}>
-      {/* ── My card ── */}
+      {/* ── My card (bottom on mobile, left on desktop) ── */}
       <div style={{
         flexShrink: 0,
         ...(isMobile
-          ? { flex: "0 0 42%" }
-          : { width: "32%", minWidth: "220px" }
+          ? { flex: "0 0 40%" }
+          : { width: "32%", minWidth: "220px", order: 2 }
         ),
       }}>
         {me && (
@@ -414,14 +478,16 @@ export const TableView: React.FC<TableViewProps> = ({
         )}
       </div>
 
-      {/* ── Opponent grid ── */}
+      {/* ── Opponent grid (top on mobile, left on desktop) ── */}
       <div style={{
         flex: 1,
-        overflowY: "auto",
+        minHeight: 0,
         display: "grid",
         gridTemplateColumns: `repeat(${opponentCols}, 1fr)`,
+        gridAutoRows: "1fr",
         gap: "10px",
-        alignContent: "start",
+        alignContent: "stretch",
+        ...(isMobile ? {} : { order: 1 }),
       }}>
         {opponents.map(({ p, idx }) => (
           <CompactOpponentCard
@@ -442,6 +508,8 @@ export const TableView: React.FC<TableViewProps> = ({
           allPlayers={players}
           theme={selectedTheme}
           lastHeartbeat={heartbeatTimes.get(selectedIdx!)}
+          adjustLife={adjustLife}
+          adjustPoison={adjustPoison}
           onClose={() => setSelectedIdx(null)}
         />
       )}
