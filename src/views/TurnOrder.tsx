@@ -7,6 +7,8 @@ import {
   subscribeWithRetry,
   broadcastState,
   leaveRoom,
+  persistState,
+  fetchPersistedState,
   SYNC_SCHEMA_VERSION,
 } from "../services/multiplayerSync";
 import type { SyncState } from "../services/multiplayerSync";
@@ -78,6 +80,20 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
     if (!isMultiplayer || !mpRoomCode) return;
     let alive = true;
     subscribeWithRetry(mpRoomCode, s => { if (alive) handleMpUpdateRef.current(s); });
+
+    // Safety net: if the host already broadcast "Begin Game" before we subscribed,
+    // the ephemeral broadcast was missed. Check the persisted DB snapshot instead.
+    fetchPersistedState(mpRoomCode).then(saved => {
+      if (!alive) return;
+      if (
+        saved?.phase === "game" &&
+        saved.schemaVersion === SYNC_SCHEMA_VERSION &&
+        Date.now() - saved.updatedAt < 5 * 60 * 1000 // only act on recent state (≤5 min)
+      ) {
+        onMpPhaseChange?.("game", saved.mpSpinWinner ?? undefined);
+      }
+    });
+
     return () => {
       alive = false;
       leaveRoom(mpRoomCode);
@@ -567,16 +583,17 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
             {isMultiplayer && showBeginGame && mpRole === "host" && mpRoomCode && (
               <button
                 onClick={() => {
-                  // Clear stale saved players so LifeCounter always takes the fresh lobby init path
-                  localStorage.removeItem(STORAGE_KEYS.PLAYERS);
-                  broadcastState(mpRoomCode, {
+                  const gamePayload: SyncState = {
                     schemaVersion: SYNC_SCHEMA_VERSION,
                     players: [], activeCounters: {} as never, dayNightState: "none",
                     updatedAt: Date.now(), updatedBy: "host",
                     phase: "game",
                     mpSpinWinner: winner ?? undefined,
                     lobbyPlayers: mpLobbyPlayers,
-                  });
+                  };
+                  broadcastState(mpRoomCode, gamePayload);
+                  // Also persist so guests who missed the ephemeral broadcast can catch up
+                  persistState(mpRoomCode, gamePayload);
                   onMpPhaseChange?.("game", winner ?? undefined);
                 }}
                 aria-label="Begin the game — start life counter for all players"

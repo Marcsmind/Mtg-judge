@@ -674,7 +674,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             <Users size={20} color="var(--accent-purple)" />
             <div>
               <h2 style={{ fontSize: "1.1rem", fontWeight: 700, lineHeight: 1.1 }}>Life Counter</h2>
-              {!showControlsModal && <p style={{ color: "var(--text-secondary)", fontSize: "0.72rem" }}>Commander &amp; variant formats</p>}
             </div>
           </div>
 

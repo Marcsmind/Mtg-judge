@@ -119,6 +119,9 @@ function App() {
   const handleTurnOrderPhaseChange = useCallback((phase: "game", spinWinner?: string) => {
     if (phase === "game") {
       if (spinWinner) setMpSpinWinner(spinWinner);
+      // Clear stale saved players so LifeCounter always uses fresh lobby data (host + guests)
+      localStorage.removeItem(STORAGE_KEYS.PLAYERS);
+      localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX);
       setMpGameKey(prev => prev + 1);
       setActiveTab("life");
       // Same deferred clear — prevents re-init from lobby data on tab switches.

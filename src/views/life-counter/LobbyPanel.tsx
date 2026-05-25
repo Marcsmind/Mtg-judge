@@ -219,7 +219,7 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
       </div>
 
       {/* ── Your Setup ── */}
-      <div className="glass-panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div className="glass-panel" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px", position: "relative", zIndex: 2 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
           {isHost && <Crown size={13} color="#eab308" />}
           <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.8px" }}>
