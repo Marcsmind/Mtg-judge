@@ -651,7 +651,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", gap: "16px", height: "calc(100dvh - 48px)", overflow: "hidden" }}>
+    <div style={{ display: "flex", gap: "16px", flex: 1, minHeight: 0, overflow: "hidden" }}>
 
       {/* ── Screen-reader announcements for room status changes (aria-live) ── */}
       <div
