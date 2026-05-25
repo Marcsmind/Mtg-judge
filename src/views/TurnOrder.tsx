@@ -6,9 +6,9 @@ import { useMobile } from "../hooks/useMobile";
 import {
   subscribeWithRetry,
   broadcastState,
-  leaveRoom,
   persistState,
   fetchPersistedState,
+  reattachHandler,
   SYNC_SCHEMA_VERSION,
 } from "../services/multiplayerSync";
 import type { SyncState } from "../services/multiplayerSync";
@@ -83,12 +83,16 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
   useEffect(() => {
     if (!isMultiplayer || !mpRoomCode) return;
     let alive = true;
-    subscribeWithRetry(mpRoomCode, s => { if (alive) handleMpUpdateRef.current(s); });
 
-    // Safety net: poll the DB every 6 seconds so guests who missed the ephemeral
-    // "Begin Game" broadcast are caught up once the host's DB write lands.
-    // Fires on an interval rather than on mount because the host hasn't clicked
-    // Begin Game yet when TurnOrder first mounts — a mount-time check always returns null.
+    // Reuse the GameNight channel if still active — avoids the 0.5–3 s reconnect
+    // window that causes missed spin and Begin Game broadcasts.
+    const reused = reattachHandler(mpRoomCode, s => { if (alive) handleMpUpdateRef.current(s); });
+    if (!reused) {
+      // No existing channel (solo TurnOrder, or GameNight already tore down) — create one.
+      subscribeWithRetry(mpRoomCode, s => { if (alive) handleMpUpdateRef.current(s); });
+    }
+
+    // Safety-net poll: catches guests who missed the ephemeral Begin Game broadcast.
     const pollInterval = setInterval(() => {
       fetchPersistedState(mpRoomCode).then(saved => {
         if (!alive) return;
@@ -111,10 +115,11 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
     return () => {
       alive = false;
       clearInterval(pollInterval);
-      leaveRoom(mpRoomCode);
+      // Do NOT call leaveRoom — hand the channel off to LifeCounter's useMultiplayer.
+      // The channel will only be torn down when the user explicitly leaves the room.
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mpRoomCode]); // only re-run if room code changes
+  }, [mpRoomCode]);
 
   // Keep handleMpUpdateRef fresh every render (calls runMpSpinAnimationRef so no forward-ref issue)
   useEffect(() => {

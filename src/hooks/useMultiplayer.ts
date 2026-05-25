@@ -25,6 +25,7 @@ import {
   joinRoom as joinSyncRoom,
   broadcastState,
   leaveRoom,
+  reattachHandler,
   SYNC_SCHEMA_VERSION,
   sendStateRequest,
   onStateRequest,
@@ -357,6 +358,25 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     if (!code || !isSupabaseConfigured) return;
     setRoomLoading(true);
     setRoomError(null);
+
+    // Reuse TurnOrder's channel if still active — eliminates the "Reconnecting" banner
+    // and the 0.5–3 s window where life counter changes are lost.
+    const reused = reattachHandler(code, (s) => handleRemoteUpdateRef.current(s));
+    if (reused) {
+      roomCodeRef.current = code;
+      _registerHandlers(code);
+      const role = overrideCode
+        ? (localStorage.getItem(STORAGE_KEYS.ROOM_ROLE) as "host" | "guest" | null ?? "guest")
+        : "guest";
+      setRoomCode(code);
+      setRoomConnected(true); // channel already subscribed — no handshake needed
+      setRoomRole(role);
+      setRoomLoading(false);
+      if (!overrideCode) setJoinCodeInput("");
+      return;
+    }
+
+    // No active channel — subscribe fresh (e.g. app reopen after background, page refresh)
     const ok = await joinSyncRoom(
       code,
       (s) => handleRemoteUpdateRef.current(s),

@@ -91,6 +91,14 @@ const MAX_RECONNECT_ATTEMPTS = RECONNECT_DELAYS_MS.length + 1; // 5 total attemp
 // ── Active channel registry ───────────────────────────────────────────────────
 const channels: Map<string, RealtimeChannel> = new Map();
 
+/**
+ * Per-room state_update handler. Stored separately from `channels` so callers
+ * can swap their callback at phase transitions (GameNight→TurnOrder→LifeCounter)
+ * without recreating the underlying WebSocket connection.
+ * See reattachHandler() below.
+ */
+const updateHandlers: Map<string, (state: SyncState) => void> = new Map();
+
 /** Rooms that currently have a retry loop in progress — prevents parallel storms. */
 const reconnecting: Set<string> = new Set();
 
@@ -252,10 +260,31 @@ export function leaveRoom(roomCode: string): void {
   }
 
   // Clean up per-room event handlers
+  updateHandlers.delete(roomCode);
   stateRequestHandlers.delete(roomCode);
   seatClaimHandlers.delete(roomCode);
   heartbeatHandlers.delete(roomCode);
   gameEndHandlers.delete(roomCode);
+}
+
+// ── Channel handler swap (phase-transition continuity) ───────────────────────
+
+/**
+ * Attaches a new state_update handler to an already-subscribed channel without
+ * recreating the WebSocket connection. Returns true if the channel exists and
+ * is active; false if the caller must fall back to subscribeWithRetry / joinRoom.
+ *
+ * Call at phase transitions (GameNight→TurnOrder, TurnOrder→LifeCounter) so the
+ * channel created in GameNight stays alive all the way through to LifeCounter,
+ * eliminating the 0.5–3 s reconnect window that caused missed spin/Begin-Game broadcasts.
+ */
+export function reattachHandler(
+  roomCode: string,
+  onUpdate: (state: SyncState) => void,
+): boolean {
+  if (!channels.has(roomCode)) return false;
+  updateHandlers.set(roomCode, onUpdate);
+  return true;
 }
 
 // ── Fix A: State request / catch-up protocol ─────────────────────────────────
@@ -443,11 +472,14 @@ async function _subscribeToRoom(
     config: { broadcast: { self: false } }, // don't echo our own sends back
   });
 
+  // Route through updateHandlers so reattachHandler() can swap callbacks at phase
+  // transitions without recreating this channel.
+  updateHandlers.set(roomCode, onUpdate);
   channel.on(
     "broadcast",
     { event: "state_update" },
     ({ payload }: { payload: SyncState }) => {
-      onUpdate(payload);
+      updateHandlers.get(roomCode)?.(payload);
     }
   );
 
@@ -511,4 +543,6 @@ async function _subscribeToRoom(
   });
 
   channels.set(roomCode, channel);
+  // updateHandlers was already set before channel.subscribe() so the handler is
+  // active as soon as the first broadcast arrives after SUBSCRIBED.
 }

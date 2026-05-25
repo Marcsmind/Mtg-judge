@@ -20,6 +20,8 @@ import {
   joinRoom as joinSyncRoom,
   broadcastState,
   leaveRoom,
+  persistState,
+  fetchPersistedState,
   SYNC_SCHEMA_VERSION,
 } from "../services/multiplayerSync";
 import type { SyncState } from "../services/multiplayerSync";
@@ -87,6 +89,10 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
   const roomCodeRef = useRef<string | null>(null);
   useEffect(() => { roomCodeRef.current = roomCode; }, [roomCode]);
 
+  // Set to true before navigating to TurnOrder so the unmount cleanup doesn't
+  // tear down the channel — TurnOrder will reattach to it instead.
+  const isNavigatingRef = useRef(false);
+
   // Stable ref for Supabase callback — updated every render so it always closes over latest state
   const handleRemoteUpdateRef = useRef<(s: SyncState) => void>(() => undefined);
 
@@ -97,6 +103,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
 
       // ── Host broadcasts "turn-select" → everyone moves to TurnOrder ────────
       if (state.phase === "turn-select") {
+        isNavigatingRef.current = true; // keep channel alive for TurnOrder to reattach
         onMpPhaseChange(
           "turn-select",
           state.lobbyPlayers ?? lobbyPlayers,
@@ -128,8 +135,31 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
     };
   });
 
-  // ── Cleanup: leave room on unmount ───────────────────────────────────────
-  useEffect(() => () => { if (roomCodeRef.current) leaveRoom(roomCodeRef.current); }, []);
+  // ── Cleanup: only tear down channel on explicit leave, not on phase transition ──
+  // When navigating to TurnOrder, isNavigatingRef is set so TurnOrder can reattach.
+  useEffect(() => () => {
+    if (!isNavigatingRef.current && roomCodeRef.current) leaveRoom(roomCodeRef.current);
+  }, []);
+
+  // ── Guest catch-up poll: navigate to TurnOrder even if "All In" broadcast was missed ──
+  useEffect(() => {
+    if (!roomCode || roomRole !== "guest") return;
+    let alive = true;
+    const poll = setInterval(() => {
+      fetchPersistedState(roomCode).then(saved => {
+        if (!alive || !saved) return;
+        if (saved.schemaVersion !== SYNC_SCHEMA_VERSION) return;
+        if (Date.now() - saved.updatedAt >= 5 * 60_000) return;
+        if (saved.phase === "turn-select" || saved.phase === "game") {
+          clearInterval(poll);
+          isNavigatingRef.current = true;
+          onMpPhaseChange("turn-select", saved.lobbyPlayers ?? [], roomCode, "guest");
+        }
+      });
+    }, 6_000);
+    return () => { alive = false; clearInterval(poll); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, roomRole]);
 
   // ── Room actions ─────────────────────────────────────────────────────────
 
@@ -243,17 +273,20 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
   /** Host clicks "All In — Start!" → transition everyone to TurnOrder. */
   const handleLobbyStart = () => {
     if (!roomCode) return;
-    // Broadcast turn-select to all guests so they navigate too
-    broadcastState(roomCode, {
+    const payload = {
       schemaVersion: SYNC_SCHEMA_VERSION,
-      players: [],
+      players: [] as never[],
       activeCounters: EMPTY_COUNTERS,
-      dayNightState: "none",
+      dayNightState: "none" as const,
       updatedAt: Date.now(),
       updatedBy: "host",
-      phase: "turn-select",
+      phase: "turn-select" as const,
       lobbyPlayers,
-    });
+    };
+    broadcastState(roomCode, payload);
+    // Persist so guests who missed the ephemeral broadcast catch up via the 6 s poll
+    persistState(roomCode, payload);
+    isNavigatingRef.current = true; // keep channel alive for TurnOrder to reattach
     onMpPhaseChange("turn-select", lobbyPlayers, roomCode, "host");
   };
 
