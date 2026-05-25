@@ -198,6 +198,12 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Life counter fills its parent on desktop; on mobile it must reach exactly to the nav bar */
+.life-counter-root {
+  flex: 1;
+  min-height: 0;
+}
+
 /* Typography styles */
 h1, h2, h3, h4, h5 {
   font-family: 'Outfit', sans-serif;
@@ -529,6 +535,12 @@ h1, h2, h3, h4, h5 {
   .main-content {
     padding: 16px !important;
     padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Life counter: override flex to an explicit height that reaches the nav bar */
+  .life-counter-root {
+    flex: none !important;
+    height: calc(100dvh - env(safe-area-inset-top) - 16px - 52px - env(safe-area-inset-bottom)) !important;
   }
 
   /* Hide brand logo and nav labels on mobile tab bar */

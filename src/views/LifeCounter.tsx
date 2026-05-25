@@ -651,7 +651,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", gap: "16px", flex: 1, minHeight: 0, overflow: "hidden" }}>
+    <div className="life-counter-root" style={{ display: "flex", gap: "16px", overflow: "hidden" }}>
 
       {/* ── Screen-reader announcements for room status changes (aria-live) ── */}
       <div
@@ -1215,6 +1215,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             savedDecks={savedDecks}
             onSetCommander={setPlayerCommander}
             onClearCommander={clearPlayerCommander}
+            adjustCommanderDamage={adjustCommanderDamage}
+            adjustToken={adjustToken}
+            adjustTax={adjustTax}
           />
         ) : (
           <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
