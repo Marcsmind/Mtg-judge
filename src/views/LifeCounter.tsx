@@ -1215,12 +1215,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             savedDecks={savedDecks}
             onSetCommander={setPlayerCommander}
             onClearCommander={clearPlayerCommander}
-            adjustCommanderDamage={adjustCommanderDamage}
-            adjustToken={adjustToken}
-            adjustTax={adjustTax}
           />
         ) : (
-          <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
+          <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", gridAutoRows: "1fr", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
             {players.map((p, idx) => {
               const playerTheme = colors[p.colorName] || colors.purple;
               return (

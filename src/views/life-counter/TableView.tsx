@@ -10,8 +10,8 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Crown, Skull, ShieldAlert, Swords } from "lucide-react";
-import type { Player, ActiveCounters, TokenKey } from "../../types/game";
+import { Crown, Skull, ShieldAlert, Swords, Coins, Shield } from "lucide-react";
+import type { Player, ActiveCounters } from "../../types/game";
 import type { SavedDeck } from "../../types/deck";
 import type { ScryfallCard } from "../../services/scryfall";
 import { PlayerCard } from "./PlayerCard";
@@ -32,9 +32,6 @@ export interface TableViewProps {
   heartbeatTimes:         Map<number, number>;
   adjustLife:             (id: number, delta: number) => void;
   adjustPoison:           (id: number, delta: number) => void;
-  adjustCommanderDamage:  (targetId: number, sourceId: number, suffix: string, amount: number) => void;
-  adjustToken:            (id: number, key: TokenKey, amount: number) => void;
-  adjustTax:              (id: number, isPartner: boolean, amount: number) => void;
   renamePlayer:           (id: number, name: string) => void;
   setAvatar?:             (id: number, emoji: string) => void;
   toggleCityBlessing:     (id: number) => void;
@@ -66,16 +63,15 @@ function getOracleText(card: ScryfallCard): string | null {
 // ── Opponent detail sheet ─────────────────────────────────────────────────────
 
 interface DetailSheetProps {
-  player:                Player;
-  allPlayers:            Player[];
-  theme:                 ColorTheme;
-  lastHeartbeat:         number | undefined;
-  adjustLife:            (id: number, delta: number) => void;
-  adjustPoison:          (id: number, delta: number) => void;
-  adjustCommanderDamage: (targetId: number, sourceId: number, suffix: string, amount: number) => void;
-  adjustToken:           (id: number, key: TokenKey, amount: number) => void;
-  adjustTax:             (id: number, isPartner: boolean, amount: number) => void;
-  onClose:               () => void;
+  player:  Player;
+  theme:                   ColorTheme;
+  lastHeartbeat:           number | undefined;
+  adjustLife:              (id: number, delta: number) => void;
+  adjustPoison:            (id: number, delta: number) => void;
+  togglePlayerTaxPanel?:   (id: number) => void;
+  togglePlayerTokensPanel: (id: number) => void;
+  setActiveDamageEditor:   (id: number) => void;
+  onClose:                 () => void;
 }
 
 const adjBtn: React.CSSProperties = {
@@ -88,12 +84,14 @@ const adjBtn: React.CSSProperties = {
 
 const smallAdjBtn: React.CSSProperties = {
   ...adjBtn,
-  width: "32px", height: "32px", fontSize: "1.1rem",
+  width: "36px", height: "36px", fontSize: "1.2rem",
 };
 
 const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
-  player: p, allPlayers, theme, lastHeartbeat,
-  adjustLife, adjustPoison, adjustCommanderDamage, adjustToken, adjustTax, onClose,
+  player: p, theme, lastHeartbeat,
+  adjustLife, adjustPoison,
+  togglePlayerTaxPanel, togglePlayerTokensPanel, setActiveDamageEditor,
+  onClose,
 }) => {
   const [cmdCard, setCmdCard] = useState<ScryfallCard | null>(null);
   const [cmdFullView, setCmdFullView] = useState(false);
@@ -132,25 +130,8 @@ const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
   const isDefeated = p.life <= 0 || (p.poison ?? 0) >= 10
     || Object.values(p.commanderDamage).some(d => d >= 21);
 
-  // Commander damage rows for all opponents (including 0-damage sources)
-  const cmdDamageRows = allPlayers
-    .filter(src => src.id !== p.id)
-    .flatMap(src => {
-      const keyA = `${src.id}_A`;
-      const dmgA = p.commanderDamage[keyA] ?? 0;
-      const rows = [{ key: keyA, label: src.name, dmg: dmgA, srcId: src.id, suffix: "_A" }];
-      if (src.partnerMode) {
-        const keyB = `${src.id}_B`;
-        const dmgB = p.commanderDamage[keyB] ?? 0;
-        rows.push({ key: keyB, label: `${src.name} (Partner)`, dmg: dmgB, srcId: src.id, suffix: "_B" });
-      }
-      return rows;
-    });
-
-  // Tokens that are either enabled for this player or have a non-zero count
-  const editableTokens = TOKEN_TYPES.filter(t =>
-    (p.enabledTokens ?? []).includes(t.key) || (p.tokens?.[t.key] ?? 0) > 0
-  );
+  const hasTax      = p.tax > 0 || (p.partnerMode && p.taxPartner > 0);
+  const hasTokens   = TOKEN_TYPES.some(t => (p.tokens?.[t.key] ?? 0) > 0);
 
   return (
     <>
@@ -273,149 +254,81 @@ const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
         {/* Status row — rad, monarch, initiative, city's blessing */}
         {((p.rad ?? 0) > 0 || p.isMonarch || p.hasInitiative || p.cityBlessing) && (
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
-            {(p.rad ?? 0) > 0 && (
-              <div style={statusPill("#84cc16")}>
-                ☢️ {p.rad} rad
-              </div>
-            )}
-            {p.isMonarch && (
-              <div style={statusPill("#eab308")}>
-                <Crown size={12} /> Monarch
-              </div>
-            )}
-            {p.hasInitiative && (
-              <div style={statusPill("#8b5cf6")}>
-                <ShieldAlert size={12} /> Initiative
-              </div>
-            )}
-            {p.cityBlessing && (
-              <div style={statusPill("#06b6d4")}>
-                ✦ City's Blessing
-              </div>
-            )}
+            {(p.rad ?? 0) > 0 && <div style={statusPill("#84cc16")}>☢️ {p.rad} rad</div>}
+            {p.isMonarch && <div style={statusPill("#eab308")}><Crown size={12} /> Monarch</div>}
+            {p.hasInitiative && <div style={statusPill("#8b5cf6")}><ShieldAlert size={12} /> Initiative</div>}
+            {p.cityBlessing && <div style={statusPill("#06b6d4")}>✦ City's Blessing</div>}
           </div>
         )}
 
-        {/* Commander Damage — editable per source */}
-        {cmdDamageRows.length > 0 && (
-          <div style={{ marginBottom: "12px" }}>
-            <div style={sectionLabel}>Commander Damage</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {cmdDamageRows.map(({ key, label, dmg, srcId, suffix }) => (
-                <div key={key} style={{
-                  display: "flex", alignItems: "center", gap: "8px",
-                  background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "6px 8px",
-                }}>
-                  <Swords size={12} color="#ef4444" style={{ flexShrink: 0 }} />
-                  <span style={{
-                    fontSize: "0.82rem", color: "var(--text-secondary)",
-                    flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>{label}</span>
-                  <button
-                    onPointerDown={() => adjustCommanderDamage(p.id, srcId, suffix, -1)}
-                    style={smallAdjBtn}
-                    aria-label={`Remove commander damage from ${label}`}
-                  >−</button>
-                  <span style={{
-                    fontWeight: 800, fontSize: "0.9rem", minWidth: "38px", textAlign: "center",
-                    color: dmg >= 21 ? "#ef4444" : "var(--text-primary)",
-                  }}>
-                    {dmg}<span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.65rem" }}>/21</span>
-                  </span>
-                  <button
-                    onPointerDown={() => adjustCommanderDamage(p.id, srcId, suffix, +1)}
-                    style={smallAdjBtn}
-                    aria-label={`Add commander damage from ${label}`}
-                  >+</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tokens — editable */}
-        {editableTokens.length > 0 && (
-          <div style={{ marginBottom: "12px" }}>
-            <div style={sectionLabel}>Tokens</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {editableTokens.map(({ key, emoji, color, label }) => {
-                const count = p.tokens?.[key] ?? 0;
-                return (
-                  <div key={key} style={{
-                    display: "flex", alignItems: "center", gap: "8px",
-                    background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "6px 8px",
-                  }}>
-                    <span style={{ fontSize: "1rem", flexShrink: 0 }}>{emoji}</span>
-                    <span style={{ fontSize: "0.82rem", color, flex: 1 }}>{label}</span>
-                    <button
-                      onPointerDown={() => adjustToken(p.id, key, -1)}
-                      style={smallAdjBtn}
-                      aria-label={`Remove ${label}`}
-                    >−</button>
-                    <span style={{
-                      fontSize: "1rem", fontWeight: 700, minWidth: "24px", textAlign: "center", color,
-                    }}>{count}</span>
-                    <button
-                      onPointerDown={() => adjustToken(p.id, key, +1)}
-                      style={smallAdjBtn}
-                      aria-label={`Add ${label}`}
-                    >+</button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Commander Tax — editable */}
-        <div style={{ marginBottom: "12px" }}>
-          <div style={sectionLabel}>Commander Tax</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "6px 8px",
-            }}>
-              <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)", flex: 1 }}>
-                {p.partnerMode ? "Commander" : "Tax"}
+        {/* Bottom action row: Tax | Tokens | Commander Damage */}
+        <div style={{
+          display: "flex", justifyContent: "center", alignItems: "stretch",
+          gap: "10px", borderTop: "1px solid rgba(255,255,255,0.06)",
+          paddingTop: "14px", marginTop: "4px",
+        }}>
+          <button
+            onClick={() => { togglePlayerTaxPanel?.(p.id); onClose(); }}
+            aria-label="Commander Tax"
+            style={{
+              flex: 1,
+              background: hasTax ? "rgba(168,85,247,0.12)" : "rgba(255,255,255,0.04)",
+              border: `1px solid ${hasTax ? "rgba(168,85,247,0.3)" : "rgba(255,255,255,0.08)"}`,
+              borderRadius: "10px", padding: "10px 8px", cursor: "pointer",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <Crown size={20} color={hasTax ? "var(--accent-purple)" : "var(--text-muted)"} />
+            <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>Tax</span>
+            {hasTax && (
+              <span style={{ fontSize: "0.7rem", color: "var(--accent-purple)", fontWeight: 700 }}>
+                +{p.tax}{p.partnerMode && p.taxPartner > 0 ? ` / +${p.taxPartner}` : ""}
               </span>
-              <button
-                onPointerDown={() => adjustTax(p.id, false, -2)}
-                style={smallAdjBtn}
-                aria-label="Decrease commander tax"
-              >−</button>
-              <span style={{
-                fontSize: "1rem", fontWeight: 700, minWidth: "28px", textAlign: "center",
-                color: "var(--text-primary)",
-              }}>+{p.tax}</span>
-              <button
-                onPointerDown={() => adjustTax(p.id, false, +2)}
-                style={smallAdjBtn}
-                aria-label="Increase commander tax"
-              >+</button>
-            </div>
-            {p.partnerMode && (
-              <div style={{
-                display: "flex", alignItems: "center", gap: "8px",
-                background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "6px 8px",
-              }}>
-                <span style={{ fontSize: "0.82rem", color: "var(--text-secondary)", flex: 1 }}>Partner</span>
-                <button
-                  onPointerDown={() => adjustTax(p.id, true, -2)}
-                  style={smallAdjBtn}
-                  aria-label="Decrease partner tax"
-                >−</button>
-                <span style={{
-                  fontSize: "1rem", fontWeight: 700, minWidth: "28px", textAlign: "center",
-                  color: "var(--text-primary)",
-                }}>+{p.taxPartner}</span>
-                <button
-                  onPointerDown={() => adjustTax(p.id, true, +2)}
-                  style={smallAdjBtn}
-                  aria-label="Increase partner tax"
-                >+</button>
-              </div>
             )}
-          </div>
+          </button>
+
+          <button
+            onClick={() => { togglePlayerTokensPanel(p.id); onClose(); }}
+            aria-label="Tokens"
+            style={{
+              flex: 1,
+              background: hasTokens ? "rgba(234,179,8,0.12)" : "rgba(255,255,255,0.04)",
+              border: `1px solid ${hasTokens ? "rgba(234,179,8,0.4)" : "rgba(255,255,255,0.08)"}`,
+              borderRadius: "10px", padding: "10px 8px", cursor: "pointer",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <Coins size={20} color={hasTokens ? "#eab308" : "var(--text-muted)"} />
+            <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>Tokens</span>
+            {hasTokens && (
+              <span style={{ fontSize: "0.7rem", color: "#eab308", fontWeight: 700 }}>
+                {TOKEN_TYPES.reduce((s, t) => s + (p.tokens?.[t.key] ?? 0), 0)} total
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => { setActiveDamageEditor(p.id); onClose(); }}
+            aria-label="Commander Damage"
+            style={{
+              flex: 1,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "10px", padding: "10px 8px", cursor: "pointer",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <Shield size={20} color="var(--accent-cyan)" />
+            <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>Cmd Dmg</span>
+            {Object.values(p.commanderDamage).some(d => d > 0) && (
+              <span style={{ fontSize: "0.7rem", color: "var(--accent-cyan)", fontWeight: 700 }}>
+                {Object.values(p.commanderDamage).reduce((a, b) => a + b, 0)} total
+              </span>
+            )}
+          </button>
         </div>
       </BottomSheet>
 
@@ -572,17 +485,11 @@ const statusPill = (color: string): React.CSSProperties => ({
   fontSize: "0.72rem", color, fontWeight: 600,
 });
 
-const sectionLabel: React.CSSProperties = {
-  fontSize: "0.65rem", color: "var(--text-muted)",
-  textTransform: "uppercase", letterSpacing: "0.8px",
-  marginBottom: "6px", fontWeight: 600,
-};
-
 // ── TableView ─────────────────────────────────────────────────────────────────
 
 export const TableView: React.FC<TableViewProps> = ({
   players, myIndex, colors, activeCounters, heartbeatTimes,
-  adjustLife, adjustPoison, adjustCommanderDamage, adjustToken, adjustTax,
+  adjustLife, adjustPoison,
   renamePlayer, setAvatar,
   toggleCityBlessing, togglePlayerTokensPanel, togglePlayerTaxPanel,
   setActiveDamageEditor, revivePlayer, firstPlayerName,
@@ -686,14 +593,13 @@ export const TableView: React.FC<TableViewProps> = ({
       {selectedPlayer && (
         <OpponentDetailSheet
           player={selectedPlayer}
-          allPlayers={players}
           theme={selectedTheme}
           lastHeartbeat={heartbeatTimes.get(selectedIdx!)}
           adjustLife={adjustLife}
           adjustPoison={adjustPoison}
-          adjustCommanderDamage={adjustCommanderDamage}
-          adjustToken={adjustToken}
-          adjustTax={adjustTax}
+          togglePlayerTaxPanel={togglePlayerTaxPanel}
+          togglePlayerTokensPanel={togglePlayerTokensPanel}
+          setActiveDamageEditor={setActiveDamageEditor}
           onClose={() => setSelectedIdx(null)}
         />
       )}
