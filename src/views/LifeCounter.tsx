@@ -637,12 +637,12 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     if (isMobile) {
       // 1-column for duels (full-width cards), 2-column for 3+ players
       return playerCount <= 2
-        ? { gridTemplateColumns: "1fr" }
-        : { gridTemplateColumns: "1fr 1fr" };
+        ? { gridTemplateColumns: "1fr", gridTemplateRows: "1fr 1fr" }
+        : { gridTemplateColumns: "1fr 1fr", gridTemplateRows: playerCount <= 4 ? "1fr 1fr" : "1fr 1fr 1fr" };
     }
-    if (playerCount <= 4) return { gridTemplateColumns: "1fr 1fr" };
-    if (playerCount <= 6) return { gridTemplateColumns: "1fr 1fr 1fr" };
-    return { gridTemplateColumns: "1fr 1fr 1fr 1fr" };
+    if (playerCount <= 4) return { gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr" };
+    if (playerCount <= 6) return { gridTemplateColumns: "1fr 1fr 1fr", gridTemplateRows: "1fr 1fr" };
+    return { gridTemplateColumns: "1fr 1fr 1fr 1fr", gridTemplateRows: "1fr 1fr" };
   };
 
   const hasAnyActive = Object.values(activeCounters).some(Boolean);

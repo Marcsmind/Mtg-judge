@@ -179,6 +179,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         borderRadius: "14px",
         border: `1.5px solid ${p.isMonarch ? "#eab308" : isDefeated ? "rgba(239,68,68,0.6)" : isActiveTurn ? "var(--accent-purple)" : playerTheme.border}`,
         padding: "12px 14px", display: "flex", flexDirection: "column", gap: "4px",
+        height: "100%",
         boxShadow: p.isMonarch
           ? "0 0 24px rgba(234,179,8,0.18), 0 4px 20px rgba(0,0,0,0.3)"
           : isDefeated

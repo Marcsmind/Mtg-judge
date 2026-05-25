@@ -537,10 +537,10 @@ h1, h2, h3, h4, h5 {
     padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
   }
 
-  /* Life counter: override flex to an explicit height that reaches the nav bar */
+  /* Life counter: allow flex growth to naturally fill main-content */
   .life-counter-root {
-    flex: none !important;
-    height: calc(100dvh - env(safe-area-inset-top) - 16px - 52px - env(safe-area-inset-bottom)) !important;
+    flex: 1 !important;
+    height: 100% !important;
   }
 
   /* Hide brand logo and nav labels on mobile tab bar */
