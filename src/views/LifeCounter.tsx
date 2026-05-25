@@ -1193,7 +1193,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         />
 
         {/* ── Player Grid / Table View ── */}
-        {roomConnected && myPlayerIndex !== null ? (
+        {myPlayerIndex !== null ? (
           <TableView
             players={players}
             myIndex={myPlayerIndex}

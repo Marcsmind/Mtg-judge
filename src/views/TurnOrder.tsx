@@ -81,21 +81,27 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
     let alive = true;
     subscribeWithRetry(mpRoomCode, s => { if (alive) handleMpUpdateRef.current(s); });
 
-    // Safety net: if the host already broadcast "Begin Game" before we subscribed,
-    // the ephemeral broadcast was missed. Check the persisted DB snapshot instead.
-    fetchPersistedState(mpRoomCode).then(saved => {
-      if (!alive) return;
-      if (
-        saved?.phase === "game" &&
-        saved.schemaVersion === SYNC_SCHEMA_VERSION &&
-        Date.now() - saved.updatedAt < 5 * 60 * 1000 // only act on recent state (≤5 min)
-      ) {
-        onMpPhaseChange?.("game", saved.mpSpinWinner ?? undefined);
-      }
-    });
+    // Safety net: poll the DB every 6 seconds so guests who missed the ephemeral
+    // "Begin Game" broadcast are caught up once the host's DB write lands.
+    // Fires on an interval rather than on mount because the host hasn't clicked
+    // Begin Game yet when TurnOrder first mounts — a mount-time check always returns null.
+    const pollInterval = setInterval(() => {
+      fetchPersistedState(mpRoomCode).then(saved => {
+        if (!alive) return;
+        if (
+          saved?.phase === "game" &&
+          saved.schemaVersion === SYNC_SCHEMA_VERSION &&
+          Date.now() - saved.updatedAt < 5 * 60_000
+        ) {
+          clearInterval(pollInterval);
+          onMpPhaseChange?.("game", saved.mpSpinWinner ?? undefined);
+        }
+      });
+    }, 6_000);
 
     return () => {
       alive = false;
+      clearInterval(pollInterval);
       leaveRoom(mpRoomCode);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

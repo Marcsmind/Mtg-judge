@@ -101,6 +101,9 @@ function App() {
       setMpLobbyPlayers(lobbyPlayers);
       if (roomCode) setMpRoomCode(roomCode);
       if (role)     setMpRole(role);
+      // Clear stale spin result from any previous session before navigating to TurnOrder
+      localStorage.removeItem(STORAGE_KEYS.TURN_WINNER);
+      localStorage.removeItem(STORAGE_KEYS.TURN_INDEX);
       setActiveTab("turns");
     }
     if (phase === "game") {
