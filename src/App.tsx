@@ -107,6 +107,9 @@ function App() {
       setActiveTab("turns");
     }
     if (phase === "game") {
+      // Clear stale saved players so LifeCounter always uses fresh lobby data
+      localStorage.removeItem(STORAGE_KEYS.PLAYERS);
+      localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX);
       setMpGameKey(prev => prev + 1);
       setActiveTab("life");
     }
