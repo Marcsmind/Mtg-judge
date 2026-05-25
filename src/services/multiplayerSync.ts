@@ -104,6 +104,8 @@ const stateRequestHandlers: Map<string, () => void> = new Map();
 const seatClaimHandlers: Map<string, (claim: SeatClaim) => void> = new Map();
 /** Called when a remote device broadcasts `heartbeat`. */
 const heartbeatHandlers: Map<string, (hb: HeartbeatPayload) => void> = new Map();
+/** Called when the host broadcasts `game_end` — all guests should reset. */
+const gameEndHandlers: Map<string, () => void> = new Map();
 
 // ── Room code generator ───────────────────────────────────────────────────────
 
@@ -253,6 +255,7 @@ export function leaveRoom(roomCode: string): void {
   stateRequestHandlers.delete(roomCode);
   seatClaimHandlers.delete(roomCode);
   heartbeatHandlers.delete(roomCode);
+  gameEndHandlers.delete(roomCode);
 }
 
 // ── Fix A: State request / catch-up protocol ─────────────────────────────────
@@ -326,6 +329,24 @@ export function broadcastHeartbeat(roomCode: string, payload: HeartbeatPayload):
 /** Registers a callback for incoming heartbeat pings from remote devices. */
 export function onHeartbeat(roomCode: string, callback: (hb: HeartbeatPayload) => void): void {
   heartbeatHandlers.set(roomCode, callback);
+}
+
+// ── Host end-game broadcast ───────────────────────────────────────────────────
+
+/** Host broadcasts `game_end` to all guests so their boards reset without recording stats. */
+export function broadcastGameEnd(roomCode: string): void {
+  const channel = channels.get(roomCode);
+  if (!channel) return;
+  channel.send({
+    type: "broadcast",
+    event: "game_end",
+    payload: {},
+  }).catch(() => {});
+}
+
+/** Registers a callback to fire when the host broadcasts `game_end`. */
+export function onGameEnd(roomCode: string, callback: () => void): void {
+  gameEndHandlers.set(roomCode, callback);
 }
 
 // ── Fix D: Supabase DB persistence ───────────────────────────────────────────
@@ -452,6 +473,11 @@ async function _subscribeToRoom(
       heartbeatHandlers.get(roomCode)?.(payload);
     },
   );
+
+  // Host ended the game for everyone — guests should reset
+  channel.on("broadcast", { event: "game_end" }, () => {
+    gameEndHandlers.get(roomCode)?.();
+  });
 
   let wasSubscribed = false;
 

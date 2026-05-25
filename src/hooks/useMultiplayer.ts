@@ -32,6 +32,8 @@ import {
   onSeatClaim,
   broadcastHeartbeat,
   onHeartbeat,
+  broadcastGameEnd,
+  onGameEnd,
   persistState,
   fetchPersistedState,
 } from "../services/multiplayerSync";
@@ -44,13 +46,14 @@ import { STORAGE_KEYS } from "../constants/storageKeys";
 // ── Options ───────────────────────────────────────────────────────────────────
 
 export interface UseMultiplayerOptions {
-  players:          Player[];
-  activeCounters:   ActiveCounters;
-  dayNightState:    DayNightState;
-  startingLife:     number;
-  onRemotePlayers:  (players: Player[]) => void;
-  onRemoteCounters: (counters: ActiveCounters) => void;
-  onRemoteDayNight: (state: DayNightState) => void;
+  players:           Player[];
+  activeCounters:    ActiveCounters;
+  dayNightState:     DayNightState;
+  startingLife:      number;
+  onRemotePlayers:   (players: Player[]) => void;
+  onRemoteCounters:  (counters: ActiveCounters) => void;
+  onRemoteDayNight:  (state: DayNightState) => void;
+  onHostEndedGame?:  () => void;
 }
 
 // ── Return shape ──────────────────────────────────────────────────────────────
@@ -68,11 +71,12 @@ export interface UseMultiplayerReturn {
   roomError:         string | null;
   roomReconnecting:  boolean;
   heartbeatTimes:    Map<number, number>;
-  scheduleBroadcast: () => void;
-  handleCreateRoom:  () => void;
-  handleJoinRoom:    (overrideCode?: string) => void;
-  handleLeaveRoom:   () => void;
-  copyRoomCode:      () => void;
+  scheduleBroadcast:  () => void;
+  handleCreateRoom:   () => void;
+  handleJoinRoom:     (overrideCode?: string) => void;
+  handleLeaveRoom:    () => void;
+  handleHostEndGame:  () => void;
+  copyRoomCode:       () => void;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -303,6 +307,12 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       setHeartbeatTimes(prev => new Map(prev).set(playerIndex, Date.now()));
     });
 
+    // Host ended game for everyone — guests reset their board
+    onGameEnd(code, () => {
+      showToast("Host ended the game", "info");
+      options.onHostEndedGame?.();
+    });
+
     _startHeartbeat(code);
   };
 
@@ -418,6 +428,12 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomConnected]);
 
+  const handleHostEndGame = () => {
+    const code = roomCodeRef.current;
+    if (code) broadcastGameEnd(code);
+    options.onHostEndedGame?.();
+  };
+
   return {
     roomCode,
     roomConnected,
@@ -435,6 +451,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     handleCreateRoom,
     handleJoinRoom,
     handleLeaveRoom,
+    handleHostEndGame,
     copyRoomCode,
   };
 }

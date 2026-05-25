@@ -149,6 +149,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         try {
           const arr = JSON.parse(saved);
           if (Array.isArray(arr) && arr.length === mpInitLobbyPlayers.length) {
+            // Tab-switch remount: use saved state but ensure MY_PLAYER_INDEX is set
+            const sorted2 = [...mpInitLobbyPlayers].sort((a, b) => a.colorName.localeCompare(b.colorName));
+            const myIdx2 = sorted2.findIndex(lp => lp.deviceId === getDeviceId());
+            if (myIdx2 >= 0) localStorage.setItem(STORAGE_KEYS.MY_PLAYER_INDEX, String(myIdx2));
             return arr.map(p => parseSavedPlayer(p, sl));
           }
         } catch { /* corrupt — fall through to lobby init */ }
@@ -258,16 +262,24 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
 
   // ── Multiplayer (extracted into useMultiplayer hook) ──
+  const [showEndForAll, setShowEndForAll] = useState(false);
+
   const {
     roomCode, roomConnected, roomRole, roomName, setRoomName,
     joinCodeInput, setJoinCodeInput, roomLoading, roomCopied,
     roomError, roomReconnecting, heartbeatTimes,
-    scheduleBroadcast, handleCreateRoom, handleJoinRoom, handleLeaveRoom, copyRoomCode,
+    scheduleBroadcast, handleCreateRoom, handleJoinRoom, handleLeaveRoom,
+    handleHostEndGame, copyRoomCode,
   } = useMultiplayer({
     players, activeCounters, dayNightState, startingLife,
     onRemotePlayers:  setPlayers,
     onRemoteCounters: setActiveCounters,
     onRemoteDayNight: setDayNightState,
+    onHostEndedGame: () => {
+      localStorage.removeItem(STORAGE_KEYS.MY_PLAYER_INDEX);
+      handleLeaveRoom();
+      doReset(Boolean(isSupabaseConfigured && userId));
+    },
   });
 
   // ── Persistence ──
@@ -1102,6 +1114,33 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                   <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontStyle: "italic" }}>
                     {roomRole === "host" ? "👑 Host" : "🎮 Guest"}
                   </span>
+
+                  {/* Host: End Game for All */}
+                  {roomRole === "host" && (
+                    showEndForAll ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>End for everyone? No stats recorded.</span>
+                        <button
+                          onClick={() => { setShowEndForAll(false); handleHostEndGame(); }}
+                          className="glass-button"
+                          style={{ padding: "4px 10px", fontSize: "0.78rem", background: "rgba(245,158,11,0.15)", borderColor: "rgba(245,158,11,0.4)", color: "#f59e0b" }}
+                        >Confirm</button>
+                        <button
+                          onClick={() => setShowEndForAll(false)}
+                          className="glass-button"
+                          style={{ padding: "4px 10px", fontSize: "0.78rem" }}
+                        >Cancel</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowEndForAll(true)}
+                        className="glass-button"
+                        style={{ padding: "6px 12px", fontSize: "0.8rem", background: "rgba(245,158,11,0.1)", borderColor: "rgba(245,158,11,0.25)", color: "#f59e0b" }}
+                      >
+                        <span>End for All</span>
+                      </button>
+                    )
+                  )}
 
                   {/* Leave */}
                   <button
