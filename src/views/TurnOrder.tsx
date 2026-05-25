@@ -69,11 +69,15 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
 
   // ── Multiplayer state ─────────────────────────────────────────────────────
   const isMultiplayer = Boolean(mpRoomCode && mpLobbyPlayers && mpLobbyPlayers.length > 0);
-  const [mpSpinWinner,  setMpSpinWinner]  = useState<string | null>(null);
   const [showBeginGame, setShowBeginGame] = useState(false);
   // Stable refs — avoids stale closures in Supabase callbacks; updated every render below
   const handleMpUpdateRef      = useRef<(s: SyncState) => void>(() => undefined);
   const runMpSpinAnimationRef  = useRef<(name: string) => void>(() => undefined);
+  // Called by the DB poll when a spin result is found but the broadcast was missed
+  const applySpinWinnerRef     = useRef<(name: string) => void>(() => undefined);
+  // Tracks the current spin winner in a ref so setInterval poll callbacks see the latest value
+  // (useState closures captured inside setInterval are stale without this)
+  const mpSpinWinnerRef = useRef<string | null>(null);
 
   // Subscribe to room when in multiplayer mode
   useEffect(() => {
@@ -88,13 +92,18 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
     const pollInterval = setInterval(() => {
       fetchPersistedState(mpRoomCode).then(saved => {
         if (!alive) return;
-        if (
-          saved?.phase === "game" &&
-          saved.schemaVersion === SYNC_SCHEMA_VERSION &&
-          Date.now() - saved.updatedAt < 5 * 60_000
-        ) {
+        if (!saved || saved.schemaVersion !== SYNC_SCHEMA_VERSION) return;
+        if (Date.now() - saved.updatedAt >= 5 * 60_000) return; // stale
+
+        if (saved.phase === "game") {
           clearInterval(pollInterval);
           onMpPhaseChange?.("game", saved.mpSpinWinner ?? undefined);
+          return;
+        }
+        // Spin result persisted but broadcast was missed — show winner without animation
+        if (saved.phase === "turn-select" && saved.mpSpinWinner && !mpSpinWinnerRef.current) {
+          mpSpinWinnerRef.current = saved.mpSpinWinner;
+          applySpinWinnerRef.current(saved.mpSpinWinner);
         }
       });
     }, 6_000);
@@ -117,7 +126,8 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
         return;
       }
       // Receive the spin winner (computed by host)
-      if (state.mpSpinWinner && !mpSpinWinner) {
+      if (state.mpSpinWinner && !mpSpinWinnerRef.current) {
+        mpSpinWinnerRef.current = state.mpSpinWinner;
         runMpSpinAnimationRef.current(state.mpSpinWinner);
       }
     };
@@ -234,7 +244,7 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
 
     setSpinning(true);
     setWinner(null);
-    setMpSpinWinner(null);
+    mpSpinWinnerRef.current = null;
 
     const duration = MP_SPIN_DURATION_MS;
     let speed = 60;
@@ -247,8 +257,21 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
         setSpinning(false);
         setCurrentIndex(targetIdx);
         setWinner(targetName);
-        setMpSpinWinner(targetName);
-        if (mpRole === "host") setShowBeginGame(true);
+        mpSpinWinnerRef.current = targetName;
+        if (mpRole === "host") {
+          setShowBeginGame(true);
+          // Persist spin result so guests who missed the broadcast discover it via the 6s poll
+          if (mpRoomCode) {
+            persistState(mpRoomCode, {
+              schemaVersion: SYNC_SCHEMA_VERSION,
+              players: [], activeCounters: {} as never, dayNightState: "none",
+              updatedAt: Date.now(), updatedBy: "host",
+              phase: "turn-select",
+              mpSpinWinner: targetName,
+              lobbyPlayers: mpLobbyPlayers,
+            });
+          }
+        }
       } else {
         if      (elapsed > duration * 0.7) speed += 40;
         else if (elapsed > duration * 0.4) speed += 20;
@@ -260,6 +283,16 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
 
   // Keep runMpSpinAnimationRef fresh every render so the subscription callback can call it
   useEffect(() => { runMpSpinAnimationRef.current = runMpSpinAnimation; });
+
+  // Apply a spin winner without playing the full animation (for guests who missed the broadcast)
+  useEffect(() => {
+    applySpinWinnerRef.current = (name: string) => {
+      const idx = (mpLobbyPlayers ?? []).findIndex(p => p.playerName === name);
+      setWinner(name);
+      if (idx >= 0) setCurrentIndex(idx);
+      if (mpRole === "host") setShowBeginGame(true);
+    };
+  });
 
   const triggerRouletteSpin = () => {
     if (spinning || players.length === 0) return;

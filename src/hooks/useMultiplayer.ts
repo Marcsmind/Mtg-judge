@@ -194,11 +194,16 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
 
         // Fix A: enter catch-up mode — suppress our own broadcasts for 3 s while
         // waiting for a peer to push current state via state_request response.
-        isCatchingUp.current = true;
-        if (catchUpTimerRef.current) clearTimeout(catchUpTimerRef.current);
-        catchUpTimerRef.current = setTimeout(() => {
-          isCatchingUp.current = false;
-        }, 3_000);
+        // Skip on fresh game start (lastAppliedAt === 0 means no prior remote state):
+        // all devices have identical initial state so catch-up suppression just delays
+        // the first broadcast and causes 3s of "nobody syncing" chaos.
+        if (lastAppliedAt.current > 0) {
+          isCatchingUp.current = true;
+          if (catchUpTimerRef.current) clearTimeout(catchUpTimerRef.current);
+          catchUpTimerRef.current = setTimeout(() => {
+            isCatchingUp.current = false;
+          }, 3_000);
+        }
 
         // Ask connected peers for current state (arrives in ~50–100 ms).
         sendStateRequest(code);
