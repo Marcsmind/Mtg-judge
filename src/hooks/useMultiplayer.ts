@@ -215,9 +215,12 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
           if (!saved) return;
           if (saved.schemaVersion !== SYNC_SCHEMA_VERSION) return;
           if (saved.updatedAt <= lastAppliedAt.current) return;
+          if (saved.phase === "lobby" || saved.phase === "turn-select") return;
           // Apply the DB snapshot as authoritative state
           lastAppliedAt.current = saved.updatedAt;
-          options.onRemotePlayers(saved.players);
+          if (saved.players && saved.players.length > 0) {
+            options.onRemotePlayers(saved.players);
+          }
           options.onRemoteCounters(saved.activeCounters);
           options.onRemoteDayNight(saved.dayNightState);
           // DB state received — done catching up
@@ -379,8 +382,11 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       fetchPersistedState(code).then(saved => {
         if (!saved || saved.schemaVersion !== SYNC_SCHEMA_VERSION) return;
         if (saved.updatedAt <= lastAppliedAt.current) return;
+        if (saved.phase === "lobby" || saved.phase === "turn-select") return;
         lastAppliedAt.current = saved.updatedAt;
-        options.onRemotePlayers(saved.players);
+        if (saved.players && saved.players.length > 0) {
+          options.onRemotePlayers(saved.players);
+        }
         options.onRemoteCounters(saved.activeCounters);
         options.onRemoteDayNight(saved.dayNightState);
       });
