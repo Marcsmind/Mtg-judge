@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { CardCodex } from "./components/CardCodex";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { AuthModal } from "./components/AuthModal";
+import { OnboardingFlow } from "./components/OnboardingFlow";
 // Eagerly loaded — landing view or lightweight
 import { LifeCounter } from "./views/LifeCounter";
 import { DiceAndCoins } from "./views/DiceAndCoins";
@@ -25,6 +26,9 @@ import { useAuth } from "./hooks/useAuth";
 import type { LobbyPlayer } from "./types/game";
 
 function App() {
+  const [onboardingDone, setOnboardingDone] = useState<boolean>(
+    () => localStorage.getItem(STORAGE_KEYS.ONBOARDING_DONE) === "1"
+  );
   const [activeTab, setActiveTab] = useState<TabId>("life");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -328,6 +332,16 @@ function App() {
         onClose={() => { setCodexOpen(false); setCodexSearch(""); }}
         initialSearch={codexSearch}
       />
+
+      {/* First-launch onboarding */}
+      {!onboardingDone && (
+        <OnboardingFlow
+          onDone={() => {
+            localStorage.setItem(STORAGE_KEYS.ONBOARDING_DONE, "1");
+            setOnboardingDone(true);
+          }}
+        />
+      )}
 
       {/* Slide-Up AI Judge Overlay */}
       {judgeOpen && (

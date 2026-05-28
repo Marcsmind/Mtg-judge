@@ -36,4 +36,5 @@ export const STORAGE_KEYS = {
   MY_PLAYER_INDEX:    "nexus_judge_my_player_index", // which player seat is "mine" on this device
   WAKE_LOCK:           "nexus_judge_wake_lock",        // screen keep-awake preference (boolean)
   SUBSCRIPTION_TIER:  "nexus_subscription_tier",      // cached SubscriptionTier from Supabase
+  ONBOARDING_DONE:    "nexus_onboarding_done",         // "1" after first-launch flow completes
 } as const;
