@@ -100,6 +100,68 @@ export async function linkGoogleAccount(): Promise<void> {
 }
 
 /**
+ * Upgrade the current anonymous session to an Apple account (same user ID preserved).
+ * Mirrors linkGoogleAccount — uses Capacitor browser plugin on native.
+ */
+export async function linkAppleAccount(): Promise<void> {
+  if (!isSupabaseConfigured) return;
+
+  if (isNative) {
+    const { data, error } = await supabase.auth.linkIdentity({
+      provider: "apple",
+      options: {
+        redirectTo: "com.nexusjudge.app://auth/callback",
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) { console.error("[auth] linkApple failed:", error.message); return; }
+    const url = (data as { url?: string })?.url;
+    if (url) {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url });
+    }
+    return;
+  }
+
+  const { error } = await supabase.auth.linkIdentity({
+    provider: "apple",
+    options: { redirectTo: window.location.origin },
+  });
+  if (error) console.error("[auth] linkApple failed:", error.message);
+}
+
+/**
+ * Sign in (or sign up) with Apple for users who don't have an existing session.
+ * Uses Supabase OAuth — redirects to Apple's login page.
+ */
+export async function signInWithApple(): Promise<void> {
+  if (!isSupabaseConfigured) return;
+
+  if (isNative) {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "apple",
+      options: {
+        redirectTo: "com.nexusjudge.app://auth/callback",
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) { console.error("[auth] signInWithApple failed:", error.message); return; }
+    const url = (data as { url?: string })?.url;
+    if (url) {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url });
+    }
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "apple",
+    options: { redirectTo: window.location.origin },
+  });
+  if (error) console.error("[auth] signInWithApple failed:", error.message);
+}
+
+/**
  * Sign up with email + password.
  *
  * If the caller is currently signed in anonymously, upgrades that session
