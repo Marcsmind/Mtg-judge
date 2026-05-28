@@ -148,6 +148,20 @@ export async function signOut(): Promise<void> {
 }
 
 /**
+ * Permanently delete the current user's account and all associated data.
+ * Calls the `delete_user` Postgres RPC (SECURITY DEFINER) which removes the
+ * auth.users row; ON DELETE CASCADE cleans up profiles, decks, and game history.
+ * Returns an error string on failure, null on success.
+ */
+export async function deleteAccount(): Promise<string | null> {
+  if (!isSupabaseConfigured) return 'Supabase not configured.';
+  const { error } = await supabase.rpc('delete_user');
+  if (error) return error.message;
+  await supabase.auth.signOut();
+  return null;
+}
+
+/**
  * Subscribe to auth state changes.
  * Returns an object with an `unsubscribe()` method.
  */

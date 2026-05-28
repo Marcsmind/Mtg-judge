@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2, BookOpen, HelpCircle, ExternalLink, LogIn, LogOut } from "lucide-react";
+import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2, BookOpen, HelpCircle, ExternalLink, LogIn, LogOut, AlertTriangle } from "lucide-react";
 import { THEMES } from "../constants/themes";
 import type { ThemeId } from "../constants/themes";
 import type { TabId } from "../constants/tabIds";
@@ -21,10 +21,11 @@ interface SettingsPanelProps {
   onLinkGoogle?: () => void;
   onSignIn?: () => void;
   onSignOut?: () => void;
+  onDeleteAccount?: () => Promise<void>;
   onNavigate?: (tab: TabId) => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onLinkGoogle, onSignIn, onSignOut, onNavigate }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onLinkGoogle, onSignIn, onSignOut, onDeleteAccount, onNavigate }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
 
@@ -48,6 +49,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
     setTimeout(() => setDisplayNameSaved(false), 3000);
   };
   const [saved, setSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [accessCodeInput, setAccessCodeInput] = useState(
     () => localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) || ""
   );
@@ -455,6 +458,52 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                   Used on the leaderboard and pre-filled as your name when joining a multiplayer room. Max 24 characters.
                 </p>
               </form>
+
+              {/* Delete Account */}
+              {onDeleteAccount && (
+                <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
+                  {!confirmDelete ? (
+                    <button
+                      onClick={() => setConfirmDelete(true)}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "5px", padding: 0 }}
+                    >
+                      <Trash2 size={13} /> Delete Account
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", background: "rgba(244,63,94,0.06)", border: "1px solid rgba(244,63,94,0.2)", borderRadius: "10px", padding: "14px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                        <AlertTriangle size={16} color="var(--accent-rose)" style={{ flexShrink: 0, marginTop: "1px" }} />
+                        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                          This will permanently delete your account, all saved decks, and game history. <strong style={{ color: "#fff" }}>This cannot be undone.</strong>
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          onClick={async () => {
+                            setDeleting(true);
+                            await onDeleteAccount();
+                            setDeleting(false);
+                            setConfirmDelete(false);
+                          }}
+                          disabled={deleting}
+                          className="glass-button"
+                          style={{ background: "rgba(244,63,94,0.15)", borderColor: "rgba(244,63,94,0.4)", color: "var(--accent-rose)", fontSize: "0.85rem", opacity: deleting ? 0.6 : 1 }}
+                        >
+                          {deleting ? "Deleting…" : "Yes, delete everything"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          disabled={deleting}
+                          className="glass-button"
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>

@@ -18,7 +18,7 @@ import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
-import { initAuth, onAuthStateChange, linkGoogleAccount, signOut } from "./services/auth";
+import { initAuth, onAuthStateChange, linkGoogleAccount, signOut, deleteAccount } from "./services/auth";
 import type { AuthUser } from "./services/auth";
 import { migrateLocalDecksToCloud } from "./services/decks";
 import { useAuth } from "./hooks/useAuth";
@@ -80,6 +80,11 @@ function App() {
   const handleSignOut = async () => {
     await signOut();
     // onAuthStateChange above handles re-initializing an anonymous session
+  };
+
+  const handleDeleteAccount = async () => {
+    await deleteAccount();
+    // onAuthStateChange fires null → re-initializes anonymous session automatically
   };
 
   // ── Handle Stripe redirect back (?upgraded=true / ?upgraded=false) ──
@@ -267,6 +272,7 @@ function App() {
             onLinkGoogle={linkGoogleAccount}
             onSignIn={() => setAuthModalOpen(true)}
             onSignOut={handleSignOut}
+            onDeleteAccount={handleDeleteAccount}
             onNavigate={(tab) => setActiveTab(tab)}
           />
         );

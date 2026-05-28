@@ -124,6 +124,22 @@ ALTER TABLE public.saved_decks ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "saved_decks: own all"
   ON public.saved_decks FOR ALL USING (auth.uid() = user_id);
 
+-- ── 8. Account Self-Deletion ────────────────────────────────────────────────
+-- Lets an authenticated user delete their own auth.users row via RPC.
+-- SECURITY DEFINER runs with postgres privileges so it can touch auth schema.
+-- ON DELETE CASCADE on profiles/saved_decks/game_participants handles cleanup.
+
+CREATE OR REPLACE FUNCTION public.delete_user()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM auth.users WHERE id = auth.uid();
+END;
+$$;
+
 -- ── Done ─────────────────────────────────────────────────────
 -- Next steps in Supabase Dashboard:
 --   Authentication → Providers → Enable "Anonymous Sign-ins"
