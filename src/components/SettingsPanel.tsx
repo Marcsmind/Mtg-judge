@@ -24,9 +24,10 @@ interface SettingsPanelProps {
   onSignOut?: () => void;
   onDeleteAccount?: () => Promise<void>;
   onNavigate?: (tab: TabId) => void;
+  onTierChange?: (tier: SubscriptionTier) => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onLinkGoogle, onSignIn, onSignOut, onDeleteAccount, onNavigate }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onLinkGoogle, onSignIn, onSignOut, onDeleteAccount, onNavigate, onTierChange }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
 
@@ -608,7 +609,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
 
       {/* ── Upgrade / Plan ── */}
       {isSupabaseConfigured && (
-        <UpgradePanel tier={tier} authUser={authUser ?? null} trialEndsAt={trialEndsAt} />
+        <UpgradePanel tier={tier} authUser={authUser ?? null} trialEndsAt={trialEndsAt} onTierChange={onTierChange} />
       )}
 
       {/* ── App Resources ── */}

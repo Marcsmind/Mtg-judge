@@ -20,6 +20,7 @@ import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
 import { initAuth, onAuthStateChange, linkGoogleAccount, signOut, deleteAccount } from "./services/auth";
+import { initRevenueCat } from "./services/revenueCat";
 import type { AuthUser } from "./services/auth";
 import { migrateLocalDecksToCloud } from "./services/decks";
 import { useAuth } from "./hooks/useAuth";
@@ -32,7 +33,11 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>("life");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const { tier, trialEndsAt } = useAuth();
+  const { tier: authTier, trialEndsAt } = useAuth();
+  // Optimistic override — set immediately after RevenueCat purchase so the UI
+  // updates before the webhook reaches Supabase. Cleared on next auth refresh.
+  const [optimisticTier, setOptimisticTier] = useState<import("./types/subscription").SubscriptionTier | null>(null);
+  const tier = optimisticTier ?? authTier;
   const [codexOpen, setCodexOpen] = useState(false);
   const [judgeOpen, setJudgeOpen] = useState(false);
   const [codexSearch, setCodexSearch] = useState("");
@@ -80,6 +85,12 @@ function App() {
     if (!authUser || authUser.isAnonymous) return;
     migrateLocalDecksToCloud(authUser.id);
   }, [authUser?.id, authUser?.isAnonymous]);
+
+  // ── Init RevenueCat on native after any auth (anonymous or email) ──
+  useEffect(() => {
+    if (!authUser) return;
+    initRevenueCat(authUser.id);
+  }, [authUser?.id]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -290,6 +301,10 @@ function App() {
             onSignOut={handleSignOut}
             onDeleteAccount={handleDeleteAccount}
             onNavigate={(tab) => setActiveTab(tab)}
+            onTierChange={(t) => {
+              setOptimisticTier(t);
+              localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION_TIER, t);
+            }}
           />
         );
       case "more":

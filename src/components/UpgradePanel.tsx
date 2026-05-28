@@ -1,12 +1,21 @@
-import React, { useState } from "react";
-import { Crown, Zap, Check, Sparkles, Clock } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Crown, Zap, Check, Sparkles, Clock, RotateCcw } from "lucide-react";
 import type { SubscriptionTier } from "../types/subscription";
 import type { AuthUser } from "../services/auth";
+import {
+  isNative,
+  getOffering,
+  purchasePackage,
+  restorePurchases,
+  type RCPackage,
+  type RCOffering,
+} from "../services/revenueCat";
 
 interface UpgradePanelProps {
   tier: SubscriptionTier;
   authUser: AuthUser | null;
   trialEndsAt?: string | null;
+  onTierChange?: (tier: SubscriptionTier) => void;
 }
 
 type PriceType = "pro_monthly" | "pro_annual" | "lifetime";
@@ -32,8 +41,15 @@ const PRO_FEATURES = [
   "Per-deck commander win rate",
 ];
 
-export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, trialEndsAt }) => {
+export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, trialEndsAt, onTierChange }) => {
   const [loading, setLoading] = useState<PriceType | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [offering, setOffering] = useState<RCOffering | null>(null);
+
+  // Fetch RevenueCat offering on native (no-op on web)
+  useEffect(() => {
+    if (isNative) getOffering().then(setOffering);
+  }, []);
 
   const daysLeftInTrial = (() => {
     if (!trialEndsAt) return null;
@@ -44,13 +60,31 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
 
   const isTrial = tier === "pro" && daysLeftInTrial !== null;
 
-  const handleUpgrade = async (priceType: PriceType) => {
+  const handleUpgrade = async (priceType: PriceType, rcPackage?: RCPackage) => {
     if (!authUser || authUser.isAnonymous) return;
     setLoading(priceType);
     try {
-      await startCheckout(priceType, authUser.id, authUser.email);
+      if (isNative && rcPackage) {
+        // Native: RevenueCat IAP
+        const newTier = await purchasePackage(rcPackage);
+        if (newTier) onTierChange?.(newTier);
+      } else {
+        // Web: Stripe Checkout
+        await startCheckout(priceType, authUser.id, authUser.email);
+      }
     } finally {
       setLoading(null);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!authUser || authUser.isAnonymous) return;
+    setRestoring(true);
+    try {
+      const newTier = await restorePurchases();
+      if (newTier && newTier !== "free") onTierChange?.(newTier);
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -139,7 +173,7 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
         {/* Monthly */}
         <button
-          onClick={() => handleUpgrade("pro_monthly")}
+          onClick={() => handleUpgrade("pro_monthly", offering?.monthly ?? undefined)}
           disabled={loading !== null}
           className="glass-button"
           style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px", padding: "16px", opacity: loading === "pro_monthly" ? 0.7 : 1 }}
@@ -148,14 +182,16 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
             <Zap size={14} color="var(--accent-purple)" />
             Monthly
           </div>
-          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#fff", lineHeight: 1 }}>$4.99</div>
+          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#fff", lineHeight: 1 }}>
+            {offering?.monthly?.priceString ?? "$4.99"}
+          </div>
           <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>per month</div>
-          {loading === "pro_monthly" && <div style={{ fontSize: "0.75rem", color: "var(--accent-purple)" }}>Redirecting…</div>}
+          {loading === "pro_monthly" && <div style={{ fontSize: "0.75rem", color: "var(--accent-purple)" }}>{isNative ? "Processing…" : "Redirecting…"}</div>}
         </button>
 
         {/* Annual */}
         <button
-          onClick={() => handleUpgrade("pro_annual")}
+          onClick={() => handleUpgrade("pro_annual", offering?.annual ?? undefined)}
           disabled={loading !== null}
           className="glass-button"
           style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px", padding: "16px", border: "1.5px solid rgba(139,92,246,0.4)", position: "relative", opacity: loading === "pro_annual" ? 0.7 : 1 }}
@@ -167,14 +203,16 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
             <Crown size={14} color="var(--accent-purple)" />
             Annual
           </div>
-          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#fff", lineHeight: 1 }}>$34.99</div>
+          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#fff", lineHeight: 1 }}>
+            {offering?.annual?.priceString ?? "$34.99"}
+          </div>
           <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>per year · $2.92/mo</div>
-          {loading === "pro_annual" && <div style={{ fontSize: "0.75rem", color: "var(--accent-purple)" }}>Redirecting…</div>}
+          {loading === "pro_annual" && <div style={{ fontSize: "0.75rem", color: "var(--accent-purple)" }}>{isNative ? "Processing…" : "Redirecting…"}</div>}
         </button>
 
         {/* Lifetime */}
         <button
-          onClick={() => handleUpgrade("lifetime")}
+          onClick={() => handleUpgrade("lifetime", offering?.lifetime ?? undefined)}
           disabled={loading !== null}
           className="glass-button"
           style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px", padding: "16px", border: "1.5px solid rgba(234,179,8,0.3)", opacity: loading === "lifetime" ? 0.7 : 1 }}
@@ -183,15 +221,30 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
             <Sparkles size={14} />
             Lifetime
           </div>
-          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#fff", lineHeight: 1 }}>$79.99</div>
+          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#fff", lineHeight: 1 }}>
+            {offering?.lifetime?.priceString ?? "$79.99"}
+          </div>
           <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>one-time · Founder pricing</div>
-          {loading === "lifetime" && <div style={{ fontSize: "0.75rem", color: "var(--accent-gold)" }}>Redirecting…</div>}
+          {loading === "lifetime" && <div style={{ fontSize: "0.75rem", color: "var(--accent-gold)" }}>{isNative ? "Processing…" : "Redirecting…"}</div>}
         </button>
       </div>
 
-      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center" }}>
-        Secure checkout via Stripe. Cancel anytime. No hidden fees.
-      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center" }}>
+        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center" }}>
+          {isNative ? "Billed through the App Store. Cancel anytime." : "Secure checkout via Stripe. Cancel anytime. No hidden fees."}
+        </p>
+        {/* Restore Purchases — Apple requires this button in IAP apps */}
+        {isNative && (
+          <button
+            onClick={handleRestore}
+            disabled={restoring}
+            style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", padding: "4px 8px", opacity: restoring ? 0.6 : 1 }}
+          >
+            <RotateCcw size={12} />
+            {restoring ? "Restoring…" : "Restore Purchases"}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
