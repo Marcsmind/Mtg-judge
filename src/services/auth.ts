@@ -78,14 +78,36 @@ export async function linkGoogleAccount(): Promise<void> {
 
 /**
  * Sign up with email + password.
- * Supabase sends a confirmation email by default — check your Supabase
- * Auth settings to enable/disable email confirmation.
+ *
+ * If the caller is currently signed in anonymously, upgrades that session
+ * to a permanent email account (preserving user ID and all history) via
+ * updateUser. Otherwise creates a fresh account via signUp.
+ *
+ * Returns `user` when the caller is immediately signed in (anonymous upgrade
+ * or signUp without email confirmation). Returns `user: null, error: null`
+ * when a confirmation email was sent and the user must confirm before signing in.
  */
 export async function signUpWithEmail(email: string, password: string): Promise<AuthResult> {
   if (!isSupabaseConfigured) return { user: null, error: 'Supabase not configured.' };
+
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (session?.user?.is_anonymous) {
+    // Upgrade anonymous → email account; preserves the same user ID
+    const { data, error } = await supabase.auth.updateUser({ email, password });
+    if (error) return { user: null, error: error.message };
+    if (!data.user) return { user: null, error: 'Account setup failed. Please try again.' };
+    return {
+      user: { id: data.user.id, isAnonymous: false, email: data.user.email ?? undefined },
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) return { user: null, error: error.message };
-  if (!data.user) return { user: null, error: 'Sign up failed. Please try again.' };
+  if (!data.user) return { user: null, error: 'Account setup failed. Please try again.' };
+  // data.session is null when email confirmation is required before sign-in
+  if (!data.session) return { user: null, error: null };
   return {
     user: { id: data.user.id, isAnonymous: false, email: data.user.email ?? undefined },
     error: null,

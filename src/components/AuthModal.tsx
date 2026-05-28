@@ -50,6 +50,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       } else if (mode === "signup") {
         const result = await signUpWithEmail(email, password);
         if (result.error) { setError(result.error); return; }
+        if (result.user) {
+          // Anonymous session was upgraded — already signed in, just close
+          onSuccess(result.user);
+          onClose();
+          return;
+        }
+        // Fresh signup — needs email confirmation before signing in
         setSuccessMsg("Account created! Check your email to confirm, then sign in.");
         switchMode("signin");
       } else {
