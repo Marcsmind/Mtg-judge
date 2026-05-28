@@ -14,14 +14,13 @@
 import { useAuth } from './useAuth';
 import type { FeatureName, SubscriptionTier } from '../types/subscription';
 
-const PRO_FEATURES: ReadonlySet<FeatureName> = new Set([
-  // Uncomment each gate when monetization (Stripe) is live:
-  // 'host_multiplayer_pod',
-  // 'unlimited_ai',
-  // 'cloud_decks',
-  // 'full_game_history',
-  // 'ai_deck_generation',
-] as FeatureName[]);
+const PRO_FEATURES: ReadonlySet<FeatureName> = new Set<FeatureName>([
+  'host_multiplayer_pod',
+  'unlimited_ai',
+  'cloud_decks',
+  'full_game_history',
+  'ai_deck_generation',
+]);
 
 function tierHasFeature(tier: SubscriptionTier, feature: FeatureName): boolean {
   if (!PRO_FEATURES.has(feature)) return true;

@@ -17,6 +17,7 @@ import type { SubscriptionTier } from '../types/subscription';
 export interface AuthState {
   user: AuthUser | null;
   tier: SubscriptionTier;
+  trialEndsAt: string | null;
   loading: boolean;
 }
 
@@ -26,22 +27,22 @@ function getCachedTier(): SubscriptionTier {
   return 'free';
 }
 
-async function fetchTierForUser(userId: string): Promise<SubscriptionTier> {
-  if (!isSupabaseConfigured) return 'free';
+async function fetchProfileForUser(userId: string): Promise<{ tier: SubscriptionTier; trialEndsAt: string | null }> {
+  if (!isSupabaseConfigured) return { tier: 'free', trialEndsAt: null };
   try {
     const { data } = await supabase
       .from('profiles')
       .select('subscription_tier, trial_ends_at')
       .eq('id', userId)
       .single();
-    if (!data) return 'free';
-    if (data.subscription_tier === 'lifetime') return 'lifetime';
-    if (data.subscription_tier === 'pro') return 'pro';
-    if (data.trial_ends_at && new Date(data.trial_ends_at) > new Date()) return 'pro';
-    return 'free';
+    if (!data) return { tier: 'free', trialEndsAt: null };
+    const trialEndsAt: string | null = data.trial_ends_at ?? null;
+    if (data.subscription_tier === 'lifetime') return { tier: 'lifetime', trialEndsAt };
+    if (data.subscription_tier === 'pro') return { tier: 'pro', trialEndsAt };
+    if (trialEndsAt && new Date(trialEndsAt) > new Date()) return { tier: 'pro', trialEndsAt };
+    return { tier: 'free', trialEndsAt };
   } catch {
-    // Column may not exist yet (pre-migration) — silently default to free
-    return 'free';
+    return { tier: 'free', trialEndsAt: null };
   }
 }
 
@@ -49,6 +50,7 @@ export function useAuth(): AuthState {
   const [state, setState] = useState<AuthState>({
     user: null,
     tier: getCachedTier(),
+    trialEndsAt: null,
     loading: true,
   });
 
@@ -58,10 +60,10 @@ export function useAuth(): AuthState {
     getCurrentUser().then(async user => {
       if (cancelled) return;
       if (user && isSupabaseConfigured) {
-        const tier = await fetchTierForUser(user.id);
+        const { tier, trialEndsAt } = await fetchProfileForUser(user.id);
         if (!cancelled) {
           localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION_TIER, tier);
-          setState({ user, tier, loading: false });
+          setState({ user, tier, trialEndsAt, loading: false });
         }
       } else {
         if (!cancelled) setState(prev => ({ ...prev, user, loading: false }));
@@ -72,15 +74,15 @@ export function useAuth(): AuthState {
       if (cancelled) return;
       setState(prev => ({ ...prev, user }));
       if (user && isSupabaseConfigured) {
-        fetchTierForUser(user.id).then(tier => {
+        fetchProfileForUser(user.id).then(({ tier, trialEndsAt }) => {
           if (!cancelled) {
             localStorage.setItem(STORAGE_KEYS.SUBSCRIPTION_TIER, tier);
-            setState(prev => ({ ...prev, tier }));
+            setState(prev => ({ ...prev, tier, trialEndsAt }));
           }
         });
       } else if (!user) {
         localStorage.removeItem(STORAGE_KEYS.SUBSCRIPTION_TIER);
-        setState(prev => ({ ...prev, tier: 'free' }));
+        setState(prev => ({ ...prev, tier: 'free', trialEndsAt: null }));
       }
     });
 

@@ -97,6 +97,7 @@ export async function signUpWithEmail(email: string, password: string): Promise<
     const { data, error } = await supabase.auth.updateUser({ email, password });
     if (error) return { user: null, error: error.message };
     if (!data.user) return { user: null, error: 'Account setup failed. Please try again.' };
+    await activateTrial(data.user.id);
     return {
       user: { id: data.user.id, isAnonymous: false, email: data.user.email ?? undefined },
       error: null,
@@ -106,6 +107,7 @@ export async function signUpWithEmail(email: string, password: string): Promise<
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) return { user: null, error: error.message };
   if (!data.user) return { user: null, error: 'Account setup failed. Please try again.' };
+  await activateTrial(data.user.id);
   // data.session is null when email confirmation is required before sign-in
   if (!data.session) return { user: null, error: null };
   return {
@@ -167,6 +169,28 @@ export function onAuthStateChange(
   });
 
   return { unsubscribe: () => data.subscription.unsubscribe() };
+}
+
+// ── Trial ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Set trial_ends_at to 14 days from now for a newly-created account.
+ * No-ops if the profile already has a trial_ends_at value (prevents
+ * resetting the trial on repeated sign-ins).
+ */
+export async function activateTrial(userId: string): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const { data } = await supabase
+    .from('profiles')
+    .select('trial_ends_at')
+    .eq('id', userId)
+    .single();
+  if (data?.trial_ends_at) return; // already set — don't reset
+  const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from('profiles').upsert(
+    { id: userId, display_name: 'Player', trial_ends_at: trialEnd, updated_at: new Date().toISOString() },
+    { onConflict: 'id' },
+  );
 }
 
 // ── Profile ───────────────────────────────────────────────────────────────────

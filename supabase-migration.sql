@@ -78,7 +78,8 @@ ALTER TABLE public.game_participants
 
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS subscription_tier TEXT NOT NULL DEFAULT 'free',
-  ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
 
 -- ── 6. AI Usage Quota ────────────────────────────────────────────
 -- Tracks per-IP daily question counts for the shared Gemini proxy key.

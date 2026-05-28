@@ -21,12 +21,14 @@ import type { TabId } from "./constants/tabIds";
 import { initAuth, onAuthStateChange, linkGoogleAccount, signOut } from "./services/auth";
 import type { AuthUser } from "./services/auth";
 import { migrateLocalDecksToCloud } from "./services/decks";
+import { useAuth } from "./hooks/useAuth";
 import type { LobbyPlayer } from "./types/game";
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>("life");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const { tier, trialEndsAt } = useAuth();
   const [codexOpen, setCodexOpen] = useState(false);
   const [judgeOpen, setJudgeOpen] = useState(false);
   const [codexSearch, setCodexSearch] = useState("");
@@ -79,6 +81,31 @@ function App() {
     await signOut();
     // onAuthStateChange above handles re-initializing an anonymous session
   };
+
+  // ── Handle Stripe redirect back (?upgraded=true / ?upgraded=false) ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const upgraded = params.get("upgraded");
+    if (!upgraded) return;
+    // Strip query param from URL without a page reload
+    window.history.replaceState({}, "", window.location.pathname);
+    if (upgraded === "true") {
+      setActiveTab("settings");
+      // Brief banner — Stripe webhook will update the tier within seconds
+      const el = document.createElement("div");
+      el.id = "upgrade-toast";
+      el.innerText = "🎉 Upgrade successful! Your plan is being activated…";
+      Object.assign(el.style, {
+        position: "fixed", bottom: "80px", left: "50%", transform: "translateX(-50%)",
+        background: "rgba(10,8,16,0.96)", border: "1px solid rgba(139,92,246,0.5)",
+        borderRadius: "12px", padding: "12px 20px", color: "#fff",
+        fontSize: "0.9rem", fontWeight: 600, zIndex: "9999",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.7)", backdropFilter: "blur(12px)",
+      });
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 6000);
+    }
+  }, []);
 
   // ── Global Event Listeners ──
   useEffect(() => {
@@ -230,6 +257,8 @@ function App() {
             theme={theme}
             setTheme={setTheme}
             authUser={authUser}
+            tier={tier}
+            trialEndsAt={trialEndsAt}
             onLinkGoogle={linkGoogleAccount}
             onSignIn={() => setAuthModalOpen(true)}
             onSignOut={handleSignOut}

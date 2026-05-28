@@ -7,6 +7,8 @@ import { upsertProfile, getDisplayName } from "../services/auth";
 import type { AuthUser } from "../services/auth";
 import { isSupabaseConfigured } from "../services/supabase";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { UpgradePanel } from "./UpgradePanel";
+import type { SubscriptionTier } from "../types/subscription";
 
 interface SettingsPanelProps {
   apiKey: string;
@@ -14,13 +16,15 @@ interface SettingsPanelProps {
   theme?: ThemeId;
   setTheme?: (t: ThemeId) => void;
   authUser?: AuthUser | null;
+  tier?: SubscriptionTier;
+  trialEndsAt?: string | null;
   onLinkGoogle?: () => void;
   onSignIn?: () => void;
   onSignOut?: () => void;
   onNavigate?: (tab: TabId) => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, onLinkGoogle, onSignIn, onSignOut, onNavigate }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onLinkGoogle, onSignIn, onSignOut, onNavigate }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
 
@@ -539,6 +543,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
         </form>
 
       </div>
+
+      {/* ── Upgrade / Plan ── */}
+      {isSupabaseConfigured && (
+        <UpgradePanel tier={tier} authUser={authUser ?? null} trialEndsAt={trialEndsAt} />
+      )}
 
       {/* ── App Resources ── */}
       <div className="glass-panel" style={{ padding: "24px" }}>
