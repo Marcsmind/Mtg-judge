@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Suspense, lazy } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { CardCodex } from "./components/CardCodex";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { AuthModal } from "./components/AuthModal";
 // Eagerly loaded — landing view or lightweight
 import { LifeCounter } from "./views/LifeCounter";
 import { DiceAndCoins } from "./views/DiceAndCoins";
@@ -17,13 +18,15 @@ import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
-import { initAuth, onAuthStateChange, linkGoogleAccount } from "./services/auth";
+import { initAuth, onAuthStateChange, linkGoogleAccount, signOut } from "./services/auth";
 import type { AuthUser } from "./services/auth";
+import { migrateLocalDecksToCloud } from "./services/decks";
 import type { LobbyPlayer } from "./types/game";
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>("life");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [codexOpen, setCodexOpen] = useState(false);
   const [judgeOpen, setJudgeOpen] = useState(false);
   const [codexSearch, setCodexSearch] = useState("");
@@ -58,9 +61,24 @@ function App() {
   // ── Auth — sign in anonymously on first load ──
   useEffect(() => {
     initAuth().then(user => { if (user) setAuthUser(user); });
-    const { unsubscribe } = onAuthStateChange(user => setAuthUser(user));
+    const { unsubscribe } = onAuthStateChange(user => {
+      setAuthUser(user);
+      // Re-init anonymous session after sign-out so the app is never sessionless
+      if (!user) initAuth().then(u => { if (u) setAuthUser(u); });
+    });
     return unsubscribe;
   }, []);
+
+  // ── Migrate local decks to cloud on first email sign-in ──
+  useEffect(() => {
+    if (!authUser || authUser.isAnonymous) return;
+    migrateLocalDecksToCloud(authUser.id);
+  }, [authUser?.id, authUser?.isAnonymous]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    // onAuthStateChange above handles re-initializing an anonymous session
+  };
 
   // ── Global Event Listeners ──
   useEffect(() => {
@@ -213,6 +231,8 @@ function App() {
             setTheme={setTheme}
             authUser={authUser}
             onLinkGoogle={linkGoogleAccount}
+            onSignIn={() => setAuthModalOpen(true)}
+            onSignOut={handleSignOut}
             onNavigate={(tab) => setActiveTab(tab)}
           />
         );
@@ -254,6 +274,13 @@ function App() {
           {renderActiveView()}
         </Suspense>
       </main>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={(user) => { setAuthUser(user); setAuthModalOpen(false); }}
+      />
 
       {/* Slide-out Search Codex Overlay */}
       <CardCodex

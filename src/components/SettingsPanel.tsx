@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2, BookOpen, HelpCircle, ExternalLink } from "lucide-react";
+import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2, BookOpen, HelpCircle, ExternalLink, LogIn, LogOut } from "lucide-react";
 import { THEMES } from "../constants/themes";
 import type { ThemeId } from "../constants/themes";
 import type { TabId } from "../constants/tabIds";
@@ -15,10 +15,12 @@ interface SettingsPanelProps {
   setTheme?: (t: ThemeId) => void;
   authUser?: AuthUser | null;
   onLinkGoogle?: () => void;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
   onNavigate?: (tab: TabId) => void;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, onLinkGoogle, onNavigate }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, onLinkGoogle, onSignIn, onSignOut, onNavigate }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
 
@@ -353,80 +355,104 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
       </div>
 
       {/* ── Account Panel ── */}
-      {isSupabaseConfigured && authUser && (
+      {isSupabaseConfigured && (
         <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
             <User2 size={22} color="var(--accent-purple)" />
             <div>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Account &amp; Leaderboard</h3>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Account</h3>
               <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                Set your leaderboard display name and link a Google account to sync stats across devices.
+                Save your decks and game history across devices.
               </p>
             </div>
           </div>
 
-          {/* Status badge */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-            {authUser.isAnonymous ? (
-              <>
-                <span style={{ fontSize: "0.78rem", background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.25)", borderRadius: "20px", padding: "3px 10px", color: "var(--accent-gold)", fontWeight: 700 }}>
-                  🎮 Anonymous — stats saved to this browser
-                </span>
-                {onLinkGoogle && (
+          {/* Not signed in — show sign-in CTA */}
+          {(!authUser || authUser.isAnonymous) && (
+            <>
+              <div style={{ display: "flex", gap: "14px", background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.15)", borderRadius: "10px", padding: "14px 16px" }}>
+                <div style={{ fontSize: "0.88rem", lineHeight: 1.55, color: "var(--text-secondary)" }}>
+                  <strong style={{ color: "#fff", display: "block", marginBottom: "4px" }}>Playing without an account</strong>
+                  Decks and history are saved to this browser only. Create a free account to access your data from any device.
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                {onSignIn && (
+                  <button
+                    onClick={onSignIn}
+                    className="glass-button"
+                    style={{ padding: "10px 18px", fontSize: "0.9rem", fontWeight: 600, background: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.4)", color: "var(--accent-purple)", flex: 1 }}
+                  >
+                    <LogIn size={15} />
+                    <span>Sign In / Create Account</span>
+                  </button>
+                )}
+                {onLinkGoogle && authUser && (
                   <button
                     onClick={onLinkGoogle}
                     className="glass-button"
-                    style={{ padding: "6px 14px", fontSize: "0.82rem", background: "rgba(66,133,244,0.1)", borderColor: "rgba(66,133,244,0.3)", color: "#4285F4" }}
+                    style={{ padding: "10px 16px", fontSize: "0.88rem", background: "rgba(66,133,244,0.08)", borderColor: "rgba(66,133,244,0.25)", color: "#4285F4" }}
                   >
                     <Link2 size={14} />
-                    <span>Link Google Account</span>
+                    <span>Link Google</span>
                   </button>
                 )}
-              </>
-            ) : (
-              <span style={{ fontSize: "0.78rem", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "20px", padding: "3px 10px", color: "var(--accent-emerald)", fontWeight: 700 }}>
-                ✅ Linked with Google{authUser.email ? ` — ${authUser.email}` : ""}
-              </span>
-            )}
-          </div>
-
-          {authUser.isAnonymous && (
-            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
-              Linking with Google keeps your win/loss history portable — if you switch browsers or devices, your stats follow you. Your anonymous history is merged automatically; nothing is lost.
-            </p>
+              </div>
+            </>
           )}
 
-          {/* Display name form */}
-          <form onSubmit={handleSaveDisplayName} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Display / Player Name</label>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <input
-                type="text"
-                className="glass-input"
-                placeholder="Player"
-                value={displayName}
-                onChange={e => setDisplayName(e.target.value.slice(0, 24))}
-                maxLength={24}
-                style={{ flex: 1 }}
-              />
-              <button
-                type="submit"
-                className="glass-button"
-                disabled={!displayName.trim()}
-                style={{
-                  background: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.15)",
-                  borderColor: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.4)",
-                  color: "#fff",
-                }}
-              >
-                {displayNameSaved ? <Check size={14} /> : null}
-                <span>{displayNameSaved ? "Saved!" : "Save"}</span>
-              </button>
-            </div>
-            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              Used on the leaderboard and pre-filled as your name when joining a multiplayer room. Max 24 characters.
-            </p>
-          </form>
+          {/* Signed in with email */}
+          {authUser && !authUser.isAnonymous && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+                <span style={{ fontSize: "0.82rem", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "20px", padding: "4px 12px", color: "var(--accent-emerald)", fontWeight: 600 }}>
+                  ✅ {authUser.email ?? "Account linked"}
+                </span>
+                {onSignOut && (
+                  <button
+                    onClick={onSignOut}
+                    className="glass-button"
+                    style={{ padding: "6px 14px", fontSize: "0.82rem", background: "rgba(244,63,94,0.06)", borderColor: "rgba(244,63,94,0.2)", color: "var(--accent-rose)" }}
+                  >
+                    <LogOut size={13} />
+                    <span>Sign Out</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Display name form — only shown when signed in */}
+              <form onSubmit={handleSaveDisplayName} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Display / Player Name</label>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <input
+                    type="text"
+                    className="glass-input"
+                    placeholder="Player"
+                    value={displayName}
+                    onChange={e => setDisplayName(e.target.value.slice(0, 24))}
+                    maxLength={24}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="submit"
+                    className="glass-button"
+                    disabled={!displayName.trim()}
+                    style={{
+                      background: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.15)",
+                      borderColor: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.4)",
+                      color: "#fff",
+                    }}
+                  >
+                    {displayNameSaved ? <Check size={14} /> : null}
+                    <span>{displayNameSaved ? "Saved!" : "Save"}</span>
+                  </button>
+                </div>
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                  Used on the leaderboard and pre-filled as your name when joining a multiplayer room. Max 24 characters.
+                </p>
+              </form>
+            </>
+          )}
         </div>
       )}
 
