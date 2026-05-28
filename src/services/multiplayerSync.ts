@@ -121,11 +121,30 @@ const gameEndHandlers: Map<string, () => void> = new Map();
 export function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous I/1/0/O
   let code = "";
-  // Called from an event handler, not during render — Math.random() is fine here
   for (let i = 0; i < 4; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+/**
+ * Generates a room code that is not currently in use.
+ * Checks game_states for an active row (< 24 h old) and retries up to 10
+ * times before falling back to a plain random code.
+ */
+export async function generateUniqueRoomCode(): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = generateRoomCode();
+    const { data } = await supabase
+      .from("game_states")
+      .select("updated_at")
+      .eq("room_code", code)
+      .maybeSingle();
+    if (!data) return code; // no row → code is free
+    const ageMs = Date.now() - new Date(data.updated_at as string).getTime();
+    if (ageMs > 24 * 60 * 60 * 1_000) return code; // row is stale → safe to reuse
+  }
+  return generateRoomCode(); // 10 collisions in a row is astronomically unlikely
 }
 
 // ── Subscribe with exponential backoff ───────────────────────────────────────

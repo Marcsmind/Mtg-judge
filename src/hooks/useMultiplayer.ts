@@ -20,7 +20,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "../components/Toast";
 import {
-  generateRoomCode,
+  generateUniqueRoomCode,
   createRoom,
   joinRoom as joinSyncRoom,
   subscribeWithRetry,
@@ -336,7 +336,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     if (!isSupabaseConfigured) return;
     setRoomLoading(true);
     setRoomError(null);
-    const code = generateRoomCode();
+    const code = await generateUniqueRoomCode();
     try {
       const ok = await createRoom(
         code,

@@ -18,7 +18,7 @@ import { QRScanner } from "../components/QRScanner";
 import { useFeature } from "../hooks/useFeature";
 import { getDeviceId } from "../services/auth";
 import {
-  generateRoomCode,
+  generateUniqueRoomCode,
   createRoom,
   joinRoom as joinSyncRoom,
   broadcastState,
@@ -185,7 +185,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
     if (!isSupabaseConfigured) return;
     setRoomLoading(true);
     setRoomError(null);
-    const code = generateRoomCode();
+    const code = await generateUniqueRoomCode();
     const hostPlayer: LobbyPlayer = {
       deviceId:      getDeviceId(),
       playerName:    localStorage.getItem(STORAGE_KEYS.DISPLAY_NAME) || "Player",
