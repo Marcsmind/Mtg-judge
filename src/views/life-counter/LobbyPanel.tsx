@@ -462,8 +462,13 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
                 <button
                   key={deck.id}
                   onClick={() => {
-                    handleSelectSuggestion(deck.commanderName);
+                    // Single update with both commanderName AND deckId to avoid
+                    // broadcasting an intermediate state without deckId to the host.
+                    setCmdInput(deck.commanderName);
+                    setShowSuggestions(false);
+                    setPreviewCard(null);
                     onUpdateSelf({ commanderName: deck.commanderName, deckId: deck.id });
+                    searchCardFuzzy(deck.commanderName).then(card => { if (card) setConfirmedCard(card); });
                   }}
                   style={{
                     padding: "4px 10px", borderRadius: "7px",
