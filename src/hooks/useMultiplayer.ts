@@ -23,6 +23,7 @@ import {
   generateRoomCode,
   createRoom,
   joinRoom as joinSyncRoom,
+  subscribeWithRetry,
   broadcastState,
   leaveRoom,
   reattachHandler,
@@ -249,7 +250,11 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       } else if (status === "failed") {
         setRoomReconnecting(false);
         setRoomConnected(false);
-        setRoomError("Connection lost. Tap to reconnect.");
+        setRoomError("Connection lost. Reconnecting when network returns…");
+        // Pre-fill the join input with the saved room code so the user doesn't
+        // have to retype it if automatic reconnect doesn't recover in time.
+        const savedCode = localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
+        if (savedCode) setJoinCodeInput(savedCode);
       }
     };
   });
@@ -361,6 +366,10 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     if (!code || !isSupabaseConfigured) return;
     setRoomLoading(true);
     setRoomError(null);
+    // Show the reconnecting banner for auto-rejoin (overrideCode) and manual
+    // retry after a connection failure (not connected + had an error displayed).
+    const isRetry = !roomConnected && roomError !== null;
+    if (isRetry || overrideCode) setRoomReconnecting(true);
 
     // Reuse TurnOrder's channel if still active — eliminates the "Reconnecting" banner
     // and the 0.5–3 s window where life counter changes are lost.
@@ -373,6 +382,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
         : "guest";
       setRoomCode(code);
       setRoomConnected(true); // channel already subscribed — no handshake needed
+      setRoomReconnecting(false);
       setRoomRole(role);
       setRoomLoading(false);
       if (!overrideCode) setJoinCodeInput("");
@@ -467,6 +477,28 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomConnected]);
+
+  // ── Auto-rejoin on network recovery ──
+  // When the device comes back online after being fully offline, fire subscribeWithRetry
+  // directly so we get the full exponential-backoff retry loop rather than a single attempt.
+  useEffect(() => {
+    const handleOnline = () => {
+      const savedCode = localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
+      if (!savedCode || !isSupabaseConfigured || roomConnected) return;
+      setRoomReconnecting(true);
+      setRoomError(null);
+      subscribeWithRetry(
+        savedCode,
+        (s) => handleRemoteUpdateRef.current(s),
+        (status) => handleConnectionStatusRef.current(status),
+      ).catch(() => {
+        // handleConnectionStatusRef "failed" path handles the UI update
+      });
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomConnected]);
 

@@ -461,12 +461,10 @@ async function _subscribeToRoom(
   onUpdate: (state: SyncState) => void,
   onDropped?: () => void,
 ): Promise<void> {
-  // Clean up any existing subscription for this room
-  const existing = channels.get(roomCode);
-  if (existing) {
-    supabase.removeChannel(existing);
-    channels.delete(roomCode);
-  }
+  // Keep the existing channel in the map while we try to create a new one.
+  // This means broadcastState() can still send via the old (potentially degraded)
+  // channel during retry attempts instead of silently dropping every broadcast.
+  // The old channel is only removed AFTER a new one successfully subscribes.
 
   const channel = supabase.channel(`game-${roomCode}`, {
     config: { broadcast: { self: false } }, // don't echo our own sends back
@@ -513,35 +511,48 @@ async function _subscribeToRoom(
 
   let wasSubscribed = false;
 
-  await new Promise<void>((resolve, reject) => {
-    // 8-second hard timeout — prevents the UI from hanging forever if
-    // Supabase never calls the callback (network drop, config issue, etc.)
-    const timeout = setTimeout(
-      () => reject(new Error("Connection timed out after 8 seconds")),
-      8_000
-    );
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // 15-second timeout — devices coming back from airplane mode / screen lock
+      // may need up to 10–15 s for the Supabase WebSocket to fully reconnect.
+      const timeout = setTimeout(
+        () => reject(new Error("Connection timed out after 15 seconds")),
+        15_000
+      );
 
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        clearTimeout(timeout);
-        wasSubscribed = true;
-        resolve();
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        if (!wasSubscribed) {
-          // Failed during initial handshake — reject so the retry loop can handle it
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
           clearTimeout(timeout);
-          reject(new Error(status));
-        } else {
-          // Mid-session drop — channel was healthy before, now it's gone
-          // Only fire onDropped if this room is still the active one (not manually closed)
-          if (channels.has(roomCode)) {
-            onDropped?.();
+          wasSubscribed = true;
+          resolve();
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          if (!wasSubscribed) {
+            // Failed during initial handshake — reject so the retry loop handles it
+            clearTimeout(timeout);
+            reject(new Error(status));
+          } else {
+            // Mid-session drop — channel was healthy before, now it's gone
+            // Only fire onDropped if this room is still the active one (not manually closed)
+            if (channels.has(roomCode)) {
+              onDropped?.();
+            }
           }
         }
-      }
+      });
     });
-  });
+  } catch (err) {
+    // CRITICAL: clean up the failed channel so it doesn't accumulate as a leak.
+    // Without this, each retry attempt leaves a dangling Supabase subscription that
+    // consumes connection budget and can prevent future subscribes from succeeding.
+    supabase.removeChannel(channel);
+    throw err;
+  }
 
+  // Success: now replace the old channel with the new one.
+  const existing = channels.get(roomCode);
+  if (existing && existing !== channel) {
+    supabase.removeChannel(existing);
+  }
   channels.set(roomCode, channel);
   // updateHandlers was already set before channel.subscribe() so the handler is
   // active as soon as the first broadcast arrives after SUBSCRIBED.
