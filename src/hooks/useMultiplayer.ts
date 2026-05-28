@@ -189,6 +189,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
         setRoomError(null);
       } else if (status === "connected") {
         setRoomReconnecting(false);
+        setRoomConnected(true);
         setRoomError(null);
 
         const code = roomCodeRef.current;
