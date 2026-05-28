@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Scale, Send, Trash2, AlertCircle, BookmarkCheck, X } from "lucide-react";
 import { useMobile } from "../hooks/useMobile";
+import { UpgradePrompt } from "../components/UpgradePrompt";
 import {
   autocompleteCard,
   searchCardFuzzy,
@@ -107,6 +108,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
   const [cardLoading, setCardLoading] = useState(false);
   const [queryLoading, setQueryLoading] = useState(false);
   const [error, setError] = useState("");
+  const [quotaHit, setQuotaHit] = useState(false);
 
   // ── Saved Rulings (Favorites) ────────────────────────────────────────────
   const [favorites, setFavorites] = useState<FavoriteRuling[]>(() => {
@@ -286,6 +288,9 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
         ...prev,
         { role: "model", content: judgeResponse },
       ]);
+      if (judgeResponse.includes("Daily question limit reached")) {
+        setQuotaHit(true);
+      }
     } catch (err: unknown) {
       console.error(err);
       setError("Error communicating with AI Judge.");
@@ -568,6 +573,16 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Quota upgrade prompt */}
+      {quotaHit && (
+        <div style={{ marginBottom: "10px" }}>
+          <UpgradePrompt
+            message="You've hit the 5 questions/day limit on the shared key. Upgrade to Pro for unlimited AI Judge questions, or add your own Gemini API key in Settings."
+            compact
+          />
+        </div>
+      )}
 
       {/* Error notification */}
       {error && (

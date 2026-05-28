@@ -8,6 +8,7 @@
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Check, Users, Crown, LogOut, ChevronRight, Loader2, X } from "lucide-react";
+import { UpgradePrompt } from "../../components/UpgradePrompt";
 import type { LobbyPlayer } from "../../types/game";
 import {
   autocompleteCard,
@@ -37,6 +38,7 @@ interface LobbyPanelProps {
   onUpdateSelf: (updates: Partial<LobbyPlayer>) => void;
   onStart: () => void;    // host only — advances to turn-select
   onLeave: () => void;
+  canHostPod?: boolean;   // Pro gate: hosting 3+ players (default true for guests)
 }
 
 // ── Commander autocomplete (uses the shared Scryfall service with AbortController) ──
@@ -100,6 +102,7 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
   onUpdateSelf,
   onStart,
   onLeave,
+  canHostPod = true,
 }) => {
   const [nameInput, setNameInput]             = useState(selfPlayer.playerName);
   const [cmdInput, setCmdInput]               = useState(selfPlayer.commanderName);
@@ -573,11 +576,19 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
         })}
       </div>
 
+      {/* ── Host: Pro gate for 3+ player pods ── */}
+      {isHost && !canHostPod && allPlayers.length >= 3 && (
+        <UpgradePrompt
+          message="Hosting pods of 3–6 players requires Pro. Guests can always join for free."
+          compact
+        />
+      )}
+
       {/* ── Host: Start button ── */}
       {isHost && (
         <button
           onClick={onStart}
-          disabled={!allReady}
+          disabled={!allReady || (!canHostPod && allPlayers.length >= 3)}
           aria-label={allReady ? "Start the game — transition to turn order selection" : !hasEnoughPlayers ? "Waiting for other players to join" : `Waiting for ${allPlayers.length - readyCount} player${allPlayers.length - readyCount === 1 ? "" : "s"} to tap Ready`}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",

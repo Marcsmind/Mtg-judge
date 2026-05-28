@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { loadDecks, addDeck, updateDeck, deleteDeck } from "../services/decks";
 import type { SavedDeck } from "../types/deck";
+import { useFeature } from "../hooks/useFeature";
+import { UpgradePrompt } from "../components/UpgradePrompt";
 import { searchCardFuzzy as searchCardForDeck, getCardImage as getDeckCardImage, autocompleteCard as autocompleteDeck } from "../services/scryfall";
 import {
   autocompleteCard,
@@ -76,6 +78,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   openCodexWith,
 }) => {
   const { showToast } = useToast();
+  const canGenerate  = useFeature("ai_deck_generation");
+  const canCloudDecks = useFeature("cloud_decks");
   const [mode, setMode] = useState<DeckMode>("generate");
 
   // ── Generate mode state ──
@@ -453,16 +457,16 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
               {/* Submit */}
               <button
                 onClick={handleGenerate}
-                disabled={!commander.trim() || generating}
+                disabled={!commander.trim() || generating || !canGenerate}
                 className="glass-button"
                 style={{
                   background: "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(6,182,212,0.15) 100%)",
                   border: "1px solid rgba(139,92,246,0.4)",
                   padding: "10px 20px", fontSize: "0.9rem", fontWeight: 700,
                   color: !commander.trim() ? "var(--text-muted)" : "var(--text-primary)",
-                  cursor: !commander.trim() || generating ? "not-allowed" : "pointer",
+                  cursor: !commander.trim() || generating || !canGenerate ? "not-allowed" : "pointer",
                   justifyContent: "center", gap: "8px",
-                  opacity: !commander.trim() ? 0.5 : 1,
+                  opacity: !commander.trim() || !canGenerate ? 0.5 : 1,
                 }}
               >
                 {generating ? (
@@ -471,6 +475,9 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   <><Wand2 size={15} /> Generate 100-Card Deck</>
                 )}
               </button>
+              {!canGenerate && (
+                <UpgradePrompt message="AI deck generation requires Pro." compact />
+              )}
             </div>
 
             {/* Generated deck output */}
@@ -809,21 +816,27 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>
                 {savedDecks.length === 0 ? "No saved decks yet." : `${savedDecks.length} saved deck${savedDecks.length > 1 ? "s" : ""}`}
+                {!canCloudDecks && <span style={{ color: "var(--text-muted)" }}> · 3 max on free</span>}
               </p>
               <button
                 onClick={() => { resetDeckForm(); setShowAddForm(v => !v); }}
+                disabled={!canCloudDecks && savedDecks.length >= 3 && !showAddForm}
                 style={{
                   display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px",
-                  borderRadius: "9px", cursor: "pointer",
+                  borderRadius: "9px", cursor: (!canCloudDecks && savedDecks.length >= 3 && !showAddForm) ? "not-allowed" : "pointer",
                   background: showAddForm ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.1)",
                   border: "1px solid rgba(139,92,246,0.35)",
                   color: "var(--accent-purple)", fontSize: "0.82rem", fontWeight: 700,
                   transition: "all 0.15s ease",
+                  opacity: (!canCloudDecks && savedDecks.length >= 3 && !showAddForm) ? 0.4 : 1,
                 }}
               >
                 <PlusCircle size={14} /> {showAddForm ? "Cancel" : "Add Deck"}
               </button>
             </div>
+            {!canCloudDecks && savedDecks.length >= 3 && !showAddForm && (
+              <UpgradePrompt message="You've reached the 3-deck limit on the free plan. Upgrade for unlimited decks and cloud sync." compact />
+            )}
 
             {/* Add / Edit form */}
             {showAddForm && (

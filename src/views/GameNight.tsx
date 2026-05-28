@@ -13,6 +13,7 @@ import {
   Sparkles, Wifi, WifiOff, Copy, Check, Crown,
 } from "lucide-react";
 import { LobbyPanel } from "./life-counter/LobbyPanel";
+import { useFeature } from "../hooks/useFeature";
 import { getDeviceId } from "../services/auth";
 import {
   generateRoomCode,
@@ -72,6 +73,7 @@ function buildLobbyBroadcast(lobby: LobbyPlayer[], updatedBy: string): Omit<Sync
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
+  const canHostPod = useFeature("host_multiplayer_pod");
   const { showToast } = useToast();
 
   // ── State ──
@@ -372,6 +374,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
             onUpdateSelf={handleUpdateLobbyPlayer}
             onStart={handleLobbyStart}
             onLeave={handleLeaveRoom}
+            canHostPod={canHostPod}
           />
         </div>
       </div>

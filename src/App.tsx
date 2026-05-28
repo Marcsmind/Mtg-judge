@@ -109,9 +109,14 @@ function App() {
 
   // ── Global Event Listeners ──
   useEffect(() => {
-    const handleOpenJudge = () => setJudgeOpen(true);
-    window.addEventListener("open-ai-judge", handleOpenJudge);
-    return () => window.removeEventListener("open-ai-judge", handleOpenJudge);
+    const handleOpenJudge  = () => setJudgeOpen(true);
+    const handleGoSettings = () => { setActiveTab("settings"); setJudgeOpen(false); };
+    window.addEventListener("open-ai-judge",   handleOpenJudge);
+    window.addEventListener("go-to-settings",  handleGoSettings);
+    return () => {
+      window.removeEventListener("open-ai-judge",  handleOpenJudge);
+      window.removeEventListener("go-to-settings", handleGoSettings);
+    };
   }, []);
   const setTheme = (t: ThemeId) => {
     setThemeState(t);
