@@ -9,7 +9,7 @@
  * Local solo sessions use the standard symmetric grid.
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Crown, Skull, ShieldAlert, Swords, Coins, Shield } from "lucide-react";
 import type { Player, ActiveCounters } from "../../types/game";
 import type { SavedDeck } from "../../types/deck";
@@ -102,6 +102,24 @@ const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
     return () => clearInterval(t);
   }, []);
 
+  // ── Active Life Delta Tracker ───────────────────────────────────────────────
+  const [lifeDelta, setLifeDelta] = useState(0);
+  const prevLifeRef = useRef(p.life);
+  const deltaTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const diff = p.life - prevLifeRef.current;
+    if (diff !== 0) {
+      setLifeDelta(prev => prev + diff);
+      prevLifeRef.current = p.life;
+      
+      if (deltaTimeoutRef.current) clearTimeout(deltaTimeoutRef.current);
+      deltaTimeoutRef.current = setTimeout(() => {
+        setLifeDelta(0);
+      }, 2500);
+    }
+  }, [p.life]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!p.commanderName) { setCmdCard(null); return; }
@@ -162,7 +180,28 @@ const OpponentDetailSheet: React.FC<DetailSheetProps> = ({
         <div style={{
           textAlign: "center", padding: "16px 0 12px",
           borderBottom: "1px solid rgba(255,255,255,0.06)", marginBottom: "14px",
+          position: "relative",
         }}>
+          {lifeDelta !== 0 && (
+            <div
+              key={lifeDelta}
+              style={{
+                position: "absolute",
+                top: "12px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                fontSize: "1.6rem",
+                fontWeight: 900,
+                color: lifeDelta > 0 ? "#10b981" : "#ef4444",
+                textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+                zIndex: 10,
+                pointerEvents: "none",
+                animation: "delta-fade-up 2.5s ease-out forwards",
+              }}
+            >
+              {lifeDelta > 0 ? `+${lifeDelta}` : lifeDelta}
+            </div>
+          )}
           <span style={{
             fontSize: "4.5rem", fontWeight: 900, lineHeight: 1,
             color: isDefeated ? "#ef4444" : theme.accent,
@@ -416,12 +455,14 @@ const CompactOpponentCard: React.FC<CompactCardProps> = ({
         alignItems: "center", justifyContent: "center", gap: "4px",
         cursor: "pointer", position: "relative",
         width: "100%", height: "100%",
-        transition: "filter 0.15s ease",
+        transition: "filter 0.3s ease, transform 0.15s ease",
         boxShadow: isDefeated ? "0 0 12px rgba(239,68,68,0.15) inset" : undefined,
+        filter: (!isDefeated && dotColor === "#6b7280") ? "grayscale(0.8) brightness(0.6)" : "none",
+        overflow: "hidden",
       }}
-      onPointerDown={e => (e.currentTarget.style.filter = "brightness(1.15)")}
-      onPointerUp={e => (e.currentTarget.style.filter = "")}
-      onPointerLeave={e => (e.currentTarget.style.filter = "")}
+      onPointerDown={e => (e.currentTarget.style.transform = "scale(0.97)")}
+      onPointerUp={e => (e.currentTarget.style.transform = "")}
+      onPointerLeave={e => (e.currentTarget.style.transform = "")}
     >
       {/* Presence dot — top-right */}
       {dotColor && (
@@ -448,9 +489,34 @@ const CompactOpponentCard: React.FC<CompactCardProps> = ({
       <span style={{
         fontSize: lifeFontSize, fontWeight: 900, lineHeight: 1,
         color: isDefeated ? "#ef4444" : theme.accent,
+        opacity: (dotColor === "#6b7280" || dotColor === "#eab308") ? 0.3 : 1,
       }}>
         {p.life}
       </span>
+
+      {/* Offline/Lagging Overlay */}
+      {!isDefeated && dotColor === "#6b7280" && (
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          background: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: "8px", padding: "4px 8px",
+          fontSize: "0.7rem", fontWeight: 800, letterSpacing: "1px", color: "var(--text-muted)",
+          pointerEvents: "none", zIndex: 10,
+        }}>
+          OFFLINE
+        </div>
+      )}
+      {!isDefeated && dotColor === "#eab308" && (
+        <div style={{
+          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.3)",
+          borderRadius: "8px", padding: "4px 8px",
+          fontSize: "0.7rem", fontWeight: 800, letterSpacing: "1px", color: "var(--accent-gold)",
+          pointerEvents: "none", zIndex: 10,
+        }}>
+          LAGGING
+        </div>
+      )}
 
       {/* Status icons */}
       <div style={{ display: "flex", gap: "5px", alignItems: "center", minHeight: "14px" }}>

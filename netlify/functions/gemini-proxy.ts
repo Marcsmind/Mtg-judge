@@ -1,19 +1,60 @@
 /**
- * Netlify serverless function — Gemini API proxy
+ * Netlify serverless function — Gemini API proxy with per-IP daily quota.
  *
- * Keeps the GEMINI_API_KEY server-side only (set in Netlify → Site configuration
- * → Environment variables). Trusted friends can use the shared key by entering
- * the ACCESS_CODE you give them in the app Settings.
+ * Environment variables (set in Netlify → Site configuration → Environment):
+ *   GEMINI_API_KEY          — shared Gemini key (required)
+ *   ACCESS_CODE             — optional passphrase gate AND quota bypass
+ *   VITE_SUPABASE_URL       — Supabase project URL (for quota tracking)
+ *   VITE_SUPABASE_ANON_KEY  — Supabase anon key (for quota tracking)
+ *
+ * Quota behaviour:
+ *   - Free users (no access code): 5 questions/day per IP address
+ *   - Requests that include the correct ACCESS_CODE bypass the quota entirely
+ *     (use this for your own testing / admin access)
+ *   - If Supabase is not configured, quota tracking is skipped (allow all)
  *
  * POST body: { model: string, payload: object, accessCode?: string }
- * Returns:   the raw Gemini API JSON response
- *
- * Access-code gate:
- *   - If ACCESS_CODE env var is set, the request body must include a matching
- *     `accessCode` field — otherwise the proxy returns 403.
- *   - If ACCESS_CODE is NOT set (local dev / open deployment), any request passes.
  */
+
 import type { Handler } from "@netlify/functions";
+import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
+
+const DAILY_LIMIT = 5;
+
+// ── Supabase client (quota tracking) ────────────────────────────────────────
+// Uses the same env vars as the frontend (Netlify exposes all vars to functions)
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseAdmin = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
+
+async function checkAndIncrementQuota(identifier: string): Promise<boolean> {
+  if (!supabaseAdmin) return true; // Supabase not configured — skip quota
+
+  const today = new Date().toISOString().split("T")[0];
+
+  try {
+    const { data } = await supabaseAdmin
+      .from("ai_usage")
+      .select("count")
+      .eq("user_hash", identifier)
+      .eq("date", today)
+      .maybeSingle();
+
+    const currentCount = data?.count ?? 0;
+    if (currentCount >= DAILY_LIMIT) return false;
+
+    await supabaseAdmin.from("ai_usage").upsert(
+      { user_hash: identifier, date: today, count: currentCount + 1 },
+      { onConflict: "user_hash,date" }
+    );
+    return true;
+  } catch {
+    return true; // On unexpected error, allow through (graceful degradation)
+  }
+}
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -41,19 +82,45 @@ export const handler: Handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: { message: `Bad request: ${err}` } }) };
   }
 
-  // ── Access-code gate ──────────────────────────────────────────────────────
-  // Only enforced when ACCESS_CODE is configured in Netlify env vars.
-  // Comparison is done server-side so the code is never exposed to the client.
+  // ── Access-code gate + quota bypass ──────────────────────────────────────
+  // If ACCESS_CODE is set: the code must match to use the proxy at all.
+  // When the code matches, it also bypasses the daily quota — use this for
+  // testing and admin access without burning through the free tier limit.
   const requiredCode = process.env.ACCESS_CODE;
-  if (requiredCode) {
-    if (!accessCode || accessCode.trim().toUpperCase() !== requiredCode.trim().toUpperCase()) {
+  const codeIsValid = requiredCode
+    ? (accessCode?.trim().toUpperCase() === requiredCode.trim().toUpperCase())
+    : false;
+
+  if (requiredCode && !codeIsValid) {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: { message: "Invalid access code. Ask the app owner for the correct code and enter it in Settings → Server Access Code." } }),
+    };
+  }
+
+  // ── Per-IP daily quota (skipped when access code matches) ────────────────
+  if (!codeIsValid) {
+    const clientIp =
+      event.headers["x-forwarded-for"]?.split(",")[0].trim()
+      ?? event.headers["x-nf-client-connection-ip"]
+      ?? "unknown";
+    const ipHash = createHash("sha256").update(clientIp).digest("hex").substring(0, 32);
+
+    const withinQuota = await checkAndIncrementQuota(ipHash);
+    if (!withinQuota) {
       return {
-        statusCode: 403,
-        body: JSON.stringify({ error: { message: "Invalid access code. Ask the app owner for the correct code and enter it in Settings → Server Access Code." } }),
+        statusCode: 429,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: {
+            message: `Daily question limit reached (${DAILY_LIMIT}/day on the shared key). Add your own Gemini API key in Settings for unlimited questions.`,
+          },
+        }),
       };
     }
   }
 
+  // ── Forward to Gemini ─────────────────────────────────────────────────────
   const upstream = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {

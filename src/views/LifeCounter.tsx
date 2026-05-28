@@ -689,25 +689,39 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
           {/* Live / Reconnecting badge — shown when multiplayer is active */}
           {roomConnected && roomCode && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: "4px",
-              background: roomReconnecting ? "rgba(234,179,8,0.1)" : "rgba(16,185,129,0.1)",
-              border: `1px solid ${roomReconnecting ? "rgba(234,179,8,0.3)" : "rgba(16,185,129,0.25)"}`,
-              borderRadius: "20px", padding: "3px 8px", flexShrink: 0,
-              transition: "all 0.3s ease",
-            }}>
+            roomReconnecting ? (
+              <button
+                onClick={handleLeaveRoom}
+                title="Cancel reconnect and play offline"
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)",
+                  borderRadius: "20px", padding: "3px 8px", cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  width: "6px", height: "6px", borderRadius: "50%",
+                  background: "var(--accent-gold)", animation: "pulse-glow 1.5s infinite",
+                }} />
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.5px", color: "var(--accent-gold)" }}>
+                  Reconnecting…
+                </span>
+              </button>
+            ) : (
               <div style={{
-                width: "6px", height: "6px", borderRadius: "50%",
-                background: roomReconnecting ? "var(--accent-gold)" : "var(--accent-emerald)",
-                animation: "pulse-glow 1.5s infinite",
-              }} />
-              <span style={{
-                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.5px",
-                color: roomReconnecting ? "var(--accent-gold)" : "var(--accent-emerald)",
+                display: "flex", alignItems: "center", gap: "4px",
+                background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)",
+                borderRadius: "20px", padding: "3px 8px", flexShrink: 0,
               }}>
-                {roomReconnecting ? "Reconnecting…" : roomCode}
-              </span>
-            </div>
+                <div style={{
+                  width: "6px", height: "6px", borderRadius: "50%",
+                  background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite",
+                }} />
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.5px", color: "var(--accent-emerald)" }}>
+                  {roomCode}
+                </span>
+              </div>
+            )
           )}
 
           {/* ── Game Timer widget ── */}
@@ -794,6 +808,27 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             >
               <History size={14} />
             </button>
+
+            {/* Resync Button (only if connected) */}
+            {roomConnected && roomCode && (
+              <button
+                onClick={() => handleJoinRoom(roomCode)}
+                aria-label="Resync Game State"
+                title="Resync Game State"
+                className="touch-icon-btn"
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "8px", padding: "7px 10px",
+                  color: "var(--accent-cyan)",
+                  cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
+                  transition: "all 0.15s ease", flexShrink: 0,
+                }}
+              >
+                <RefreshCw size={14} />
+              </button>
+            )}
 
             {/* Controls toggle — hamburger */}
             <button

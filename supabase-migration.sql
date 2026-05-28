@@ -73,8 +73,63 @@ create policy "game_participants: authenticated insert"
 ALTER TABLE public.game_participants
   ADD COLUMN IF NOT EXISTS commander_name text;
 
+-- ── 5. Subscription Tier ────────────────────────────────────────
+-- Adds monetization columns to profiles (safe to run on existing data).
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS subscription_tier TEXT NOT NULL DEFAULT 'free',
+  ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+
+-- ── 6. AI Usage Quota ────────────────────────────────────────────
+-- Tracks per-IP daily question counts for the shared Gemini proxy key.
+-- Used by netlify/functions/gemini-proxy.ts to enforce the 5/day free limit.
+
+CREATE TABLE IF NOT EXISTS public.ai_usage (
+  id          UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_hash   TEXT    NOT NULL,
+  date        DATE    NOT NULL DEFAULT CURRENT_DATE,
+  count       INT     NOT NULL DEFAULT 0,
+  UNIQUE (user_hash, date)
+);
+
+ALTER TABLE public.ai_usage ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "ai_usage: anon read"
+  ON public.ai_usage FOR SELECT TO anon USING (true);
+CREATE POLICY "ai_usage: anon upsert"
+  ON public.ai_usage FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "ai_usage: anon update"
+  ON public.ai_usage FOR UPDATE TO anon USING (true);
+
+-- ── 7. Cloud-synced Decks ────────────────────────────────────────
+-- Mirrors the SavedDeck localStorage shape. Populated by
+-- migrateLocalDecksToCloud() on first authenticated sign-in.
+
+CREATE TABLE IF NOT EXISTS public.saved_decks (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name            TEXT        NOT NULL,
+  commander_name  TEXT        NOT NULL DEFAULT '',
+  partner_name    TEXT,
+  notes           TEXT,
+  games_played    INT         NOT NULL DEFAULT 0,
+  wins            INT         NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.saved_decks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "saved_decks: own all"
+  ON public.saved_decks FOR ALL USING (auth.uid() = user_id);
+
 -- ── Done ─────────────────────────────────────────────────────
 -- Next steps in Supabase Dashboard:
 --   Authentication → Providers → Enable "Anonymous Sign-ins"
 --   Authentication → Providers → Enable "Google" (for account linking)
+--   Authentication → Providers → Enable "Email" (for email/password sign-in)
 --   Authentication → URL Configuration → Add your app URL to "Redirect URLs"
+--
+-- After running this migration, add to Netlify environment variables:
+--   VITE_SENTRY_DSN     (from sentry.io after creating a project)
+--   VITE_POSTHOG_KEY    (from posthog.com after creating a project)

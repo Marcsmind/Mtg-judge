@@ -16,6 +16,11 @@ export interface AuthUser {
   email?: string;
 }
 
+export interface AuthResult {
+  user: AuthUser | null;
+  error: string | null;
+}
+
 // ── Core helpers ──────────────────────────────────────────────────────────────
 
 /**
@@ -69,6 +74,47 @@ export async function linkGoogleAccount(): Promise<void> {
     options: { redirectTo: window.location.origin },
   });
   if (error) console.error("[auth] linkIdentity failed:", error.message);
+}
+
+/**
+ * Sign up with email + password.
+ * Supabase sends a confirmation email by default — check your Supabase
+ * Auth settings to enable/disable email confirmation.
+ */
+export async function signUpWithEmail(email: string, password: string): Promise<AuthResult> {
+  if (!isSupabaseConfigured) return { user: null, error: 'Supabase not configured.' };
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) return { user: null, error: error.message };
+  if (!data.user) return { user: null, error: 'Sign up failed. Please try again.' };
+  return {
+    user: { id: data.user.id, isAnonymous: false, email: data.user.email ?? undefined },
+    error: null,
+  };
+}
+
+/** Sign in with email + password. */
+export async function signInWithEmail(email: string, password: string): Promise<AuthResult> {
+  if (!isSupabaseConfigured) return { user: null, error: 'Supabase not configured.' };
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) return { user: null, error: error.message };
+  if (!data.user) return { user: null, error: 'Sign in failed. Please try again.' };
+  return {
+    user: { id: data.user.id, isAnonymous: false, email: data.user.email ?? undefined },
+    error: null,
+  };
+}
+
+/**
+ * Send a password reset email. The link redirects to /reset-password
+ * where you can complete the reset flow.
+ */
+export async function resetPassword(email: string): Promise<{ error: string | null }> {
+  if (!isSupabaseConfigured) return { error: 'Supabase not configured.' };
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) return { error: error.message };
+  return { error: null };
 }
 
 /** Sign out and clear the local session. */
@@ -142,7 +188,9 @@ export async function getDisplayName(userId: string): Promise<string> {
 export function getDeviceId(): string {
   let id = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
   if (!id) {
-    id = crypto.randomUUID();
+    id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : 'device-' + Math.random().toString(36).substring(2, 15);
     localStorage.setItem(STORAGE_KEYS.DEVICE_ID, id);
   }
   return id;

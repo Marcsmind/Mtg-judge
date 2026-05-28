@@ -118,6 +118,24 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   const holdTimerRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Active Life Delta Tracker ───────────────────────────────────────────────
+  const [lifeDelta, setLifeDelta] = useState(0);
+  const prevLifeRef = useRef(p.life);
+  const deltaTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const diff = p.life - prevLifeRef.current;
+    if (diff !== 0) {
+      setLifeDelta(prev => prev + diff);
+      prevLifeRef.current = p.life;
+      
+      if (deltaTimeoutRef.current) clearTimeout(deltaTimeoutRef.current);
+      deltaTimeoutRef.current = setTimeout(() => {
+        setLifeDelta(0);
+      }, 2500); // Wait 2.5s before clearing
+    }
+  }, [p.life]);
+
   const startHold = useCallback((delta: number) => {
     holdTimerRef.current = setTimeout(() => {
       holdIntervalRef.current = setInterval(() => {
@@ -189,6 +207,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
               : "0 4px 20px rgba(0,0,0,0.3)",
         position: "relative", overflow: "hidden",
         transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)",
+        filter: (!isDefeated && dotColor === "#6b7280") ? "grayscale(0.8) brightness(0.6)" : "none",
       }}
     >
       {/* ── Presence dot — only shown during a multiplayer session ── */}
@@ -386,8 +405,28 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         {/* Center: life number */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "center",
-          minWidth: "80px", pointerEvents: "none",
+          minWidth: "80px", pointerEvents: "none", position: "relative",
         }}>
+          {lifeDelta !== 0 && (
+            <div
+              key={lifeDelta} // force re-render/animation restart on change
+              style={{
+                position: "absolute",
+                top: "-20px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                fontSize: "1.8rem",
+                fontWeight: 900,
+                color: lifeDelta > 0 ? "#10b981" : "#ef4444",
+                textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+                zIndex: 10,
+                pointerEvents: "none",
+                animation: "delta-fade-up 2.5s ease-out forwards",
+              }}
+            >
+              {lifeDelta > 0 ? `+${lifeDelta}` : lifeDelta}
+            </div>
+          )}
           <span
             className="lc-life-number"
             style={{
@@ -398,10 +437,35 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
               lineHeight: 1, letterSpacing: "-3px",
               filter: p.life < 10 ? "drop-shadow(0 0 8px rgba(239,68,68,0.7))" : "none",
               color: p.life <= 0 ? "#ef4444" : p.life < 10 ? "#fca5a5" : "#fff",
+              opacity: (dotColor === "#6b7280" || dotColor === "#eab308") ? 0.3 : 1,
             }}
           >
             {p.life}
           </span>
+
+          {/* Offline/Lagging Overlay */}
+          {!isDefeated && dotColor === "#6b7280" && (
+            <div style={{
+              position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+              background: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "8px", padding: "6px 12px",
+              fontSize: "1.2rem", fontWeight: 800, letterSpacing: "1px", color: "var(--text-muted)",
+              pointerEvents: "none", zIndex: 10,
+            }}>
+              OFFLINE
+            </div>
+          )}
+          {!isDefeated && dotColor === "#eab308" && (
+            <div style={{
+              position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+              background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.3)",
+              borderRadius: "8px", padding: "6px 12px",
+              fontSize: "1.2rem", fontWeight: 800, letterSpacing: "1px", color: "var(--accent-gold)",
+              pointerEvents: "none", zIndex: 10,
+            }}>
+              LAGGING
+            </div>
+          )}
         </div>
 
         {/* Right zone: add life */}

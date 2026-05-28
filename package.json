@@ -12,8 +12,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@sentry/react": "^10.54.0",
     "@supabase/supabase-js": "^2.106.1",
     "lucide-react": "^1.16.0",
+    "posthog-js": "^1.376.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
@@ -25,6 +27,7 @@
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/ui": "^4.1.7",
     "eslint": "^10.3.0",

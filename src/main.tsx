@@ -1,9 +1,23 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
+import * as Sentry from '@sentry/react'
 import './index.css'
+import './services/analytics' // side-effect import — initialises PostHog on module load
 import App from './App.tsx'
 import { ToastProvider } from './components/Toast.tsx'
+
+// ── Sentry error monitoring ────────────────────────────────────────────────────
+// Set VITE_SENTRY_DSN in .env (and Netlify env vars) after creating a Sentry project.
+// No-op when the DSN is absent (local dev, pre-setup).
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN as string,
+    environment: import.meta.env.MODE,
+    tracesSampleRate: 0.1,
+    sendDefaultPii: true,
+  })
+}
 
 // Service-worker auto-update with a subtle toast notification
 registerSW({

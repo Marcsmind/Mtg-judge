@@ -1,10 +1,17 @@
 /**
- * Deck service — pure localStorage CRUD for SavedDeck records.
- * No React, no side effects; fully unit-testable.
+ * Deck service — localStorage CRUD + Supabase cloud sync.
+ *
+ * Local functions (loadDecks, saveDecks, addDeck, etc.) remain unchanged
+ * and always operate on localStorage. Cloud functions are additive — call
+ * them when the user is authenticated to sync data across devices.
+ *
+ * Migration path: call migrateLocalDecksToCloud(userId) once after a user
+ * signs in for the first time to upload their existing localStorage decks.
  */
 
 import type { SavedDeck } from "../types/deck";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 // ── Read / Write ───────────────────────────────────────────────────────────────
 
@@ -71,4 +78,99 @@ export function recordDeckResult(id: string, won: boolean): void {
 
 export function getDeck(id: string): SavedDeck | undefined {
   return loadDecks().find(d => d.id === id);
+}
+
+// ── Cloud Sync (Supabase) ──────────────────────────────────────────────────────
+// These functions are additive — existing localStorage functions are unchanged.
+// Call them in the UI when the user is authenticated to enable cross-device sync.
+
+type DbDeckRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  commander_name: string;
+  partner_name: string | null;
+  notes: string | null;
+  games_played: number;
+  wins: number;
+  created_at: string;
+  updated_at: string;
+};
+
+function toDbRow(userId: string, deck: SavedDeck): Omit<DbDeckRow, 'updated_at'> & { updated_at: string } {
+  return {
+    id: deck.id,
+    user_id: userId,
+    name: deck.name,
+    commander_name: deck.commanderName,
+    partner_name: deck.partnerName ?? null,
+    notes: deck.notes ?? null,
+    games_played: deck.gamesPlayed,
+    wins: deck.wins,
+    created_at: new Date(deck.createdAt).toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function fromDbRow(row: DbDeckRow): SavedDeck {
+  return {
+    id: row.id,
+    name: row.name,
+    commanderName: row.commander_name,
+    partnerName: row.partner_name ?? undefined,
+    notes: row.notes ?? undefined,
+    createdAt: new Date(row.created_at).getTime(),
+    gamesPlayed: row.games_played,
+    wins: row.wins,
+  };
+}
+
+/** Fetch all cloud-synced decks for an authenticated user. */
+export async function loadDecksFromCloud(userId: string): Promise<SavedDeck[]> {
+  if (!isSupabaseConfigured) return [];
+  const { data, error } = await supabase
+    .from("saved_decks")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (error || !data) return [];
+  return (data as DbDeckRow[]).map(fromDbRow);
+}
+
+/** Create or update a single deck in the cloud. */
+export async function upsertDeckToCloud(userId: string, deck: SavedDeck): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const { error } = await supabase
+    .from("saved_decks")
+    .upsert(toDbRow(userId, deck), { onConflict: "id" });
+  if (error) console.error("[decks] upsertDeckToCloud:", error.message);
+}
+
+/** Delete a deck from the cloud by its ID. */
+export async function deleteDeckFromCloud(deckId: string): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const { error } = await supabase.from("saved_decks").delete().eq("id", deckId);
+  if (error) console.error("[decks] deleteDeckFromCloud:", error.message);
+}
+
+/**
+ * One-time migration: upload all localStorage decks to Supabase.
+ * Skips silently if the user already has cloud decks (prevents duplication
+ * on repeated sign-ins).
+ */
+export async function migrateLocalDecksToCloud(userId: string): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const localDecks = loadDecks();
+  if (localDecks.length === 0) return;
+
+  const { count } = await supabase
+    .from("saved_decks")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (count && count > 0) return; // already migrated — don't duplicate
+
+  const rows = localDecks.map(deck => toDbRow(userId, deck));
+  const { error } = await supabase.from("saved_decks").upsert(rows, { onConflict: "id" });
+  if (error) console.error("[decks] migrateLocalDecksToCloud:", error.message);
 }
