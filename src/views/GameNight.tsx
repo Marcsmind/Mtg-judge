@@ -151,8 +151,9 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
     const code = localStorage.getItem("nexus_qr_join_code");
     if (!code) return;
     localStorage.removeItem("nexus_qr_join_code");
-    setJoinCodeInput(code);
+    setTimeout(() => setJoinCodeInput(code), 0);
     // Slight delay so the component is fully mounted before joining
+    // eslint-disable-next-line react-hooks/immutability
     const t = setTimeout(() => handleJoinRoom(code), 300);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps

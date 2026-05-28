@@ -500,7 +500,6 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     };
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomConnected]);
 
   const handleHostEndGame = () => {

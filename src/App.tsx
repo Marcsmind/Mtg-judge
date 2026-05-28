@@ -114,7 +114,7 @@ function App() {
     if (!joinCode) return;
     window.history.replaceState({}, "", window.location.pathname);
     localStorage.setItem("nexus_qr_join_code", joinCode.toUpperCase());
-    setActiveTab("gamenight");
+    setTimeout(() => setActiveTab("gamenight"), 0);
   }, []);
 
   // ── Handle Stripe redirect back (?upgraded=true / ?upgraded=false) ──
@@ -125,7 +125,7 @@ function App() {
     // Strip query param from URL without a page reload
     window.history.replaceState({}, "", window.location.pathname);
     if (upgraded === "true") {
-      setActiveTab("settings");
+      setTimeout(() => setActiveTab("settings"), 0);
       // Brief banner — Stripe webhook will update the tier within seconds
       const el = document.createElement("div");
       el.id = "upgrade-toast";

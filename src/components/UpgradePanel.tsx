@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Crown, Zap, Check, Sparkles, Clock, RotateCcw } from "lucide-react";
 import type { SubscriptionTier } from "../types/subscription";
 import type { AuthUser } from "../services/auth";
@@ -45,18 +45,19 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
   const [loading, setLoading] = useState<PriceType | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [offering, setOffering] = useState<RCOffering | null>(null);
+  const [mountTime] = useState(Date.now);
 
   // Fetch RevenueCat offering on native (no-op on web)
   useEffect(() => {
     if (isNative) getOffering().then(setOffering);
   }, []);
 
-  const daysLeftInTrial = (() => {
+  const daysLeftInTrial = useMemo(() => {
     if (!trialEndsAt) return null;
-    const ms = new Date(trialEndsAt).getTime() - Date.now();
+    const ms = new Date(trialEndsAt).getTime() - mountTime;
     if (ms <= 0) return null;
     return Math.ceil(ms / (1000 * 60 * 60 * 24));
-  })();
+  }, [trialEndsAt, mountTime]);
 
   const isTrial = tier === "pro" && daysLeftInTrial !== null;
 

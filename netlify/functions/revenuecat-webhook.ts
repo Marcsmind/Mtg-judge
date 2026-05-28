@@ -54,16 +54,14 @@ export const handler: Handler = async (event) => {
 
   if (!userId || !eventType) return { statusCode: 400, body: "Missing fields" };
 
-  let tier: string | null = null;
-
-  if (ACTIVE_EVENTS.has(eventType)) {
-    tier = productId.includes("lifetime") ? "lifetime" : "pro";
-  } else if (INACTIVE_EVENTS.has(eventType)) {
-    tier = "free";
-  } else {
+  if (!ACTIVE_EVENTS.has(eventType) && !INACTIVE_EVENTS.has(eventType)) {
     // Unhandled event type — acknowledge but do nothing
     return { statusCode: 200, body: "OK" };
   }
+
+  const tier = ACTIVE_EVENTS.has(eventType)
+    ? (productId.includes("lifetime") ? "lifetime" : "pro")
+    : "free";
 
   const { error } = await supabase
     .from("profiles")
