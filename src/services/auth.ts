@@ -8,6 +8,10 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 
+// Detect Capacitor native runtime at module load time
+const isNative = typeof (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === 'function'
+  && (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor!.isNativePlatform!();
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface AuthUser {
@@ -63,12 +67,31 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
 /**
  * Upgrade the current anonymous session to a Google account.
- * Supabase merges history automatically — the same user_id is preserved,
- * so all existing game_participants rows remain linked.
- * This triggers a browser redirect to Google OAuth.
+ * In a Capacitor native app the OAuth flow opens in an in-app browser via
+ * @capacitor/browser so the deep-link redirect is handled correctly.
  */
 export async function linkGoogleAccount(): Promise<void> {
   if (!isSupabaseConfigured) return;
+
+  if (isNative) {
+    // Native: get the OAuth URL from Supabase then open it in the Capacitor browser
+    const { data, error } = await supabase.auth.linkIdentity({
+      provider: "google",
+      options: {
+        redirectTo: "com.nexusjudge.app://auth/callback",
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) { console.error("[auth] linkIdentity failed:", error.message); return; }
+    const url = (data as { url?: string })?.url;
+    if (url) {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url });
+    }
+    return;
+  }
+
+  // Web: standard redirect flow
   const { error } = await supabase.auth.linkIdentity({
     provider: "google",
     options: { redirectTo: window.location.origin },

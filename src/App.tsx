@@ -91,6 +91,18 @@ function App() {
     // onAuthStateChange fires null → re-initializes anonymous session automatically
   };
 
+  // ── Handle QR-code deep-link join (?join=ABCD) ──
+  // When a guest scans the host's QR code from outside the app, we land on
+  // /?join=ABCD. Store it for GameNight to pick up, then navigate there.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get("join");
+    if (!joinCode) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    localStorage.setItem("nexus_qr_join_code", joinCode.toUpperCase());
+    setActiveTab("gamenight");
+  }, []);
+
   // ── Handle Stripe redirect back (?upgraded=true / ?upgraded=false) ──
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

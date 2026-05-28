@@ -10,9 +10,11 @@
  */
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Sparkles, Wifi, WifiOff, Copy, Check, Crown,
+  Sparkles, Wifi, WifiOff, Copy, Check, Crown, QrCode,
 } from "lucide-react";
 import { LobbyPanel } from "./life-counter/LobbyPanel";
+import { RoomQRCode } from "../components/RoomQRCode";
+import { QRScanner } from "../components/QRScanner";
 import { useFeature } from "../hooks/useFeature";
 import { getDeviceId } from "../services/auth";
 import {
@@ -86,6 +88,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
   const [joinCodeInput, setJoinCodeInput] = useState("");
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [codeCopied, setCodeCopied]     = useState(false);
+  const [scannerOpen, setScannerOpen]   = useState(false);
 
   // Keep roomCode accessible in the unmount cleanup without stale closure
   const roomCodeRef = useRef<string | null>(null);
@@ -141,6 +144,18 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
   // When navigating to TurnOrder, isNavigatingRef is set so TurnOrder can reattach.
   useEffect(() => () => {
     if (!isNavigatingRef.current && roomCodeRef.current) leaveRoom(roomCodeRef.current);
+  }, []);
+
+  // ── Auto-join from QR code deep-link ─────────────────────────────────────
+  useEffect(() => {
+    const code = localStorage.getItem("nexus_qr_join_code");
+    if (!code) return;
+    localStorage.removeItem("nexus_qr_join_code");
+    setJoinCodeInput(code);
+    // Slight delay so the component is fully mounted before joining
+    const t = setTimeout(() => handleJoinRoom(code), 300);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Guest catch-up poll: navigate to TurnOrder even if "All In" broadcast was missed ──
@@ -355,6 +370,13 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
           </div>
         </div>
 
+        {/* QR code for host — lets guests scan instead of typing */}
+        {roomRole === "host" && (
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <RoomQRCode roomCode={roomCode} size={100} />
+          </div>
+        )}
+
         {/* LobbyPanel fills remaining height */}
         <div style={{ flex: 1, overflowY: "auto", paddingRight: "4px" }}>
           <LobbyPanel
@@ -385,6 +407,16 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px", maxWidth: "680px", margin: "0 auto", width: "100%", padding: "12px" }}>
+
+      {scannerOpen && (
+        <QRScanner
+          onScan={(code) => {
+            setJoinCodeInput(code);
+            setScannerOpen(false);
+          }}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
 
       {/* Page title */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
@@ -443,6 +475,14 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
                 Enter the 4-letter room code from your host to jump into their lobby and get set up.
               </p>
               <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  onClick={() => setScannerOpen(true)}
+                  className="glass-button"
+                  title="Scan QR code"
+                  style={{ padding: "8px 10px", flexShrink: 0 }}
+                >
+                  <QrCode size={16} />
+                </button>
                 <input
                   type="text"
                   autoCapitalize="characters"
