@@ -19,7 +19,7 @@ import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
-import { initAuth, onAuthStateChange, linkGoogleAccount, signOut, deleteAccount } from "./services/auth";
+import { initAuth, onAuthStateChange, linkGoogleAccount, signOut, deleteAccount, activateTrial } from "./services/auth";
 import { initRevenueCat } from "./services/revenueCat";
 import type { AuthUser } from "./services/auth";
 import { migrateLocalDecksToCloud } from "./services/decks";
@@ -80,9 +80,12 @@ function App() {
     return unsubscribe;
   }, []);
 
-  // ── Migrate local decks to cloud on first email sign-in ──
+  // ── Activate 14-day trial + migrate decks on first permanent sign-in ──
+  // Covers all auth paths: email signup, Google link, Apple sign-in.
+  // activateTrial is idempotent — no-ops if trial_ends_at is already set.
   useEffect(() => {
     if (!authUser || authUser.isAnonymous) return;
+    activateTrial(authUser.id);
     migrateLocalDecksToCloud(authUser.id);
   }, [authUser?.id, authUser?.isAnonymous]);
 
