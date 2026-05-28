@@ -3,6 +3,7 @@
 import { getCardOracleText } from "./scryfall";
 import type { ScryfallCard, ScryfallRuling } from "./scryfall";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 // ── Deck Builder system instruction (completely isolated from the Judge) ───────
 const DECKBUILDER_SYSTEM_INSTRUCTION = `You are Nexus Deckbuilder, an expert Magic: The Gathering Commander deck construction AI.
@@ -157,12 +158,23 @@ async function fetchGemini(model: string, payload: object, apiKey: string): Prom
     );
   }
   const accessCode = localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) ?? "";
+  // Include the session JWT so the proxy can verify Pro/trial subscription and
+  // bypass the daily quota for paying users without revealing their tier client-side.
+  let sessionToken = "";
+  if (isSupabaseConfigured) {
+    const { data } = await supabase.auth.getSession();
+    sessionToken = data.session?.access_token ?? "";
+  }
   return fetch("/.netlify/functions/gemini-proxy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, payload, accessCode }),
+    body: JSON.stringify({ model, payload, accessCode, sessionToken }),
   });
 }
+
+// Sentinel returned (not thrown) when the shared-key daily quota is exhausted.
+// Callers check for this string to show the upgrade prompt rather than an error.
+export const QUOTA_EXCEEDED_MARKER = "__QUOTA_EXCEEDED__";
 
 // Actual Gemini API Call
 // `model` is passed in by the caller — do not read localStorage here
@@ -220,6 +232,9 @@ export async function askGeminiJudge(
     }
 
     if (!response.ok) {
+      // 429 from the proxy means the shared-key daily quota is exhausted.
+      // Return a sentinel so the caller can show the upgrade prompt (not a generic error).
+      if (response.status === 429) return QUOTA_EXCEEDED_MARKER;
       const errData = await response.json().catch(() => ({})) as GeminiResponse;
       const errMsg = errData.error?.message || `HTTP error ${response.status}`;
       throw new Error(errMsg);

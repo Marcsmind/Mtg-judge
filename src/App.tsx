@@ -142,6 +142,20 @@ function App() {
     }
   }, []);
 
+  // ── visualViewport → --app-height (iOS keyboard fix) ──
+  // Keeps --app-height in sync with the visible viewport so .app-container
+  // shrinks when the iOS soft keyboard opens, preventing inputs from being
+  // obscured. Falls back to 100dvh via CSS when visualViewport is unavailable.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () =>
+      document.documentElement.style.setProperty("--app-height", `${vv.height}px`);
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+
   // ── Global Event Listeners ──
   useEffect(() => {
     const handleOpenJudge  = () => setJudgeOpen(true);

@@ -8,8 +8,9 @@ import {
   fetchCardRulings,
 } from "../services/scryfall";
 import type { ScryfallCard, ScryfallRuling } from "../services/scryfall";
-import { askGeminiJudge } from "../services/gemini";
+import { askGeminiJudge, QUOTA_EXCEEDED_MARKER } from "../services/gemini";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { useFeature } from "../hooks/useFeature";
 import { useAppStore } from "../store/useAppStore";
 import { ChatMessage } from "./ai-judge/ChatMessage";
 import { CardTagBar } from "./ai-judge/CardTagBar";
@@ -109,6 +110,16 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
   const [queryLoading, setQueryLoading] = useState(false);
   const [error, setError] = useState("");
   const [quotaHit, setQuotaHit] = useState(false);
+
+  const canUnlimitedAI = useFeature("unlimited_ai");
+  const DAILY_LIMIT = 5;
+  // Daily question counter — keyed by date so it auto-resets at midnight.
+  // Only tracked for shared-key (no personal API key) non-Pro users.
+  const todayKey = `nexus_ai_q_${new Date().toISOString().split("T")[0]}`;
+  const [questionsToday, setQuestionsToday] = useState<number>(() => {
+    const stored = localStorage.getItem(todayKey);
+    return stored ? parseInt(stored, 10) : 0;
+  });
 
   // ── Saved Rulings (Favorites) ────────────────────────────────────────────
   const [favorites, setFavorites] = useState<FavoriteRuling[]>(() => {
@@ -284,12 +295,22 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
         geminiModel
       );
 
-      setChatHistory((prev) => [
-        ...prev,
-        { role: "model", content: judgeResponse },
-      ]);
-      if (judgeResponse.includes("Daily question limit reached")) {
+      if (judgeResponse === QUOTA_EXCEEDED_MARKER) {
         setQuotaHit(true);
+        // Sync counter to the limit so the UI shows 5/5
+        setQuestionsToday(DAILY_LIMIT);
+        localStorage.setItem(todayKey, String(DAILY_LIMIT));
+      } else {
+        setChatHistory((prev) => [
+          ...prev,
+          { role: "model", content: judgeResponse },
+        ]);
+        // Increment the local counter for shared-key free users
+        if (!apiKey && !canUnlimitedAI) {
+          const next = Math.min(questionsToday + 1, DAILY_LIMIT);
+          setQuestionsToday(next);
+          localStorage.setItem(todayKey, String(next));
+        }
       }
     } catch (err: unknown) {
       console.error(err);
@@ -674,6 +695,20 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           </div>
         )}
       </div>
+
+      {/* Daily question counter — only for shared-key free users */}
+      {!apiKey && !canUnlimitedAI && !quotaHit && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
+          gap: "6px", marginBottom: "6px", fontSize: "0.72rem",
+          color: questionsToday >= DAILY_LIMIT - 1 ? "var(--accent-amber)" : "var(--text-muted)",
+        }}>
+          <span>{questionsToday}/{DAILY_LIMIT} questions today</span>
+          {questionsToday >= DAILY_LIMIT - 1 && questionsToday < DAILY_LIMIT && (
+            <span style={{ color: "var(--accent-amber)" }}>· last one!</span>
+          )}
+        </div>
+      )}
 
       {/* Main Chat Input Form */}
       <form

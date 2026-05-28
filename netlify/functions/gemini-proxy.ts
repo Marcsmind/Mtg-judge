@@ -22,13 +22,34 @@ import { createHash } from "crypto";
 
 const DAILY_LIMIT = 5;
 
-// ── Supabase client (quota tracking) ────────────────────────────────────────
-// Uses the same env vars as the frontend (Netlify exposes all vars to functions)
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
-const supabaseAdmin = supabaseUrl && supabaseKey
+// ── Supabase client ──────────────────────────────────────────────────────────
+// Prefer the service role key (needed to read profiles for tier verification).
+// Falls back to the anon key for quota-only tracking if service key isn't set.
+const supabaseUrl      = process.env.VITE_SUPABASE_URL;
+const supabaseKey      = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseAdmin    = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null;
+
+/** Returns true if the Supabase session token belongs to a Pro/trial user. */
+async function isProUser(accessToken: string): Promise<boolean> {
+  if (!supabaseAdmin || !accessToken) return false;
+  try {
+    const { data: { user } } = await supabaseAdmin.auth.getUser(accessToken);
+    if (!user) return false;
+    const { data } = await supabaseAdmin
+      .from("profiles")
+      .select("subscription_tier, trial_ends_at")
+      .eq("id", user.id)
+      .single();
+    if (!data) return false;
+    if (data.subscription_tier === "pro" || data.subscription_tier === "lifetime") return true;
+    if (data.trial_ends_at && new Date(data.trial_ends_at) > new Date()) return true;
+    return false;
+  } catch {
+    return false; // Fail open — don't block a user over a verification error
+  }
+}
 
 async function checkAndIncrementQuota(identifier: string): Promise<boolean> {
   if (!supabaseAdmin) return true; // Supabase not configured — skip quota
@@ -72,27 +93,28 @@ export const handler: Handler = async (event) => {
   let model: string;
   let payload: object;
   let accessCode: string | undefined;
+  let sessionToken: string | undefined;
   try {
     const parsed = JSON.parse(event.body ?? "{}");
-    model      = parsed.model;
-    payload    = parsed.payload;
-    accessCode = parsed.accessCode;
+    model        = parsed.model;
+    payload      = parsed.payload;
+    accessCode   = parsed.accessCode;
+    sessionToken = parsed.sessionToken;
     if (!model || !payload) throw new Error("Missing model or payload");
   } catch (err) {
     return { statusCode: 400, body: JSON.stringify({ error: { message: `Bad request: ${err}` } }) };
   }
 
-  // ── Access-code quota bypass ──────────────────────────────────────────────
-  // ACCESS_CODE is optional. When set, providing the correct code bypasses the
-  // daily quota entirely (for testing / admin use). Wrong or missing code just
-  // means the normal per-IP quota applies — users are never hard-blocked.
-  const serverCode = process.env.ACCESS_CODE;
+  // ── Quota bypass checks (access code OR verified Pro/trial subscription) ──
+  const serverCode  = process.env.ACCESS_CODE;
   const codeIsValid = serverCode
     ? (accessCode?.trim().toUpperCase() === serverCode.trim().toUpperCase())
     : false;
+  const proUser     = codeIsValid ? false : await isProUser(sessionToken ?? "");
+  const bypassQuota = codeIsValid || proUser;
 
-  // ── Per-IP daily quota (skipped when access code matches) ────────────────
-  if (!codeIsValid) {
+  // ── Per-IP daily quota (skipped for Pro users and access-code holders) ────
+  if (!bypassQuota) {
     const clientIp =
       event.headers["x-forwarded-for"]?.split(",")[0].trim()
       ?? event.headers["x-nf-client-connection-ip"]

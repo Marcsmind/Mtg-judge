@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Users, Scale, WifiOff, Copy, Timer, Square, Play, Crown, Skull, Swords, Star } from "lucide-react";
+import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Users, Scale, WifiOff, Copy, Timer, Square, Play, Crown, Skull, Swords, Star, Undo2 } from "lucide-react";
 import { useMobile } from "../hooks/useMobile";
 import { useGameTimer } from "../hooks/useGameTimer";
 import { loadDecks, recordDeckResult } from "../services/decks";
@@ -787,6 +787,27 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 }}
               >
                 <Scale size={14} />
+              </button>
+            )}
+
+            {/* Quick undo button — always visible once there's something to undo */}
+            {undoStack.length > 0 && (
+              <button
+                onClick={handleUndo}
+                aria-label="Undo last action"
+                title="Undo last action (Ctrl+Z)"
+                className="touch-icon-btn"
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  background: "rgba(139,92,246,0.12)",
+                  border: "1px solid rgba(139,92,246,0.3)",
+                  borderRadius: "8px", padding: "7px 10px",
+                  color: "var(--accent-purple)",
+                  cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
+                  transition: "all 0.15s ease", flexShrink: 0,
+                }}
+              >
+                <Undo2 size={14} />
               </button>
             )}
 
