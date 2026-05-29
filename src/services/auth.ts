@@ -38,9 +38,22 @@ export async function initAuth(): Promise<AuthUser | null> {
   if (session?.user) {
     return {
       id: session.user.id,
-      isAnonymous: session.user.is_anonymous ?? true,
+      isAnonymous: session.user.is_anonymous ?? false,
       email: session.user.email ?? undefined,
     };
+  }
+
+  // If the URL contains an OAuth callback, Supabase is still processing the
+  // token exchange. Returning null here lets onAuthStateChange fire SIGNED_IN
+  // once the exchange completes — we must NOT create a new anonymous session
+  // here or it would overwrite the incoming OAuth session.
+  const href = window.location.href;
+  if (
+    href.includes('access_token') ||
+    href.includes('code=') ||
+    href.includes('error_description=')
+  ) {
+    return null;
   }
 
   // No session — create an anonymous one (zero friction, no email required)
@@ -60,7 +73,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   if (!session?.user) return null;
   return {
     id: session.user.id,
-    isAnonymous: session.user.is_anonymous ?? true,
+    isAnonymous: session.user.is_anonymous ?? false,
     email: session.user.email ?? undefined,
   };
 }
@@ -289,7 +302,7 @@ export function onAuthStateChange(
     if (session?.user) {
       callback({
         id: session.user.id,
-        isAnonymous: session.user.is_anonymous ?? true,
+        isAnonymous: session.user.is_anonymous ?? false,
         email: session.user.email ?? undefined,
       });
     } else {
