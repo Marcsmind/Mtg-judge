@@ -17,6 +17,7 @@ interface UpgradePanelProps {
   authUser: AuthUser | null;
   trialEndsAt?: string | null;
   onTierChange?: (tier: SubscriptionTier) => void;
+  onSignIn?: () => void;
 }
 
 type PriceType = "pro_monthly" | "pro_annual" | "lifetime";
@@ -42,7 +43,7 @@ const PRO_FEATURES = [
   "Per-deck commander win rate",
 ];
 
-export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, trialEndsAt, onTierChange }) => {
+export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, trialEndsAt, onTierChange, onSignIn }) => {
   const [loading, setLoading] = useState<PriceType | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [offering, setOffering] = useState<RCOffering | null>(null);
@@ -139,6 +140,20 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
         <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>
           Create a free account first, then upgrade to unlock the full Commander experience.
         </p>
+        {onSignIn && (
+          <button
+            onClick={onSignIn}
+            className="glass-button"
+            style={{
+              justifyContent: "center", padding: "11px",
+              fontWeight: 700, fontSize: "0.9rem",
+              background: "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(6,182,212,0.15) 100%)",
+              borderColor: "rgba(139,92,246,0.4)",
+            }}
+          >
+            Create Free Account
+          </button>
+        )}
       </div>
     );
   }

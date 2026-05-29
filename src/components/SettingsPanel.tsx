@@ -666,7 +666,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
 
       {/* ── Upgrade / Plan ── */}
       {isSupabaseConfigured && (
-        <UpgradePanel tier={tier} authUser={authUser ?? null} trialEndsAt={trialEndsAt} onTierChange={onTierChange} />
+        <UpgradePanel tier={tier} authUser={authUser ?? null} trialEndsAt={trialEndsAt} onTierChange={onTierChange} onSignIn={onSignIn} />
       )}
 
       {/* ── App Resources ── */}

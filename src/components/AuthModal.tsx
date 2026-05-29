@@ -37,6 +37,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     setError(null);
     setSuccessMsg(null);
 
+    if (!email.trim() || !email.includes("@") || !email.includes(".")) {
+      setError("Enter a valid email address."); return;
+    }
     if (mode === "signup") {
       if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
       if (password !== confirmPassword) { setError("Passwords do not match."); return; }
@@ -135,7 +138,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           {/* Email */}
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "5px" }}>
