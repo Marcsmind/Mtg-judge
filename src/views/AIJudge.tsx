@@ -16,6 +16,7 @@ import { ChatMessage } from "./ai-judge/ChatMessage";
 import { CardTagBar } from "./ai-judge/CardTagBar";
 import { BottomSheet } from "../components/BottomSheet";
 import { track } from "../services/analytics";
+import { supabase, isSupabaseConfigured } from "../services/supabase";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -35,13 +36,13 @@ interface FavoriteRuling {
 
 const INITIAL_MESSAGE: Message = {
   role: "model",
-  content: `Greetings, Commander! 🛡️ I am your **Nexus Judge**. \n\nI have encyclopedic knowledge of the Magic Comprehensive Rules (CR) and Magic Tournament Rules (MTR). I am optimized specifically for the **Commander (EDH) format**.\n\n**How to get the most accurate rulings:**\n1. Use the search bar below to search and **tag cards** relevant to your question. This pulls their exact printing details and WotC rulings, injecting them as context so I never hallucinate.\n2. Ask your question in the box below (e.g. *"If my commander is phased out, does it still deal commander damage?"*).\n\nHow can I assist your pod today?`,
+  content: `Greetings, Commander! 🛡️ I am your **Nexus Judge**. \n\nI have encyclopedic knowledge of the Magic Comprehensive Rules (CR) and Magic Tournament Rules (MTR). I am optimized specifically for the **Commander (EDH) format**.\n\n**How to get the most accurate rulings:**\n1. Use the search bar below to search and **tag cards** relevant to your question. This pulls their exact printing details and WotC rulings, injecting them as context so I never hallucinate.\n2. Ask your question in the box below (e.g. *"If my commander is phased out, does it still deal commander damage?"*).\n\n⚠️ *AI answers may contain errors. Always verify with an official judge for sanctioned tournament play. This is an unofficial fan tool — not affiliated with or endorsed by Wizards of the Coast.*\n\nHow can I assist your pod today?`,
 };
 
 /** Compact greeting for mobile — includes scenario topics inline since the chip row is hidden. */
 const MOBILE_INITIAL_MESSAGE: Message = {
   role: "model",
-  content: `Greetings, Commander! 🛡️ I'm your **Nexus Judge** — an AI rules advisor for Magic: The Gathering Commander.\n\nTag cards using the search bar, then ask me anything. Common starting points:\n\n• **Commander Tax** — recasting from the command zone\n• **Commander Damage** — tracking the 21-damage threshold\n• **Phased Out** — attachments and combat with phasing\n\nWhat ruling can I help you with?`,
+  content: `Greetings, Commander! 🛡️ I'm your **Nexus Judge** — an AI rules advisor for Magic: The Gathering Commander.\n\nTag cards using the search bar, then ask me anything. Common starting points:\n\n• **Commander Tax** — recasting from the command zone\n• **Commander Damage** — tracking the 21-damage threshold\n• **Phased Out** — attachments and combat with phasing\n\n⚠️ *AI answers may contain errors. Verify with an official judge for tournament play. Unofficial fan tool — not affiliated with Wizards of the Coast.*\n\nWhat ruling can I help you with?`,
 };
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -335,6 +336,15 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     localStorage.setItem(STORAGE_KEYS.AI_FAVORITES, JSON.stringify(next));
   };
 
+  const handleFlag = useCallback(async (responseText: string, reason: string) => {
+    track("ai_response_flagged", { reason });
+    if (!isSupabaseConfigured) return;
+    await supabase.from("flagged_ai_responses").insert({
+      response_text: responseText.slice(0, 4000),
+      reason,
+    });
+  }, []);
+
   // Shortcut to open Codex — CardTagBar and ChatMessage both need this.
   // Wrapped in useCallback so the reference is stable across renders caused by
   // local state changes (card search input, etc.), keeping markdownComponents
@@ -497,6 +507,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
               if (cards && cards.length > 0) setTaggedCards(cards);
               setTimeout(() => inputRef.current?.focus(), 0);
             } : undefined}
+            onFlag={msg.role === "model" ? handleFlag : undefined}
           />
         ))}
 

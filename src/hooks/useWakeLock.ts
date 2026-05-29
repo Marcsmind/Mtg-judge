@@ -1,20 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 
+const isNative =
+  typeof (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+    ?.isNativePlatform === "function" &&
+  (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor!.isNativePlatform!();
+
 export function useWakeLock(isActive: boolean = true) {
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const [isSupported] = useState<boolean>("wakeLock" in navigator);
+  const [isSupported] = useState<boolean>(isNative || "wakeLock" in navigator);
 
   useEffect(() => {
     if (!isActive || !isSupported) return;
 
+    if (isNative) {
+      // Native: @capacitor-community/keep-awake prevents the device from sleeping
+      // inside a WKWebView where navigator.wakeLock is unreliable.
+      import("@capacitor-community/keep-awake").then(({ KeepAwake }) => {
+        KeepAwake.keepAwake().catch(console.warn);
+      });
+      return () => {
+        import("@capacitor-community/keep-awake").then(({ KeepAwake }) => {
+          KeepAwake.allowSleep().catch(console.warn);
+        });
+      };
+    }
+
+    // Web: standard Screen Wake Lock API
     const requestWakeLock = async () => {
       try {
-        if ("wakeLock" in navigator) {
-          wakeLockRef.current = await navigator.wakeLock.request("screen");
-          wakeLockRef.current.addEventListener("release", () => {
-            // Wake lock released
-          });
-        }
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
       } catch (err) {
         console.warn("Wake Lock error:", err);
       }

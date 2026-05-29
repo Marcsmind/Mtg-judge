@@ -74,6 +74,14 @@ Rules for card names:
 At the end, add a brief 2–3 sentence **Strategy Note** explaining the deck's primary game plan.
 End with: ⚠️ *AI suggestions may include unreleased or incorrectly named cards. Verify legality on Scryfall before playing.*`;
 
+// ── Content safety settings (required for App Store / Google Play) ───────────
+const SAFETY_SETTINGS = [
+  { category: "HARM_CATEGORY_HARASSMENT",        threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH",        threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",  threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT",  threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+] as const;
+
 // ── Gemini API response types ─────────────────────────────────────────────────
 interface GeminiPart      { text?: string }
 interface GeminiContent   { parts?: GeminiPart[] }
@@ -85,7 +93,7 @@ interface Message {
   content: string;
 }
 
-const SYSTEM_INSTRUCTION = `You are Nexus Judge, a premium, authoritative AI Magic: The Gathering Rules Judge, specializing in the Commander (EDH) format. You hold a Level 3 Judge certification and possess encyclopedic knowledge of the Magic Comprehensive Rules (CR), Magic Tournament Rules (MTR), and Commander Rules.
+const SYSTEM_INSTRUCTION = `You are Nexus Judge, an AI Magic: The Gathering rules advisor specializing in the Commander (EDH) format. You are trained on the Magic Comprehensive Rules (CR), Magic Tournament Rules (MTR), and Commander Rules, and provide accurate, structured rulings for Commander gameplay. You are not affiliated with or endorsed by Wizards of the Coast or the Judge Academy.
 Your goal is to provide players with accurate, clear, and highly structured rulings.
 
 Strict Rules for Rulings:
@@ -232,6 +240,7 @@ export async function askGeminiJudge(
       contents: formattedContents,
       systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
       generationConfig: { temperature: 0.15, topP: 0.95, maxOutputTokens: 8192 },
+      safetySettings: SAFETY_SETTINGS,
     }, apiKey);
 
     // Fallback: strip systemInstruction for legacy models (1.0 Pro) that return 404/400
@@ -251,6 +260,7 @@ export async function askGeminiJudge(
       response = await fetchGemini(model, {
         contents: fallbackContents,
         generationConfig: { temperature: 0.15, topP: 0.95, maxOutputTokens: 8192 },
+        safetySettings: SAFETY_SETTINGS,
       }, apiKey);
     }
 
@@ -298,6 +308,7 @@ export async function askGeminiDeckBuilder(
       contents,
       systemInstruction: { parts: [{ text: DECKBUILDER_SYSTEM_INSTRUCTION }] },
       generationConfig: { temperature: 0.4, topP: 0.95, maxOutputTokens: 8192 },
+      safetySettings: SAFETY_SETTINGS,
     }, apiKey);
 
     // Legacy model fallback (1.0 Pro doesn't support systemInstruction)
@@ -308,6 +319,7 @@ export async function askGeminiDeckBuilder(
           parts: [{ text: `[SYSTEM PERSONA (OBEY STRICTLY)]:\n${DECKBUILDER_SYSTEM_INSTRUCTION}\n\n[USER REQUEST]:\n${prompt}` }],
         }],
         generationConfig: { temperature: 0.4, topP: 0.95, maxOutputTokens: 8192 },
+        safetySettings: SAFETY_SETTINGS,
       }, apiKey);
     }
 
@@ -352,6 +364,7 @@ export async function askGeminiDeckOptimizer(
       contents,
       systemInstruction: { parts: [{ text: OPTIMIZER_SYSTEM_INSTRUCTION }] },
       generationConfig: { temperature: 0.3, topP: 0.95, maxOutputTokens: 4096 },
+      safetySettings: SAFETY_SETTINGS,
     }, apiKey);
 
     if (!response.ok && (response.status === 404 || response.status === 400)) {
@@ -361,6 +374,7 @@ export async function askGeminiDeckOptimizer(
           parts: [{ text: `[SYSTEM]:\n${OPTIMIZER_SYSTEM_INSTRUCTION}\n\n[USER]:\n${prompt}` }],
         }],
         generationConfig: { temperature: 0.3, topP: 0.95, maxOutputTokens: 4096 },
+        safetySettings: SAFETY_SETTINGS,
       }, apiKey);
     }
 

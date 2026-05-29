@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, Link2, BookOpen, HelpCircle, ExternalLink, LogIn, LogOut, AlertTriangle } from "lucide-react";
-import { linkAppleAccount } from "../services/auth";
+import { linkAppleAccount, linkGoogleAccount } from "../services/auth";
 import { THEMES } from "../constants/themes";
 import type { ThemeId } from "../constants/themes";
 import type { TabId } from "../constants/tabIds";
@@ -19,7 +19,6 @@ interface SettingsPanelProps {
   authUser?: AuthUser | null;
   tier?: SubscriptionTier;
   trialEndsAt?: string | null;
-  onLinkGoogle?: () => void;
   onSignIn?: () => void;
   onSignOut?: () => void;
   onDeleteAccount?: () => Promise<void>;
@@ -81,7 +80,7 @@ function StorageCleaner() {
   );
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onLinkGoogle, onSignIn, onSignOut, onDeleteAccount, onNavigate, onTierChange }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onSignIn, onSignOut, onDeleteAccount, onNavigate, onTierChange }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
 
@@ -105,6 +104,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
     setTimeout(() => setDisplayNameSaved(false), 3000);
   };
   const [saved, setSaved] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [accessCodeInput, setAccessCodeInput] = useState(
@@ -451,9 +451,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                     <span>Sign In / Create Account</span>
                   </button>
                 )}
-                {onLinkGoogle && authUser && (
+                {authUser && (
                   <button
-                    onClick={onLinkGoogle}
+                    onClick={async () => {
+                      setLinkError(null);
+                      const err = await linkGoogleAccount();
+                      if (err) setLinkError(err);
+                    }}
                     className="glass-button"
                     style={{ padding: "10px 16px", fontSize: "0.88rem", background: "rgba(66,133,244,0.08)", borderColor: "rgba(66,133,244,0.25)", color: "#4285F4" }}
                   >
@@ -463,7 +467,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                 )}
                 {authUser && (
                   <button
-                    onClick={linkAppleAccount}
+                    onClick={async () => {
+                      setLinkError(null);
+                      const err = await linkAppleAccount();
+                      if (err) setLinkError(err);
+                    }}
                     className="glass-button"
                     style={{ padding: "10px 16px", fontSize: "0.88rem", background: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.15)", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "7px" }}
                   >
@@ -474,6 +482,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                   </button>
                 )}
               </div>
+              {linkError && (
+                <p style={{ fontSize: "0.78rem", color: "var(--accent-rose)", display: "flex", alignItems: "flex-start", gap: "6px", lineHeight: 1.5 }}>
+                  <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: "1px" }} />
+                  {linkError.includes("manual_linking_disabled")
+                    ? "Account linking is not enabled yet. Please sign in with email first, then link Google/Apple from your account settings."
+                    : linkError}
+                </p>
+              )}
             </>
           )}
 

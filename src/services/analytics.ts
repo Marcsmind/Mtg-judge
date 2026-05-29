@@ -26,20 +26,25 @@ export type AnalyticsEvent =
   // Multiplayer
   | 'room_created'
   | 'room_joined'
+  | 'multiplayer_game_hosted'    // host starts a game; include { player_count }
   // AI Judge
   | 'ai_query_sent'
   | 'ai_quota_reached'
+  | 'ai_response_flagged'
   // Game lifecycle
   | 'game_ended'
   | 'game_recorded'
   // Decks
   | 'deck_saved'
+  | 'deck_saved_first'           // first deck save ever — strong retention signal
   | 'deck_generated'
   | 'deck_imported'
   // Monetization
   | 'upgrade_prompt_shown'
   | 'upgrade_prompt_clicked'
   | 'subscription_started'
+  | 'trial_activated'
+  | 'paywall_reached'            // which gate was hit; include { feature }
   // Auth
   | 'account_created'
   | 'account_signed_in'

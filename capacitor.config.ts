@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   // Live reload — remove this block before building for App Store submission
   server: {
-    url: 'http://192.168.0.5:5173',
+    url: 'http://192.168.0.5:5174',
     cleartext: true,
   },
   plugins: {

@@ -43,16 +43,20 @@ export async function initAuth(): Promise<AuthUser | null> {
     };
   }
 
-  // If the URL contains an OAuth callback, Supabase is still processing the
-  // token exchange. Returning null here lets onAuthStateChange fire SIGNED_IN
-  // once the exchange completes — we must NOT create a new anonymous session
-  // here or it would overwrite the incoming OAuth session.
-  const href = window.location.href;
-  if (
-    href.includes('access_token') ||
-    href.includes('code=') ||
-    href.includes('error_description=')
-  ) {
+  // Use URLSearchParams for exact parameter matching — string.includes('code=')
+  // would incorrectly match 'error_code=' from OAuth error redirect URLs.
+  const qp = new URLSearchParams(window.location.search);
+  const hp = new URLSearchParams(window.location.hash.slice(1));
+  const hasOAuthCallback =
+    qp.has('code') ||              // PKCE success
+    hp.has('access_token') ||      // implicit success
+    qp.has('error') ||             // OAuth error in query string
+    hp.has('error');               // OAuth error in hash
+
+  if (hasOAuthCallback) {
+    // Don't create an anonymous session while Supabase is processing an
+    // OAuth callback (success or error). onAuthStateChange will fire once
+    // the exchange completes; App.tsx handles the error display.
     return null;
   }
 
@@ -82,12 +86,12 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
  * Upgrade the current anonymous session to a Google account.
  * In a Capacitor native app the OAuth flow opens in an in-app browser via
  * @capacitor/browser so the deep-link redirect is handled correctly.
+ * Returns an error string on failure, null on success/redirect.
  */
-export async function linkGoogleAccount(): Promise<void> {
-  if (!isSupabaseConfigured) return;
+export async function linkGoogleAccount(): Promise<string | null> {
+  if (!isSupabaseConfigured) return "Supabase not configured.";
 
   if (isNative) {
-    // Native: get the OAuth URL from Supabase then open it in the Capacitor browser
     const { data, error } = await supabase.auth.linkIdentity({
       provider: "google",
       options: {
@@ -95,13 +99,13 @@ export async function linkGoogleAccount(): Promise<void> {
         skipBrowserRedirect: true,
       },
     });
-    if (error) { console.error("[auth] linkIdentity failed:", error.message); return; }
+    if (error) { console.error("[auth] linkIdentity failed:", error.message); return error.message; }
     const url = (data as { url?: string })?.url;
     if (url) {
       const { Browser } = await import("@capacitor/browser");
       await Browser.open({ url });
     }
-    return;
+    return null;
   }
 
   // Web: standard redirect flow
@@ -109,15 +113,17 @@ export async function linkGoogleAccount(): Promise<void> {
     provider: "google",
     options: { redirectTo: window.location.origin },
   });
-  if (error) console.error("[auth] linkIdentity failed:", error.message);
+  if (error) { console.error("[auth] linkIdentity failed:", error.message); return error.message; }
+  return null;
 }
 
 /**
  * Upgrade the current anonymous session to an Apple account (same user ID preserved).
  * Mirrors linkGoogleAccount — uses Capacitor browser plugin on native.
+ * Returns an error string on failure, null on success/redirect.
  */
-export async function linkAppleAccount(): Promise<void> {
-  if (!isSupabaseConfigured) return;
+export async function linkAppleAccount(): Promise<string | null> {
+  if (!isSupabaseConfigured) return "Supabase not configured.";
 
   if (isNative) {
     const { data, error } = await supabase.auth.linkIdentity({
@@ -127,20 +133,21 @@ export async function linkAppleAccount(): Promise<void> {
         skipBrowserRedirect: true,
       },
     });
-    if (error) { console.error("[auth] linkApple failed:", error.message); return; }
+    if (error) { console.error("[auth] linkApple failed:", error.message); return error.message; }
     const url = (data as { url?: string })?.url;
     if (url) {
       const { Browser } = await import("@capacitor/browser");
       await Browser.open({ url });
     }
-    return;
+    return null;
   }
 
   const { error } = await supabase.auth.linkIdentity({
     provider: "apple",
     options: { redirectTo: window.location.origin },
   });
-  if (error) console.error("[auth] linkApple failed:", error.message);
+  if (error) { console.error("[auth] linkApple failed:", error.message); return error.message; }
+  return null;
 }
 
 /**
@@ -320,19 +327,21 @@ export function onAuthStateChange(
  * No-ops if the profile already has a trial_ends_at value (prevents
  * resetting the trial on repeated sign-ins).
  */
-export async function activateTrial(userId: string): Promise<void> {
-  if (!isSupabaseConfigured) return;
+/** Returns true if the trial was freshly activated, false if already set. */
+export async function activateTrial(userId: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
   const { data } = await supabase
     .from('profiles')
     .select('trial_ends_at')
     .eq('id', userId)
     .single();
-  if (data?.trial_ends_at) return; // already set — don't reset
+  if (data?.trial_ends_at) return false; // already set — don't reset
   const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
   await supabase.from('profiles').upsert(
     { id: userId, display_name: 'Player', trial_ends_at: trialEnd, updated_at: new Date().toISOString() },
     { onConflict: 'id' },
   );
+  return true;
 }
 
 // ── Profile ───────────────────────────────────────────────────────────────────

@@ -4,12 +4,17 @@ import { track } from "../services/analytics";
 
 interface UpgradePromptProps {
   message: string;
+  feature?: string;
   compact?: boolean;
 }
 
 /** Inline upgrade nudge. Dispatches 'go-to-settings' to navigate to the plan panel. */
-export const UpgradePrompt: React.FC<UpgradePromptProps> = ({ message, compact = false }) => {
-  useEffect(() => { track("upgrade_prompt_shown", { message }); }, [message]);
+export const UpgradePrompt: React.FC<UpgradePromptProps> = ({ message, feature, compact = false }) => {
+  useEffect(() => {
+    track("upgrade_prompt_shown", { message, feature });
+    track("paywall_reached", { feature: feature ?? "unknown" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
   <div style={{
     display: "flex", alignItems: compact ? "center" : "flex-start",

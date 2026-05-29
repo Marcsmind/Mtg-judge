@@ -2,6 +2,12 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Set CAPACITOR_BUILD=true when running `npm run build` for native targets.
+// The PWA plugin (service worker + manifest) must not be injected into a
+// Capacitor WKWebView — native OS layers handle caching, and the SW causes
+// cache invalidation bugs and App Store rejection for downloading scripts.
+const isNativeBuild = process.env.CAPACITOR_BUILD === 'true';
+
 // https://vite.dev/config/
 export default defineConfig({
   server: {
@@ -20,7 +26,19 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    VitePWA({
+    // When building for native, stub out virtual:pwa-register so main.tsx's
+    // static import resolves to a no-op instead of crashing the build.
+    isNativeBuild && {
+      name: 'stub-pwa-register',
+      enforce: 'pre' as const,
+      resolveId(id: string) {
+        if (id === 'virtual:pwa-register') return '\0virtual:pwa-register-stub';
+      },
+      load(id: string) {
+        if (id === '\0virtual:pwa-register-stub') return 'export function registerSW() {}';
+      },
+    },
+    !isNativeBuild && VitePWA({
       registerType: 'autoUpdate',
 
       // Static assets to precache (app shell)
@@ -109,5 +127,5 @@ export default defineConfig({
         ],
       },
     }),
-  ],
+  ].filter(Boolean),
 })

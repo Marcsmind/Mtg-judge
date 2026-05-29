@@ -21,6 +21,7 @@ import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
 import { initAuth, onAuthStateChange, linkGoogleAccount, signOut, deleteAccount, activateTrial } from "./services/auth";
+import { track } from "./services/analytics";
 import { initRevenueCat, isNative } from "./services/revenueCat";
 import { supabase } from "./services/supabase";
 import type { AuthUser } from "./services/auth";
@@ -88,7 +89,9 @@ function App() {
   // activateTrial is idempotent — no-ops if trial_ends_at is already set.
   useEffect(() => {
     if (!authUser || authUser.isAnonymous) return;
-    activateTrial(authUser.id);
+    activateTrial(authUser.id).then(wasNew => {
+      if (wasNew) track("trial_activated");
+    });
     migrateLocalDecksToCloud(authUser.id);
   }, [authUser?.id, authUser?.isAnonymous]);
 
@@ -125,6 +128,34 @@ function App() {
     await deleteAccount();
     // onAuthStateChange fires null → re-initializes anonymous session automatically
   };
+
+  // ── Handle OAuth callback errors (?error= / #error=) ──
+  // Supabase redirects back with error params when Google/Apple sign-in fails.
+  // Show a toast and clean the URL so the app doesn't get stuck in broken state.
+  useEffect(() => {
+    const qp = new URLSearchParams(window.location.search);
+    const hp = new URLSearchParams(window.location.hash.slice(1));
+    const oauthError = qp.get('error') || hp.get('error');
+    if (!oauthError) return;
+    window.history.replaceState({}, '', window.location.pathname);
+    const desc = (qp.get('error_description') || hp.get('error_description') || 'Sign in failed. Please try again.')
+      .replace(/\+/g, ' ');
+    const el = document.createElement('div');
+    el.innerText = `Sign in failed: ${decodeURIComponent(desc)}`;
+    Object.assign(el.style, {
+      position: 'fixed', bottom: '80px', left: '50%', transform: 'translateX(-50%)',
+      background: 'rgba(10,8,16,0.96)', border: '1px solid rgba(244,63,94,0.5)',
+      borderRadius: '12px', padding: '12px 20px', color: '#fff',
+      fontSize: '0.88rem', fontWeight: 600, zIndex: '9999',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)',
+      maxWidth: '340px', textAlign: 'center',
+    });
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 6000);
+    // Re-open the auth modal so the user can retry
+    setAuthModalOpen(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Handle QR-code deep-link join (?join=ABCD) ──
   // When a guest scans the host's QR code from outside the app, we land on
@@ -385,7 +416,6 @@ function App() {
             authUser={authUser}
             tier={tier}
             trialEndsAt={trialEndsAt}
-            onLinkGoogle={linkGoogleAccount}
             onSignIn={() => setAuthModalOpen(true)}
             onSignOut={handleSignOut}
             onDeleteAccount={handleDeleteAccount}

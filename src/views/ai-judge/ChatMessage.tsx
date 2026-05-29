@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { Copy, Check, Bookmark, BookmarkCheck, RotateCcw, X } from "lucide-react";
+import { Copy, Check, Bookmark, BookmarkCheck, RotateCcw, X, Flag } from "lucide-react";
 import { MTG_KEYWORDS } from "../../constants/mtgKeywords";
 import { searchCardFuzzy } from "../../services/scryfall";
 import type { ScryfallCard } from "../../services/scryfall";
@@ -20,6 +20,7 @@ interface ChatMessageProps {
   onBookmark?: () => void;
   isBookmarked?: boolean;
   onReprompt?: (content: string, taggedCards?: ScryfallCard[]) => void;
+  onFlag?: (responseText: string, reason: string) => void;
 }
 
 // ── Confidence badge colours ──────────────────────────────────────────────────
@@ -52,6 +53,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onBookmark,
   isBookmarked = false,
   onReprompt,
+  onFlag,
 }) => {
   const isUser = message.role === "user";
 
@@ -59,10 +61,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const { body: messageBody, level: confidenceLevel, note: confidenceNote } =
     React.useMemo(() => parseConfidence(message.content), [message.content]);
 
-  // ── Copy-ruling state ──
   const [copied, setCopied] = useState(false);
-  // ── Bookmark feedback state ──
   const [justSaved, setJustSaved] = useState(false);
+  const [flagged, setFlagged] = useState(false);
+  const [flagging, setFlagging] = useState(false);
+  const [flagReason, setFlagReason] = useState("Inaccurate ruling");
 
   const handleBookmarkClick = useCallback(() => {
     if (isBookmarked || !onBookmark) return;
@@ -425,6 +428,57 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 {copied ? <Check size={11} /> : <Copy size={11} />}
                 {copied ? "Copied!" : "Copy"}
               </button>
+              {/* Flag inaccurate / problematic response — required by App Store UGC/AI policy */}
+              {flagged ? (
+                <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.72rem", color: "var(--accent-rose)", padding: "4px 10px" }}>
+                  <Flag size={11} /> Flagged
+                </span>
+              ) : flagging ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                  <select
+                    value={flagReason}
+                    onChange={e => setFlagReason(e.target.value)}
+                    style={{
+                      background: "rgba(10,8,20,0.9)", border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: "6px", color: "var(--text-secondary)", fontSize: "0.72rem",
+                      padding: "3px 6px", cursor: "pointer",
+                    }}
+                  >
+                    <option>Inaccurate ruling</option>
+                    <option>Inappropriate content</option>
+                    <option>Other</option>
+                  </select>
+                  <button
+                    onClick={() => { setFlagged(true); setFlagging(false); onFlag?.(message.content, flagReason); }}
+                    style={{ background: "rgba(244,63,94,0.15)", border: "1px solid rgba(244,63,94,0.35)", borderRadius: "6px", padding: "3px 8px", color: "var(--accent-rose)", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => setFlagging(false)}
+                    style={{ background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "6px", padding: "3px 8px", color: "var(--text-muted)", fontSize: "0.72rem", cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setFlagging(true)}
+                  aria-label="Flag this response"
+                  title="Flag as inaccurate or problematic"
+                  style={{
+                    display: "flex", alignItems: "center", gap: "5px",
+                    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "7px", padding: "4px 10px",
+                    color: "var(--text-muted)", cursor: "pointer",
+                    fontSize: "0.72rem", fontWeight: 500, transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+                >
+                  <Flag size={11} /> Flag
+                </button>
+              )}
             </div>
           )}
 

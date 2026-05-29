@@ -308,6 +308,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
     // Persist so guests who missed the ephemeral broadcast catch up via the 6 s poll
     persistState(roomCode, payload);
     isNavigatingRef.current = true; // keep channel alive for TurnOrder to reattach
+    track("multiplayer_game_hosted", { player_count: lobbyPlayers.length });
     onMpPhaseChange("turn-select", lobbyPlayers, roomCode, "host");
   };
 

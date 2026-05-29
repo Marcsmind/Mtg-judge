@@ -192,7 +192,10 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
       showToast(isQuota ? "Storage full — go to Settings and clear chat history to free space." : `Save failed: ${msg}`, "error");
       return;
     }
-    if (!editingDeckId) track("deck_saved");
+    if (!editingDeckId) {
+      track("deck_saved");
+      if (savedDecks.length === 0) track("deck_saved_first");
+    }
     showToast(editingDeckId ? "Deck updated!" : `"${name}" saved!`, "success");
     setSavedDecks(loadDecks());
     setDeckThumbs(prev => { const next = { ...prev }; if (editingDeckId) delete next[editingDeckId]; return next; });
