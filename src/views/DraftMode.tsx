@@ -184,6 +184,7 @@ function SetupScreen({ onStart }: SetupProps) {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNames(prev => {
       const next = [...prev];
       while (next.length < playerCount) next.push(`Player ${next.length + 1}`);
@@ -340,19 +341,20 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
   const passLeft    = currentPack % 2 === 1;
   const done        = globalPick >= totalPicks;
 
-  useEffect(() => {
-    if (!timerActive || done || config.timerSeconds === 0) return;
-    if (timerLeft <= 0) { advancePick(); return; }
-    const id = setInterval(() => setTimerLeft(t => t - 1), 1000);
-    return () => clearInterval(id);
-  }, [timerActive, timerLeft, done]);
-
   const advancePick = useCallback(() => {
     if (done) return;
     setGlobalPick(g => g + 1);
     setTimerLeft(config.timerSeconds);
     if (config.timerSeconds > 0) setTimerActive(true);
   }, [done, config.timerSeconds]);
+
+  useEffect(() => {
+    if (!timerActive || done || config.timerSeconds === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (timerLeft <= 0) { advancePick(); return; }
+    const id = setInterval(() => setTimerLeft(t => t - 1), 1000);
+    return () => clearInterval(id);
+  }, [timerActive, timerLeft, done, advancePick]);
 
   const timerPct   = config.timerSeconds > 0 ? (timerLeft / config.timerSeconds) * 100 : 100;
   const timerColor = timerLeft <= 5 ? "#f43f5e" : timerLeft <= 15 ? "#f59e0b" : "#8b5cf6";

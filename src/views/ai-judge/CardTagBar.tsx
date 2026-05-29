@@ -30,8 +30,11 @@ export const CardTagBar: React.FC<CardTagBarProps> = ({
   // Debounced Scryfall search — text names first, then image cards
   useEffect(() => {
     if (query.trim().length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAutocompleteNames([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearching(false);
       return;
     }

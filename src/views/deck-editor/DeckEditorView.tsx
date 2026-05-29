@@ -105,6 +105,7 @@ export const DeckEditorView: React.FC<DeckEditorViewProps> = ({
   // ── Inline card search (same pattern as CardTagBar) ──────────────────────
   useEffect(() => {
     if (searchQuery.trim().length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAcNames([]); setAcResults([]); setSearching(false);
       return;
     }
