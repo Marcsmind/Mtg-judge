@@ -27,6 +27,60 @@ interface SettingsPanelProps {
   onTierChange?: (tier: SubscriptionTier) => void;
 }
 
+function StorageCleaner() {
+  const [cleared, setCleared] = useState(false);
+
+  const usedKb = React.useMemo(() => {
+    // Count ALL localStorage keys so PostHog / third-party keys are visible too
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      total += (localStorage.getItem(localStorage.key(i) ?? "") ?? "").length;
+    }
+    return Math.round(total / 1024);
+  }, [cleared]);
+
+  const handleClear = () => {
+    // Clear nexus history/cache keys
+    [
+      STORAGE_KEYS.AI_CHAT, STORAGE_KEYS.AI_RULINGS,
+      STORAGE_KEYS.AI_TAGS, STORAGE_KEYS.AI_FAVORITES,
+      STORAGE_KEYS.LIFE_HISTORY, STORAGE_KEYS.SAVED_GAMES,
+    ].forEach(k => localStorage.removeItem(k));
+    // Also clear any PostHog keys (ph_*) that may have accumulated from earlier builds
+    const phKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) ?? "";
+      if (k.startsWith("ph_") || k.startsWith("posthog")) phKeys.push(k);
+    }
+    phKeys.forEach(k => localStorage.removeItem(k));
+    setCleared(c => !c);
+  };
+
+  return (
+    <div className="glass-panel" style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Trash2 size={18} color="var(--accent-rose)" />
+          <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: 0 }}>Device Storage</h3>
+        </div>
+        <span style={{ fontSize: "0.8rem", color: usedKb > 2000 ? "var(--accent-rose)" : "var(--text-muted)", fontWeight: 600 }}>
+          {usedKb} KB used
+        </span>
+      </div>
+      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+        Clears AI chat history, card rulings, and game logs. Your saved decks, settings, and API key are kept.
+      </p>
+      <button
+        className="glass-button"
+        onClick={handleClear}
+        style={{ alignSelf: "flex-start", fontSize: "0.82rem", padding: "8px 16px", background: "rgba(244,63,94,0.1)", borderColor: "rgba(244,63,94,0.3)", color: "var(--accent-rose)" }}
+      >
+        Clear chat history &amp; game logs
+      </button>
+    </div>
+  );
+}
+
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey, theme = "void", setTheme, authUser, tier = "free", trialEndsAt, onLinkGoogle, onSignIn, onSignOut, onDeleteAccount, onNavigate, onTierChange }) => {
   // Initialize directly to avoid setState-in-effect lint warnings
   const [keyInput, setKeyInput] = useState(() => apiKey);
@@ -224,6 +278,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
               placeholder={apiKey ? "••••••••••••••••••••••••••••••••••••" : "Paste your Gemini API Key here (AIzaSy...)"}
               value={keyInput}
               onChange={e => setKeyInput(e.target.value)}
+              onFocus={e => { const el = e.currentTarget; setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "nearest" }), 350); }}
               style={{ flex: 1, fontFamily: "monospace" }}
             />
             {apiKey && (
@@ -451,6 +506,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                     placeholder="Player"
                     value={displayName}
                     onChange={e => setDisplayName(e.target.value.slice(0, 24))}
+                    onFocus={e => { const el = e.currentTarget; setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "nearest" }), 350); }}
                     maxLength={24}
                     style={{ flex: 1 }}
                   />
@@ -565,6 +621,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
               placeholder="Enter the access code…"
               value={accessCodeInput}
               onChange={e => setAccessCodeInput(e.target.value)}
+              onFocus={e => { const el = e.currentTarget; setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "nearest" }), 350); }}
               style={{ flex: 1, fontFamily: "monospace", letterSpacing: "2px" }}
               autoComplete="off"
             />
@@ -613,6 +670,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
       )}
 
       {/* ── App Resources ── */}
+      {/* ── Storage Management ── */}
+      <StorageCleaner />
+
       <div className="glass-panel" style={{ padding: "24px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
           <Info size={22} color="var(--accent-cyan)" />

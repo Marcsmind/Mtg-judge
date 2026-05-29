@@ -54,6 +54,13 @@ export interface LeaderboardEntry {
   winRate: number; // 0–100
 }
 
+export interface CommanderStat {
+  commanderName: string;
+  games: number;
+  wins: number;
+  winRate: number; // 0–100
+}
+
 // ── Write ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -165,6 +172,36 @@ export async function getRecentGames(userId: string): Promise<RecentGame[]> {
     isWinner:     row.is_winner,
     finalLife:    row.final_life,
   }));
+}
+
+/** Per-commander win/loss breakdown for a user. */
+export async function getCommanderStats(userId: string): Promise<CommanderStat[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const { data, error } = await supabase
+    .from("game_participants")
+    .select("commander_name, is_winner")
+    .eq("user_id", userId)
+    .not("commander_name", "is", null);
+
+  if (error || !data) return [];
+
+  const map: Record<string, { games: number; wins: number }> = {};
+  for (const row of data) {
+    const name = row.commander_name as string;
+    if (!map[name]) map[name] = { games: 0, wins: 0 };
+    map[name].games++;
+    if (row.is_winner) map[name].wins++;
+  }
+
+  return Object.entries(map)
+    .map(([commanderName, { games, wins }]) => ({
+      commanderName,
+      games,
+      wins,
+      winRate: (wins / games) * 100,
+    }))
+    .sort((a, b) => b.games - a.games);
 }
 
 /**

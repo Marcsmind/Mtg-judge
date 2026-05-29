@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Crown, Zap, Check, Sparkles, Clock, RotateCcw } from "lucide-react";
+import { track } from "../services/analytics";
 import type { SubscriptionTier } from "../types/subscription";
 import type { AuthUser } from "../services/auth";
 import {
@@ -68,9 +69,13 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
       if (isNative && rcPackage) {
         // Native: RevenueCat IAP
         const newTier = await purchasePackage(rcPackage);
-        if (newTier) onTierChange?.(newTier);
+        if (newTier) {
+          track("subscription_started", { price_type: priceType, platform: "ios" });
+          onTierChange?.(newTier);
+        }
       } else {
-        // Web: Stripe Checkout
+        // Web: Stripe Checkout — track before redirect since the page unloads
+        track("subscription_started", { price_type: priceType, platform: "web" });
         await startCheckout(priceType, authUser.id, authUser.email);
       }
     } finally {

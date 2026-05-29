@@ -272,7 +272,7 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
       broadcastState(roomCode, state);
       // Fix D: write snapshot to DB (fire-and-forget — never awaited, never blocks UI).
       persistState(roomCode, state);
-    }, 150);
+    }, 300);
   };
 
   // ── Heartbeat helpers ─────────────────────────────────────────────────────

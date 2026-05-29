@@ -8,12 +8,12 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Trophy, RefreshCw, Link2, User2, ChevronRight,
-  Loader2, Crown, Skull, Clock, Users, Heart,
+  Loader2, Crown, Skull, Clock, Users, Heart, Swords,
 } from "lucide-react";
 import type { AuthUser } from "../services/auth";
 import {
-  getMyStats, getRecentGames, getLeaderboard,
-  type PlayerStats, type RecentGame, type LeaderboardEntry,
+  getMyStats, getRecentGames, getLeaderboard, getCommanderStats,
+  type PlayerStats, type RecentGame, type LeaderboardEntry, type CommanderStat,
 } from "../services/leaderboard";
 import { isSupabaseConfigured } from "../services/supabase";
 
@@ -67,24 +67,27 @@ const StatPill: React.FC<{ label: string; value: string | number; color?: string
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export const Leaderboard: React.FC<LeaderboardProps> = ({ authUser, onLinkGoogle, onGoToSettings }) => {
-  const [myStats,       setMyStats]       = useState<PlayerStats | null>(null);
-  const [recentGames,   setRecentGames]   = useState<RecentGame[]>([]);
-  const [globalBoard,   setGlobalBoard]   = useState<LeaderboardEntry[]>([]);
-  const [loading,       setLoading]       = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [myStats,         setMyStats]         = useState<PlayerStats | null>(null);
+  const [recentGames,     setRecentGames]     = useState<RecentGame[]>([]);
+  const [globalBoard,     setGlobalBoard]     = useState<LeaderboardEntry[]>([]);
+  const [commanderStats,  setCommanderStats]  = useState<CommanderStat[]>([]);
+  const [loading,         setLoading]         = useState(false);
+  const [lastRefreshed,   setLastRefreshed]   = useState<Date | null>(null);
 
   const fetchAll = useCallback(async () => {
     if (!isSupabaseConfigured || !authUser?.id) return;
     setLoading(true);
     try {
-      const [stats, recent, board] = await Promise.all([
+      const [stats, recent, board, cmdStats] = await Promise.all([
         getMyStats(authUser.id),
         getRecentGames(authUser.id),
         getLeaderboard(),
+        getCommanderStats(authUser.id),
       ]);
       setMyStats(stats);
       setRecentGames(recent);
       setGlobalBoard(board);
+      setCommanderStats(cmdStats);
       setLastRefreshed(new Date());
     } finally {
       setLoading(false);
@@ -219,6 +222,67 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ authUser, onLinkGoogle
           </p>
         )}
       </div>
+
+      {/* ── Your Commanders ── */}
+      {(commanderStats.length > 0 || (loading && !myStats)) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+            Your Commanders
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {loading && commanderStats.length === 0
+              ? [1, 2, 3].map(i => (
+                  <div key={i} style={{ height: "52px", borderRadius: "10px", background: "rgba(255,255,255,0.02)", animation: "pulse-glow 1.5s infinite" }} />
+                ))
+              : commanderStats.map(cmd => (
+                  <div
+                    key={cmd.commanderName}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "12px",
+                      padding: "10px 14px", borderRadius: "10px",
+                      background: "rgba(255,255,255,0.02)",
+                      border: "1px solid rgba(255,255,255,0.04)",
+                    }}
+                  >
+                    <Swords size={14} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
+
+                    {/* Commander name + record */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {cmd.commanderName}
+                      </p>
+                      {/* Win rate bar */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
+                        <div style={{ flex: 1, height: "3px", background: "rgba(255,255,255,0.06)", borderRadius: "2px", overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%",
+                            width: `${cmd.winRate}%`,
+                            background: cmd.winRate >= 50 ? "var(--accent-emerald)" : cmd.winRate >= 33 ? "#f59e0b" : "var(--accent-rose)",
+                            borderRadius: "2px",
+                            transition: "width 0.4s ease",
+                          }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px", flexShrink: 0 }}>
+                      <span style={{
+                        fontSize: "0.85rem", fontWeight: 800,
+                        color: cmd.winRate >= 50 ? "var(--accent-emerald)" : cmd.winRate >= 33 ? "#f59e0b" : "var(--accent-rose)",
+                      }}>
+                        {pct(cmd.winRate)}
+                      </span>
+                      <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                        {cmd.wins}W / {cmd.games - cmd.wins}L
+                      </span>
+                    </div>
+                  </div>
+                ))
+            }
+          </div>
+        </div>
+      )}
 
       {/* ── Recent Games ── */}
       {(recentGames.length > 0 || loading) && (

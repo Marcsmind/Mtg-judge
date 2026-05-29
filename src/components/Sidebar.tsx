@@ -9,11 +9,12 @@ interface SidebarProps {
   openCodex: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  isKeyboardOpen?: boolean;
 }
 
 
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openCodex, collapsed, onToggleCollapsed }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openCodex, collapsed, onToggleCollapsed, isKeyboardOpen }) => {
   const isMobile = useMobile(768);
 
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
@@ -29,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
 
   // ── Mobile: bottom tab bar ──────────────────────────────────────────────────
   if (isMobile) {
+    if (isKeyboardOpen) return null;
     const makeTabBtn = (item: typeof navItems[0], onPress: () => void) => {
       const Icon = item.icon;
       const isActive = activeTab === item.id;

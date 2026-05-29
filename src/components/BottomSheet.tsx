@@ -58,11 +58,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
       }
     : {
         position:  "fixed",
-        top:       "50%",
+        top:       "calc(var(--app-height, 100dvh) / 2)",
         left:      "50%",
         transform: "translate(-50%, -50%)",
         width:     `min(${maxWidth}, 92vw)`,
-        maxHeight: "90dvh",
+        maxHeight: "calc(var(--app-height, 100dvh) * 0.85)",
         overflowY: "auto",
         zIndex:    zIndex + 1,
         padding,

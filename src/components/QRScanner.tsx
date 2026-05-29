@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { X, Camera } from "lucide-react";
 
 interface QRScannerProps {
   onScan: (code: string) => void;
@@ -17,11 +17,26 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [error, setError] = useState<string | null>(null);
   const firedRef = useRef(false);
 
+  const handleError = useCallback((err: unknown) => {
+    console.error("[QRScanner]", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    const isPermission = /permission|denied|notallowed|notfound/i.test(msg);
+    setError(
+      isPermission
+        ? "Camera access denied. Please allow camera access in Settings and try again."
+        : "Camera could not be loaded. Please close and try again.",
+    );
+  }, []);
+
   useEffect(() => {
     let stopped = false;
 
     async function startScanner() {
       try {
+        // Verify camera is accessible before handing off to html5-qrcode
+        await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+          .then(s => s.getTracks().forEach(t => t.stop()));
+
         const { Html5Qrcode } = await import("html5-qrcode");
         const scanner = new Html5Qrcode(divId);
         scannerRef.current = scanner;
@@ -51,8 +66,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
           undefined,
         );
       } catch (err) {
-        if (!stopped) setError("Camera access denied or unavailable.");
-        console.error("[QRScanner]", err);
+        if (!stopped) handleError(err);
       }
     }
 
@@ -62,7 +76,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
       stopped = true;
       scannerRef.current?.stop().catch(() => undefined);
     };
-  }, [onScan]);
+  }, [onScan, handleError]);
 
   return (
     <div
@@ -87,10 +101,13 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
       </div>
 
       {error ? (
-        <div style={{ color: "var(--accent-rose)", fontSize: "0.9rem", textAlign: "center" }}>
-          {error}
-          <br />
-          <button onClick={onClose} style={{ marginTop: "12px", background: "none", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px", color: "var(--text-secondary)", padding: "8px 16px", cursor: "pointer", fontSize: "0.85rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px", textAlign: "center", maxWidth: "280px" }}>
+          <Camera size={40} color="var(--accent-rose)" style={{ opacity: 0.7 }} />
+          <p style={{ color: "var(--accent-rose)", fontSize: "0.9rem", margin: 0 }}>{error}</p>
+          <button
+            onClick={onClose}
+            style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "10px", color: "var(--text-primary)", padding: "12px 28px", cursor: "pointer", fontSize: "0.9rem", fontWeight: 600 }}
+          >
             Close
           </button>
         </div>

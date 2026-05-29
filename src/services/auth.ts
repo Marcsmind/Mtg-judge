@@ -162,6 +162,36 @@ export async function signInWithApple(): Promise<void> {
 }
 
 /**
+ * Sign in (or sign up) with Google for users who don't have an existing session.
+ */
+export async function signInWithGoogle(): Promise<void> {
+  if (!isSupabaseConfigured) return;
+
+  if (isNative) {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: "com.nexusjudge.app://auth/callback",
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) { console.error("[auth] signInWithGoogle failed:", error.message); return; }
+    const url = (data as { url?: string })?.url;
+    if (url) {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url });
+    }
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.origin },
+  });
+  if (error) console.error("[auth] signInWithGoogle failed:", error.message);
+}
+
+/**
  * Sign up with email + password.
  *
  * If the caller is currently signed in anonymously, upgrades that session

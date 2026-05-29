@@ -9,9 +9,20 @@
  * signs in for the first time to upload their existing localStorage decks.
  */
 
-import type { SavedDeck } from "../types/deck";
+import type { SavedDeck, DeckCard } from "../types/deck";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { supabase, isSupabaseConfigured } from "./supabase";
+
+// crypto.randomUUID is unavailable in iOS WKWebView before iOS 15.4
+function makeId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 // ── Read / Write ───────────────────────────────────────────────────────────────
 
@@ -27,11 +38,7 @@ export function loadDecks(): SavedDeck[] {
 }
 
 export function saveDecks(decks: SavedDeck[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.SAVED_DECKS, JSON.stringify(decks));
-  } catch {
-    // localStorage quota exceeded — fail silently
-  }
+  localStorage.setItem(STORAGE_KEYS.SAVED_DECKS, JSON.stringify(decks));
 }
 
 // ── CRUD ───────────────────────────────────────────────────────────────────────
@@ -41,7 +48,7 @@ export function addDeck(
 ): SavedDeck {
   const newDeck: SavedDeck = {
     ...deck,
-    id: crypto.randomUUID(),
+    id: makeId(),
     createdAt: Date.now(),
     gamesPlayed: 0,
     wins: 0,
@@ -91,6 +98,7 @@ type DbDeckRow = {
   commander_name: string;
   partner_name: string | null;
   notes: string | null;
+  cards: DeckCard[] | null;
   games_played: number;
   wins: number;
   created_at: string;
@@ -105,6 +113,7 @@ function toDbRow(userId: string, deck: SavedDeck): Omit<DbDeckRow, 'updated_at'>
     commander_name: deck.commanderName,
     partner_name: deck.partnerName ?? null,
     notes: deck.notes ?? null,
+    cards: deck.cards ?? null,
     games_played: deck.gamesPlayed,
     wins: deck.wins,
     created_at: new Date(deck.createdAt).toISOString(),
@@ -119,6 +128,7 @@ function fromDbRow(row: DbDeckRow): SavedDeck {
     commanderName: row.commander_name,
     partnerName: row.partner_name ?? undefined,
     notes: row.notes ?? undefined,
+    cards: row.cards ?? undefined,
     createdAt: new Date(row.created_at).getTime(),
     gamesPlayed: row.games_played,
     wins: row.wins,

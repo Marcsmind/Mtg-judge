@@ -15,9 +15,10 @@ const posthogKey = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
 if (posthogKey) {
   posthog.init(posthogKey, {
     api_host: 'https://us.i.posthog.com',
-    person_profiles: 'identified_only', // only create person profiles for identified users
-    capture_pageview: false,            // SPA — tabs fire custom events instead
-    autocapture: false,                 // too noisy; track explicit events only
+    person_profiles: 'identified_only',
+    capture_pageview: false,
+    autocapture: false,
+    persistence: 'memory', // never write to localStorage — prevents quota issues on iOS WKWebView
   });
 }
 

@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   Wand2, Upload, Search, Copy, Check, Loader, AlertTriangle, X,
-  BookMarked, Trash2, Pencil, PlusCircle,
+  BookMarked, Trash2, Pencil, PlusCircle, ListOrdered, Sparkles, ClipboardPaste,
 } from "lucide-react";
 import { loadDecks, addDeck, updateDeck, deleteDeck } from "../services/decks";
-import type { SavedDeck } from "../types/deck";
+import type { SavedDeck, DeckCard } from "../types/deck";
+import { DeckEditorView } from "./deck-editor/DeckEditorView";
+import { DeckRecommendationsView } from "./deck-editor/DeckRecommendationsView";
 import { useFeature } from "../hooks/useFeature";
 import { UpgradePrompt } from "../components/UpgradePrompt";
 import { searchCardFuzzy as searchCardForDeck, getCardImage as getDeckCardImage, autocompleteCard as autocompleteDeck } from "../services/scryfall";
@@ -18,6 +20,7 @@ import type { ScryfallCard } from "../services/scryfall";
 import { askGeminiDeckBuilder } from "../services/gemini";
 import { buildManaCurve, buildColorSpread, calcDeckCost, toMoxfieldFormat, COLOR_META } from "../utils/deckUtils";
 import { useToast } from "../components/Toast";
+import { track } from "../services/analytics";
 
 interface DeckBuilderProps {
   apiKey: string;
@@ -80,6 +83,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   const { showToast } = useToast();
   const canGenerate  = useFeature("ai_deck_generation");
   const canCloudDecks = useFeature("cloud_decks");
+
+  const autoResize = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
   const [mode, setMode] = useState<DeckMode>("generate");
 
   // ── Generate mode state ──
@@ -106,6 +114,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   const [deckThumbs, setDeckThumbs] = useState<Record<string, string>>({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
+  const [openDeckId, setOpenDeckId]             = useState<string | null>(null);
+  const [openRecommendDeckId, setOpenRecommendDeckId] = useState<string | null>(null);
   const [newDeckName, setNewDeckName] = useState("");
   const [newDeckCmd, setNewDeckCmd] = useState("");
   const [newDeckPartner, setNewDeckPartner] = useState("");
@@ -167,12 +177,23 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   const handleSaveDeck = () => {
     const name = newDeckName.trim();
     const commanderName = newDeckCmd.trim();
-    if (!name || !commanderName) return;
-    if (editingDeckId) {
-      updateDeck(editingDeckId, { name, commanderName, partnerName: newDeckPartner.trim() || undefined, notes: newDeckNotes.trim() || undefined });
-    } else {
-      addDeck({ name, commanderName, partnerName: newDeckPartner.trim() || undefined, notes: newDeckNotes.trim() || undefined });
+    if (!name) { showToast("Enter a deck name.", "error"); return; }
+    if (!commanderName) { showToast("Enter a commander name.", "error"); return; }
+    try {
+      if (editingDeckId) {
+        updateDeck(editingDeckId, { name, commanderName, partnerName: newDeckPartner.trim() || undefined, notes: newDeckNotes.trim() || undefined });
+      } else {
+        addDeck({ name, commanderName, partnerName: newDeckPartner.trim() || undefined, notes: newDeckNotes.trim() || undefined });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[DeckBuilder] save error:", err);
+      const isQuota = /quota|storage|QuotaExceeded/i.test(msg);
+      showToast(isQuota ? "Storage full — go to Settings and clear chat history to free space." : `Save failed: ${msg}`, "error");
+      return;
     }
+    if (!editingDeckId) track("deck_saved");
+    showToast(editingDeckId ? "Deck updated!" : `"${name}" saved!`, "success");
     setSavedDecks(loadDecks());
     setDeckThumbs(prev => { const next = { ...prev }; if (editingDeckId) delete next[editingDeckId]; return next; });
     resetDeckForm();
@@ -191,6 +212,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
     deleteDeck(id);
     setSavedDecks(loadDecks());
     setDeckThumbs(prev => { const next = { ...prev }; delete next[id]; return next; });
+  };
+
+  const handleSaveDeckCards = (deckId: string, cards: DeckCard[]) => {
+    updateDeck(deckId, { cards });
+    setSavedDecks(loadDecks());
   };
 
   // ── Autocomplete abort controller ──
@@ -232,6 +258,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
     const result = await askGeminiDeckBuilder(prompt, apiKey, geminiModel);
     setGeneratedDeck(result);
     setGenerating(false);
+    if (result) track("deck_generated", { commander: commander.trim() });
   }, [commander, strategy, budget, apiKey, geminiModel]);
 
   const handleCopyDecklist = () => {
@@ -288,9 +315,12 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
       });
       setFetchProgress({ done: Math.min(i + CONCURRENCY, names.length), total: names.length });
       setImportedCards([...results]);
+      if (i + CONCURRENCY < names.length) await new Promise(r => setTimeout(r, 100));
     }
 
     setFetchProgress(null);
+    const found = results.filter(Boolean).length;
+    if (found > 0) track("deck_imported", { card_count: found });
   }, [rawDecklist]);
 
   const handleAnalyzeImport = useCallback(async () => {
@@ -322,7 +352,40 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px", height: "calc(100vh - 48px)", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px", flex: 1, overflow: "hidden" }}>
+
+      {/* ── Deck editor overlay ── */}
+      {openDeckId && (() => {
+        const deck = savedDecks.find(d => d.id === openDeckId);
+        if (!deck) return null;
+        return (
+          <DeckEditorView
+            deck={deck}
+            onSave={cards => handleSaveDeckCards(deck.id, cards)}
+            onBack={() => setOpenDeckId(null)}
+            openCodexWith={openCodexWith}
+          />
+        );
+      })()}
+
+      {/* ── Deck recommendations overlay ── */}
+      {openRecommendDeckId && (() => {
+        const deck = savedDecks.find(d => d.id === openRecommendDeckId);
+        if (!deck) return null;
+        return (
+          <DeckRecommendationsView
+            deck={deck}
+            apiKey={apiKey}
+            geminiModel={geminiModel}
+            onBack={() => setOpenRecommendDeckId(null)}
+            onDeckUpdated={() => setSavedDecks(loadDecks())}
+            openCodexWith={openCodexWith}
+          />
+        );
+      })()}
+
+      {/* Hide everything below when an overlay is open */}
+      {!openDeckId && !openRecommendDeckId && <>
 
       {/* ── Header ── */}
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
@@ -362,7 +425,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
       </div>
 
       {/* ── Scrollable content area ── */}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", background: "var(--bg-card)" }}>
 
         {/* ════════════════════════════════════════
             GENERATE MODE
@@ -423,9 +486,10 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   className="glass-input"
                   placeholder="e.g. Aggressive voltron with equipment synergies, or Combo-focused proliferate engine"
                   value={strategy}
-                  onChange={e => setStrategy(e.target.value)}
+                  onChange={e => { setStrategy(e.target.value); autoResize(e.target); }}
+                  onFocus={e => { autoResize(e.target); e.target.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}
                   rows={2}
-                  style={{ width: "100%", resize: "vertical", minHeight: "60px", fontFamily: "inherit" }}
+                  style={{ width: "100%", resize: "none", minHeight: "60px", fontFamily: "inherit", overflow: "hidden", WebkitAppearance: "none", borderRadius: "8px" }}
                 />
               </div>
 
@@ -570,14 +634,26 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                 </p>
               )}
 
-              <textarea
-                className="glass-input"
-                placeholder={"1 Sol Ring\n1 Command Tower\n1 Atraxa, Praetors' Voice\n..."}
-                value={rawDecklist}
-                onChange={e => setRawDecklist(e.target.value)}
-                rows={8}
-                style={{ width: "100%", resize: "vertical", fontFamily: "'Courier New', monospace", fontSize: "0.82rem" }}
-              />
+              <div style={{ position: "relative" }}>
+                <textarea
+                  className="glass-input"
+                  placeholder={"1 Sol Ring\n1 Command Tower\n1 Atraxa, Praetors' Voice\n..."}
+                  value={rawDecklist}
+                  onChange={e => { setRawDecklist(e.target.value); autoResize(e.target); }}
+                  onFocus={e => { autoResize(e.target); e.target.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}
+                  rows={8}
+                  style={{ width: "100%", resize: "none", fontFamily: "'Courier New', monospace", fontSize: "0.82rem", overflow: "hidden", minHeight: "160px", WebkitAppearance: "none", borderRadius: "8px", paddingBottom: "36px" }}
+                />
+                {!rawDecklist.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.readText().then(t => { if (t.trim()) setRawDecklist(t.trim()); }).catch(() => undefined)}
+                    style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "5px", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "8px", color: "var(--accent-purple)", fontSize: "0.75rem", fontWeight: 600, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                  >
+                    <ClipboardPaste size={12} /> Paste from Clipboard
+                  </button>
+                )}
+              </div>
               <button
                 onClick={handleParseDecklist}
                 disabled={!rawDecklist.trim() || !!fetchProgress}
@@ -909,10 +985,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                 <div>
                   <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: "4px", fontWeight: 700 }}>Notes <span style={{ fontWeight: 400 }}>(optional)</span></label>
                   <textarea
-                    value={newDeckNotes} onChange={e => setNewDeckNotes(e.target.value)}
+                    value={newDeckNotes}
+                    onChange={e => { setNewDeckNotes(e.target.value); autoResize(e.target); }}
                     placeholder="Strategy notes, combos, budget info…" rows={2} maxLength={200}
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-primary)", fontSize: "0.82rem", outline: "none", resize: "vertical", boxSizing: "border-box" }}
-                    onFocus={e => (e.target.style.borderColor = "var(--accent-purple)")}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-primary)", fontSize: "0.82rem", outline: "none", resize: "none", boxSizing: "border-box", overflow: "hidden", minHeight: "56px", WebkitAppearance: "none" }}
+                    onFocus={e => { e.target.style.borderColor = "var(--accent-purple)"; autoResize(e.target); e.target.scrollIntoView({ behavior: "smooth", block: "nearest" }); }}
                     onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
                   />
                 </div>
@@ -921,7 +998,6 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   <button onClick={resetDeckForm} style={{ padding: "8px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-secondary)", fontSize: "0.82rem", cursor: "pointer" }}>Cancel</button>
                   <button
                     onClick={handleSaveDeck}
-                    disabled={!newDeckName.trim() || !newDeckCmd.trim()}
                     style={{
                       padding: "8px 16px", borderRadius: "8px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer",
                       background: newDeckName.trim() && newDeckCmd.trim() ? "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(6,182,212,0.2))" : "rgba(255,255,255,0.04)",
@@ -951,7 +1027,17 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   )}
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{deck.name}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <p style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", margin: 0 }}>{deck.name}</p>
+                      {deck.cards && deck.cards.length > 0 && (() => {
+                        const total = deck.cards.reduce((s, c) => s + c.quantity, 0);
+                        return (
+                          <span style={{ fontSize: "0.6rem", fontWeight: 700, color: total === 100 ? "var(--accent-emerald)" : "var(--text-muted)", background: "rgba(255,255,255,0.05)", borderRadius: "10px", padding: "1px 6px", flexShrink: 0 }}>
+                            {total}/100
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       ⚔️ {deck.commanderName}{deck.partnerName ? ` + ${deck.partnerName}` : ""}
                     </p>
@@ -983,7 +1069,27 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   </div>
                   {/* Actions */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
-                    <button onClick={() => handleEditDeck(deck)} aria-label={`Edit ${deck.name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "3px", display: "flex" }} onMouseEnter={e => e.currentTarget.style.color = "var(--accent-purple)"} onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>
+                    <button
+                      onClick={() => setOpenDeckId(deck.id)}
+                      aria-label={`Edit cards in ${deck.name}`}
+                      title="Edit cards"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "3px", display: "flex" }}
+                      onMouseEnter={e => e.currentTarget.style.color = "var(--accent-cyan)"}
+                      onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                    >
+                      <ListOrdered size={13} />
+                    </button>
+                    <button
+                      onClick={() => setOpenRecommendDeckId(deck.id)}
+                      aria-label={`AI recommendations for ${deck.name}`}
+                      title="AI recommendations"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "3px", display: "flex" }}
+                      onMouseEnter={e => e.currentTarget.style.color = "var(--accent-purple)"}
+                      onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                    >
+                      <Sparkles size={13} />
+                    </button>
+                    <button onClick={() => handleEditDeck(deck)} aria-label={`Edit ${deck.name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "3px", display: "flex" }} onMouseEnter={e => e.currentTarget.style.color = "#a78bfa"} onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>
                       <Pencil size={13} />
                     </button>
                     <button onClick={() => handleDeleteDeck(deck.id)} aria-label={`Delete ${deck.name}`} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "3px", display: "flex" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>
@@ -1008,6 +1114,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
         )}
 
       </div>
+
+      </> /* end !openDeckId && !openRecommendDeckId */}
     </div>
   );
 };

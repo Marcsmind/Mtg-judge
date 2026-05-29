@@ -32,6 +32,7 @@ import type { LobbyPlayer, ActiveCounters } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { useToast } from "../components/Toast";
+import { track } from "../services/analytics";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -211,6 +212,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
         // Broadcast initial lobby so guests that join immediately see the host
         broadcastState(code, buildLobbyBroadcast([hostPlayer], hostPlayer.playerName));
         showToast(`Room ${code} created — share this code!`, "success");
+        track("room_created");
       } else {
         setRoomError("Could not create room. Check your connection and try again.");
       }
@@ -250,6 +252,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
         localStorage.setItem(STORAGE_KEYS.ROOM_ROLE, "guest");
         // Announce self so the host can merge us into the canonical lobby list
         broadcastState(code, buildLobbyBroadcast([selfPlayer], selfPlayer.playerName));
+        track("room_joined");
       } else {
         setRoomError("Room not found — double-check the code and try again.");
       }
@@ -320,7 +323,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
 
   if (phase === "lobby" && roomConnected && roomCode) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px", height: "calc(100dvh - 48px)", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, overflow: "hidden" }}>
 
         {/* Header bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, flexWrap: "wrap", gap: "8px" }}>
@@ -496,6 +499,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
                   maxLength={4}
                   onChange={e => setJoinCodeInput(e.target.value.toUpperCase())}
                   onKeyDown={e => { if (e.key === "Enter") handleJoinRoom(); }}
+                  onFocus={e => e.target.scrollIntoView({ behavior: "smooth", block: "center" })}
                   style={{
                     flex: 1, padding: "8px 10px", fontWeight: 800,
                     letterSpacing: "4px", fontSize: "1rem", textAlign: "center",

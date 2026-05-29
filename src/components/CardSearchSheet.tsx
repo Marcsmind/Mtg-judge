@@ -17,11 +17,15 @@ export const CardSearchSheet: React.FC<CardSearchSheetProps> = ({ onClose, onTag
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Auto-focus input when opened
+  // Auto-focus input when opened — delay long enough for keyboard event to
+  // update --app-height so the modal repositions before the input is focused.
+  // Guard prevents re-triggering the keyboard if it's already open.
   useEffect(() => {
     const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
+      if (document.activeElement !== inputRef.current) {
+        inputRef.current?.focus();
+      }
+    }, 350);
     return () => clearTimeout(timer);
   }, []);
 
@@ -102,7 +106,7 @@ export const CardSearchSheet: React.FC<CardSearchSheetProps> = ({ onClose, onTag
 
   return (
     <BottomSheet onClose={onClose} zIndex={400} maxWidth="500px">
-      <div style={{ padding: "0 20px 20px 20px", display: "flex", flexDirection: "column", height: "60vh" }}>
+      <div style={{ padding: "0 20px 20px 20px", display: "flex", flexDirection: "column", maxHeight: "calc(var(--app-height, 100dvh) * 0.55)", minHeight: "220px" }}>
         
         {/* Search Input Header */}
         <div style={{ position: "relative", marginBottom: "16px" }}>
@@ -112,7 +116,6 @@ export const CardSearchSheet: React.FC<CardSearchSheetProps> = ({ onClose, onTag
             className="glass-input"
             placeholder="Search card name... (e.g. Sol Ring)"
             value={query}
-            autoFocus
             onChange={(e) => setQuery(e.target.value)}
             style={{ width: "100%", paddingLeft: "40px", fontSize: "16px", height: "48px" }}
           />

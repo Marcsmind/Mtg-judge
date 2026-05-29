@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Crown } from "lucide-react";
+import { track } from "../services/analytics";
 
 interface UpgradePromptProps {
   message: string;
@@ -7,7 +8,9 @@ interface UpgradePromptProps {
 }
 
 /** Inline upgrade nudge. Dispatches 'go-to-settings' to navigate to the plan panel. */
-export const UpgradePrompt: React.FC<UpgradePromptProps> = ({ message, compact = false }) => (
+export const UpgradePrompt: React.FC<UpgradePromptProps> = ({ message, compact = false }) => {
+  useEffect(() => { track("upgrade_prompt_shown", { message }); }, [message]);
+  return (
   <div style={{
     display: "flex", alignItems: compact ? "center" : "flex-start",
     gap: "10px", padding: compact ? "10px 14px" : "14px 16px",
@@ -20,7 +23,10 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({ message, compact =
       {message}
     </span>
     <button
-      onClick={() => window.dispatchEvent(new CustomEvent("go-to-settings"))}
+      onClick={() => {
+        track("upgrade_prompt_clicked", { message });
+        window.dispatchEvent(new CustomEvent("go-to-settings"));
+      }}
       style={{
         flexShrink: 0, padding: compact ? "5px 10px" : "6px 13px",
         background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.4)",
@@ -32,4 +38,5 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({ message, compact =
       Upgrade →
     </button>
   </div>
-);
+  );
+};

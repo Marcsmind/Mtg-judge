@@ -15,12 +15,14 @@ const DeckBuilder = lazy(() => import("./views/DeckBuilder").then(m => ({ defaul
 const GameNight  = lazy(() => import("./views/GameNight").then(m => ({ default: m.GameNight })));
 const AppGuide   = lazy(() => import("./views/AppGuide").then(m => ({ default: m.AppGuide })));
 const MoreMenu   = lazy(() => import("./views/MoreMenu").then(m => ({ default: m.MoreMenu })));
+const DraftMode  = lazy(() => import("./views/DraftMode").then(m => ({ default: m.DraftMode })));
 import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
 import { initAuth, onAuthStateChange, linkGoogleAccount, signOut, deleteAccount, activateTrial } from "./services/auth";
-import { initRevenueCat } from "./services/revenueCat";
+import { initRevenueCat, isNative } from "./services/revenueCat";
+import { supabase } from "./services/supabase";
 import type { AuthUser } from "./services/auth";
 import { migrateLocalDecksToCloud } from "./services/decks";
 import { useAuth } from "./hooks/useAuth";
@@ -49,6 +51,7 @@ function App() {
   const [geminiModel, setGeminiModel] = useState<string>(
     () => localStorage.getItem(STORAGE_KEYS.GEMINI_MODEL) || "gemini-2.5-flash"
   );
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
     () => localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === "true"
   );
@@ -94,6 +97,24 @@ function App() {
     if (!authUser) return;
     initRevenueCat(authUser.id);
   }, [authUser?.id]);
+
+  // ── Handle OAuth deep-link callback on native (Google / Apple sign-in) ──
+  // After the Capacitor Browser closes, iOS fires appUrlOpen with the redirect URL.
+  // We hand it to Supabase to exchange the code for a session.
+  useEffect(() => {
+    if (!isNative) return;
+    let cleanup: (() => void) | undefined;
+    import("@capacitor/app").then(({ App: CapApp }) => {
+      CapApp.addListener("appUrlOpen", async ({ url }) => {
+        if (url.startsWith("com.nexusjudge.app://auth/callback")) {
+          await supabase.auth.exchangeCodeForSession(url);
+        }
+      }).then((handle: { remove: () => void }) => {
+        cleanup = () => handle.remove();
+      });
+    });
+    return () => cleanup?.();
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -142,18 +163,69 @@ function App() {
     }
   }, []);
 
-  // ── visualViewport → --app-height (iOS keyboard fix) ──
-  // Keeps --app-height in sync with the visible viewport so .app-container
-  // shrinks when the iOS soft keyboard opens, preventing inputs from being
-  // obscured. Falls back to 100dvh via CSS when visualViewport is unavailable.
+  // ── --app-height keyboard fix ──
+  // On iOS Capacitor, window.visualViewport doesn't fire resize events when the
+  // soft keyboard appears (WKWebView limitation). Instead we use @capacitor/keyboard
+  // native delegate events which are guaranteed to fire. On web we fall back to
+  // visualViewport for the same behaviour in a browser.
   useEffect(() => {
+    if (isNative) {
+      let showHandle: { remove: () => void } | null = null;
+      let hideHandle: { remove: () => void } | null = null;
+      import("@capacitor/keyboard").then(({ Keyboard }) => {
+        Keyboard.addListener("keyboardWillShow", (info) => {
+          setIsKeyboardOpen(true);
+          document.documentElement.style.setProperty(
+            "--app-height",
+            `${window.innerHeight - info.keyboardHeight}px`,
+          );
+        }).then(h => { showHandle = h; });
+        Keyboard.addListener("keyboardWillHide", () => {
+          setIsKeyboardOpen(false);
+          document.documentElement.style.setProperty(
+            "--app-height",
+            `${window.innerHeight}px`,
+          );
+        }).then(h => { hideHandle = h; });
+        // Disable scroll-to-visible on focus (prevents fixed elements jumping).
+        Keyboard.setScroll({ isDisabled: true });
+        // Hide the accessory bar (^  v  ✓) globally — users tap outside to dismiss.
+        Keyboard.setAccessoryBarVisible({ isVisible: false });
+        // Set initial value
+        document.documentElement.style.setProperty("--app-height", `${window.innerHeight}px`);
+      });
+      return () => {
+        showHandle?.remove();
+        hideHandle?.remove();
+      };
+    }
+    // Web fallback: visualViewport works fine in browsers
     const vv = window.visualViewport;
     if (!vv) return;
     const update = () =>
       document.documentElement.style.setProperty("--app-height", `${vv.height}px`);
     update();
     vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
+
+    // Track keyboard open state via focus events; check relatedTarget to avoid
+    // false "closed" flashes when focus moves between two inputs.
+    const onFocusIn  = (e: FocusEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") setIsKeyboardOpen(true);
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      const rel = e.relatedTarget as HTMLElement | null;
+      if (!rel || (rel.tagName !== "INPUT" && rel.tagName !== "TEXTAREA")) {
+        setIsKeyboardOpen(false);
+      }
+    };
+    window.addEventListener("focusin",  onFocusIn);
+    window.addEventListener("focusout", onFocusOut);
+    return () => {
+      vv.removeEventListener("resize", update);
+      window.removeEventListener("focusin",  onFocusIn);
+      window.removeEventListener("focusout", onFocusOut);
+    };
   }, []);
 
   // ── Global Event Listeners ──
@@ -326,6 +398,8 @@ function App() {
         );
       case "more":
         return <MoreMenu onNavigate={(tab) => setActiveTab(tab)} />;
+      case "draft":
+        return <DraftMode />;
       case "guide":
         return <AppGuide onNavigate={(tab) => setActiveTab(tab)} />;
       default:
@@ -350,10 +424,11 @@ function App() {
         openCodex={() => setCodexOpen(true)}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleSidebar}
+        isKeyboardOpen={isKeyboardOpen}
       />
 
       {/* Main Feature View */}
-      <main className="main-content">
+      <main className={`main-content${isKeyboardOpen ? " keyboard-open" : ""}`}>
         <Suspense fallback={
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", fontSize: "0.9rem" }}>
             Loading…
@@ -392,11 +467,11 @@ function App() {
         <div 
           className="desktop-split-panel" 
           style={{
-            position: "fixed", inset: 0, zIndex: 100, background: "var(--bg-deep)", display: "flex", flexDirection: "column",
+            position: "fixed", top: 0, left: 0, right: 0, height: "var(--app-height, 100dvh)", zIndex: 100, background: "var(--bg-deep)", display: "flex", flexDirection: "column",
             animation: "slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
             boxSizing: "border-box",
-            paddingTop: "env(safe-area-inset-top)",
-            paddingBottom: "env(safe-area-inset-bottom)",
+            paddingTop: "max(20px, env(safe-area-inset-top))",
+            paddingBottom: "max(8px, env(safe-area-inset-bottom))",
             transition: "top 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
             overflowY: "hidden",
             overscrollBehavior: "none",

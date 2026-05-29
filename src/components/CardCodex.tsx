@@ -303,13 +303,29 @@ export const CardCodex: React.FC<CardCodexProps> = ({
             placeholder="Search any card..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onBlur={() => setTimeout(() => setSuggestions([]), 150)}
             aria-label="Search for a Magic card"
             aria-autocomplete="list"
             aria-expanded={suggestions.length > 0}
             aria-haspopup="listbox"
             role="combobox"
-            style={{ width: "100%", paddingRight: "40px" }}
+            style={{ width: "100%", paddingRight: query ? "72px" : "40px" }}
           />
+          {/* Clear button — visible when there's a query or a selected card */}
+          {query && (
+            <button
+              type="button"
+              onClick={() => { setQuery(""); setSuggestions([]); setSelectedCard(null); setRulings([]); setError(""); }}
+              style={{
+                position: "absolute", right: "40px", top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer",
+                display: "flex", padding: "4px",
+              }}
+              aria-label="Clear search"
+            >
+              <X size={15} />
+            </button>
+          )}
           <button
             type="submit"
             style={{
@@ -346,25 +362,17 @@ export const CardCodex: React.FC<CardCodexProps> = ({
             }}
           >
             {suggestions.map((name, i) => (
-              <div
+              <button
                 key={i}
-                role="option"
-                aria-selected={false}
-                tabIndex={0}
-                onClick={() => handleSelectCard(name)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") handleSelectCard(name);
-                }}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); handleSelectCard(name); }}
                 style={{
-                  padding: "10px 14px",
-                  cursor: "pointer",
-                  fontSize: "0.9rem",
-                  color: "var(--text-secondary)",
+                  display: "block", width: "100%", textAlign: "left",
+                  padding: "10px 14px", cursor: "pointer",
+                  fontSize: "0.9rem", color: "var(--text-secondary)",
+                  background: "transparent", border: "none",
+                  borderBottom: i < suggestions.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none",
                   transition: "background 0.15s ease",
-                  borderBottom:
-                    i < suggestions.length - 1
-                      ? "1px solid rgba(255,255,255,0.03)"
-                      : "none",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)";
@@ -376,7 +384,7 @@ export const CardCodex: React.FC<CardCodexProps> = ({
                 }}
               >
                 {name}
-              </div>
+              </button>
             ))}
           </div>
         )}

@@ -15,6 +15,7 @@ import { useAppStore } from "../store/useAppStore";
 import { ChatMessage } from "./ai-judge/ChatMessage";
 import { CardTagBar } from "./ai-judge/CardTagBar";
 import { BottomSheet } from "../components/BottomSheet";
+import { track } from "../services/analytics";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -79,9 +80,6 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     return [window.innerWidth <= 768 ? MOBILE_INITIAL_MESSAGE : INITIAL_MESSAGE];
   });
 
-  const [cardSearch, setCardSearch] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  
   // ── Mention Autocomplete State ──
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionSuggestions, setMentionSuggestions] = useState<string[]>([]);
@@ -132,8 +130,6 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const autocompleteAbortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize the textarea as content grows (max ~4 lines / 140px)
@@ -152,41 +148,18 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory, queryLoading]);
 
-  // ── Persist chat state ──
+  // ── Persist chat state (keep last 30 messages to avoid filling storage) ──
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.AI_CHAT, JSON.stringify(chatHistory));
-    localStorage.setItem(STORAGE_KEYS.AI_TAGS, JSON.stringify(taggedCards));
-    localStorage.setItem(STORAGE_KEYS.AI_RULINGS, JSON.stringify(rulingsMap));
-  }, [chatHistory, taggedCards, rulingsMap]);
-
-  // ── Click outside — close autocomplete dropdown ──
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setSuggestions([]);
-      }
+    const trimmed = chatHistory.length > 30 ? chatHistory.slice(-30) : chatHistory;
+    try {
+      localStorage.setItem(STORAGE_KEYS.AI_CHAT, JSON.stringify(trimmed));
+      localStorage.setItem(STORAGE_KEYS.AI_TAGS, JSON.stringify(taggedCards));
+      // Rulings map is large and re-fetched on demand — don't persist it
+      localStorage.removeItem(STORAGE_KEYS.AI_RULINGS);
+    } catch {
+      // Storage full — silently skip (existing data is preserved)
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // ── Autocomplete debounce — 300ms + AbortController to cancel stale requests ──
-  useEffect(() => {
-    const delayDebounce = setTimeout(async () => {
-      if (cardSearch.trim().length >= 2) {
-        autocompleteAbortRef.current?.abort();
-        autocompleteAbortRef.current = new AbortController();
-        const list = await autocompleteCard(cardSearch, autocompleteAbortRef.current.signal);
-        setSuggestions(list);
-      } else {
-        setSuggestions([]);
-      }
-    }, 300);
-    return () => clearTimeout(delayDebounce);
-  }, [cardSearch]);
+  }, [chatHistory, taggedCards]);
 
   // ── Mention Autocomplete debounce ──
   useEffect(() => {
@@ -206,8 +179,6 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
   // ── Tag a card — fetch oracle text + rulings for RAG context ──
   const handleTagCard = useCallback(
     async (cardName: string) => {
-      setCardSearch("");
-      setSuggestions([]);
 
       if (taggedCards.some((c) => c.name.toLowerCase() === cardName.toLowerCase())) {
         return;
@@ -300,11 +271,13 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
         // Sync counter to the limit so the UI shows 5/5
         setQuestionsToday(DAILY_LIMIT);
         localStorage.setItem(todayKey, String(DAILY_LIMIT));
+        track("ai_quota_reached");
       } else {
         setChatHistory((prev) => [
           ...prev,
           { role: "model", content: judgeResponse },
         ]);
+        track("ai_query_sent", { tagged_cards: taggedCards.length });
         // Increment the local counter for shared-key free users
         if (!apiKey && !canUnlimitedAI) {
           const next = Math.min(questionsToday + 1, DAILY_LIMIT);
@@ -637,9 +610,6 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
       >
         <CardTagBar
           taggedCards={taggedCards}
-          cardSearch={cardSearch}
-          setCardSearch={setCardSearch}
-          suggestions={suggestions}
           cardLoading={cardLoading}
           onTagCard={handleTagCard}
           onRemoveTag={handleRemoveTag}
@@ -647,7 +617,6 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
             setTaggedCards([]);
             setRulingsMap({});
           }}
-          dropdownRef={dropdownRef}
         />
 
         {/* Sample prompt shortcuts — only shown on desktop when chat is fresh */}

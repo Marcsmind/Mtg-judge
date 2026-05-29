@@ -5,6 +5,29 @@ import type { ScryfallCard, ScryfallRuling } from "./scryfall";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
+// ── Deck Optimizer system instruction ────────────────────────────────────────
+const OPTIMIZER_SYSTEM_INSTRUCTION = `You are Nexus Optimizer, an expert Magic: The Gathering Commander deck optimization AI.
+Your goal is to analyze an existing Commander decklist and give specific, high-impact recommendations.
+
+Output format — use EXACTLY this structure, no deviations:
+
+## ✂️ Cards to Cut
+
+- **Exact Card Name** — One concise reason (focus on what makes this slot weak or redundant).
+
+## ➕ Cards to Add
+
+- **Exact Card Name** — One concise reason (highlight direct synergy with the commander or strategy).
+
+Rules you MUST follow:
+1. Recommend exactly 8 cards to cut and 8 cards to add.
+2. Every addition must be within the commander's color identity.
+3. Use exact official card names (front face only for double-faced cards).
+4. Never recommend adding a card that is already in the deck.
+5. Prioritize synergy and power level consistent with the rest of the list.
+6. Be specific — reference the commander's abilities or the deck's apparent strategy.
+7. Do not add a preamble, summary, or strategy note — only the two sections above.`;
+
 // ── Deck Builder system instruction (completely isolated from the Judge) ───────
 const DECKBUILDER_SYSTEM_INSTRUCTION = `You are Nexus Deckbuilder, an expert Magic: The Gathering Commander deck construction AI.
 You have encyclopedic knowledge of all Magic cards printed through your training data.
@@ -302,5 +325,58 @@ export async function askGeminiDeckBuilder(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return `❌ **Deckbuilder Error:** ${message}\n\nMake sure your Gemini API Key is valid in **Settings**.`;
+  }
+}
+
+/**
+ * Analyze a saved deck and return cut/add recommendations.
+ * commanderName is always required; cardNames is optional (empty = recommendations
+ * based on commander identity only).
+ */
+export async function askGeminiDeckOptimizer(
+  commanderName: string,
+  cardNames: string[],
+  apiKey: string,
+  model: string,
+): Promise<string> {
+  const deckSection = cardNames.length > 0
+    ? `Current decklist (${cardNames.length} cards):\n${cardNames.join("\n")}`
+    : `No full decklist provided — give general recommendations for this commander.`;
+
+  const prompt = `Commander: ${commanderName}\n\n${deckSection}`;
+
+  const contents = [{ role: "user", parts: [{ text: prompt }] }];
+
+  try {
+    let response = await fetchGemini(model, {
+      contents,
+      systemInstruction: { parts: [{ text: OPTIMIZER_SYSTEM_INSTRUCTION }] },
+      generationConfig: { temperature: 0.3, topP: 0.95, maxOutputTokens: 4096 },
+    }, apiKey);
+
+    if (!response.ok && (response.status === 404 || response.status === 400)) {
+      response = await fetchGemini(model, {
+        contents: [{
+          role: "user",
+          parts: [{ text: `[SYSTEM]:\n${OPTIMIZER_SYSTEM_INSTRUCTION}\n\n[USER]:\n${prompt}` }],
+        }],
+        generationConfig: { temperature: 0.3, topP: 0.95, maxOutputTokens: 4096 },
+      }, apiKey);
+    }
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({})) as GeminiResponse;
+      throw new Error(errData.error?.message || `HTTP error ${response.status}`);
+    }
+
+    const data = await response.json() as GeminiResponse;
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p: GeminiPart) => p.text ?? "").join("");
+
+    if (!text) throw new Error("Empty response from Gemini.");
+    return text;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `❌ **Optimizer Error:** ${message}\n\nMake sure your Gemini API Key is valid in **Settings**.`;
   }
 }

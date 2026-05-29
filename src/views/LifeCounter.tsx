@@ -28,6 +28,7 @@ import { parseSavedPlayer } from "../utils/playerUtils";
 import { getDeviceId } from "../services/auth";
 import { useToast } from "../components/Toast";
 import { BottomSheet } from "../components/BottomSheet";
+import { track } from "../services/analytics";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 // Player, PlayerTokens, TokenKey, DayNightState, ActiveCounters are imported
@@ -330,7 +331,18 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     if (undoStack.length === 0) return;
     scheduleBroadcast();
     const [last, ...rest] = undoStack;
-    setPlayers(last);
+    if (roomCode) {
+      // Multiplayer: only restore the local player's data so we don't overwrite
+      // life changes other players made after this snapshot was taken.
+      const myIdx = parseInt(localStorage.getItem(STORAGE_KEYS.MY_PLAYER_INDEX) ?? "-1", 10);
+      if (myIdx >= 0) {
+        setPlayers(prev => prev.map((p, i) => i === myIdx ? (last[myIdx] ?? p) : p));
+      } else {
+        setPlayers(last);
+      }
+    } else {
+      setPlayers(last);
+    }
     setUndoStack(rest);
     addLog("↩️ Undone last action.");
   };
@@ -441,6 +453,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     const alive = playerSnapshot.filter(notDefeated);
     const winner = alive.length === 1 ? alive[0] : [...playerSnapshot].sort((a, b) => b.life - a.life)[0];
 
+    track("game_ended", { player_count: playerSnapshot.length, duration_seconds: timerSeconds });
+
     if (isSupabaseConfigured && userId) {
       await recordGame({
         roomCode:        roomCode ?? undefined,
@@ -455,6 +469,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           commanderName: p.commanderName,
         })),
       });
+      track("game_recorded");
       showToast("Game recorded to leaderboard! 🏆", "success");
     }
 

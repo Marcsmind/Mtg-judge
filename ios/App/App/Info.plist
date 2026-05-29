@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Nexus Judge</string>
+        <string>Arbiter</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,5 +47,18 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Arbiter uses your camera to scan room code QR codes when joining a multiplayer game.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.nexusjudge.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.nexusjudge.app</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
