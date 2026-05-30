@@ -97,7 +97,7 @@ export async function signInWithApple(): Promise<void> {
   if (isNative) {
     const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
     const nonce = crypto.randomUUID();
-    let identityToken: string | null = null;
+    let identityToken: string;
     try {
       const { response } = await SignInWithApple.authorize({
         clientId: "com.nexusjudge.app",
@@ -105,14 +105,13 @@ export async function signInWithApple(): Promise<void> {
         scopes: "email name",
         nonce,
       });
+      if (!response.identityToken) {
+        console.error("[auth] signInWithApple: no identityToken");
+        return;
+      }
       identityToken = response.identityToken;
     } catch (e) {
       console.error("[auth] signInWithApple native failed:", e);
-      return;
-    }
-
-    if (!identityToken) {
-      console.error("[auth] signInWithApple: no identityToken");
       return;
     }
 
