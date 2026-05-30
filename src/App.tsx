@@ -152,8 +152,8 @@ function App() {
     });
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 6000);
-    // Re-open the auth modal so the user can retry
-    setAuthModalOpen(true);
+    // Re-open the auth modal so the user can retry (deferred to avoid setState-in-effect lint error)
+    setTimeout(() => setAuthModalOpen(true), 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
