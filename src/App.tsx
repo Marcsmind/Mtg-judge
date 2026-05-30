@@ -131,17 +131,33 @@ function App() {
 
   // ── Handle OAuth callback errors (?error= / #error=) ──
   // Supabase redirects back with error params when Google/Apple sign-in fails.
-  // Show a toast and clean the URL so the app doesn't get stuck in broken state.
+  // Special case: "identity_already_linked" means the Google/Apple account already
+  // belongs to an existing user (e.g. returning user in incognito gets an anon
+  // session, then linkIdentity fails). Fix: clear the anon session and retry as
+  // a regular sign-in so they land back in their account.
   useEffect(() => {
     const qp = new URLSearchParams(window.location.search);
     const hp = new URLSearchParams(window.location.hash.slice(1));
     const oauthError = qp.get('error') || hp.get('error');
     if (!oauthError) return;
     window.history.replaceState({}, '', window.location.pathname);
-    const desc = (qp.get('error_description') || hp.get('error_description') || 'Sign in failed. Please try again.')
+
+    const desc = (qp.get('error_description') || hp.get('error_description') || '')
       .replace(/\+/g, ' ');
+    const isAlreadyLinked =
+      oauthError === 'identity_already_linked' ||
+      decodeURIComponent(desc).toLowerCase().includes('already linked');
+
+    if (isAlreadyLinked) {
+      // Sign out the temporary anon session, then kick off a normal OAuth sign-in.
+      // signInWithGoogle will now see isAnon=false and call signInWithOAuth.
+      signOut().then(() => signInWithGoogle());
+      return;
+    }
+
+    const message = desc ? decodeURIComponent(desc) : 'Sign in failed. Please try again.';
     const el = document.createElement('div');
-    el.innerText = `Sign in failed: ${decodeURIComponent(desc)}`;
+    el.innerText = `Sign in failed: ${message}`;
     Object.assign(el.style, {
       position: 'fixed', bottom: '80px', left: '50%', transform: 'translateX(-50%)',
       background: 'rgba(10,8,16,0.96)', border: '1px solid rgba(244,63,94,0.5)',
