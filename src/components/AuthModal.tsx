@@ -258,7 +258,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             {/* Google */}
             <button
               type="button"
-              onClick={signInWithGoogle}
+              onClick={() => signInWithGoogle()}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
                 padding: "11px 16px", borderRadius: "10px", cursor: "pointer",

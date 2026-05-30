@@ -139,11 +139,11 @@ export async function signInWithApple(): Promise<void> {
  * linkIdentity so their user ID and data are preserved. Otherwise does a fresh
  * signInWithOAuth (handles both new sign-ups and returning Google users).
  */
-export async function signInWithGoogle(): Promise<void> {
+export async function signInWithGoogle(forceFresh = false): Promise<void> {
   if (!isSupabaseConfigured) return;
 
   const { data: { session } } = await supabase.auth.getSession();
-  const isAnon = session?.user?.is_anonymous === true;
+  const isAnon = !forceFresh && session?.user?.is_anonymous === true;
 
   if (isNative) {
     const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const };

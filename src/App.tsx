@@ -127,10 +127,11 @@ function App() {
 
         if (isAlreadyLinked) {
           // Google account belongs to existing user — clear anon session and
-          // retry as a plain sign-in (signInWithGoogle will use signInWithOAuth
-          // once there is no anonymous session).
+          // retry as a plain sign-in. forceFresh=true bypasses the isAnon check
+          // so we always use signInWithOAuth even if a new anon session was
+          // created in the gap between signOut and this call.
           await signOut();
-          await signInWithGoogle();
+          await signInWithGoogle(true);
           return;
         }
 
@@ -180,7 +181,7 @@ function App() {
     if (isAlreadyLinked) {
       // Sign out the temporary anon session, then kick off a normal OAuth sign-in.
       // signInWithGoogle will now see isAnon=false and call signInWithOAuth.
-      signOut().then(() => signInWithGoogle());
+      signOut().then(() => signInWithGoogle(true));
       return;
     }
 
