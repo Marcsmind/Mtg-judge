@@ -20,7 +20,7 @@ import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
 import type { TabId } from "./constants/tabIds";
-import { initAuth, onAuthStateChange, linkGoogleAccount, signOut, deleteAccount, activateTrial } from "./services/auth";
+import { initAuth, onAuthStateChange, signInWithGoogle, signOut, deleteAccount, activateTrial } from "./services/auth";
 import { track } from "./services/analytics";
 import { initRevenueCat, isNative } from "./services/revenueCat";
 import { supabase } from "./services/supabase";
@@ -402,7 +402,7 @@ function App() {
         return (
           <Leaderboard
             authUser={authUser}
-            onLinkGoogle={linkGoogleAccount}
+            onLinkGoogle={signInWithGoogle}
             onGoToSettings={() => setActiveTab("settings")}
           />
         );
