@@ -83,90 +83,21 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 /**
- * Upgrade the current anonymous session to a Google account.
- * In a Capacitor native app the OAuth flow opens in an in-app browser via
- * @capacitor/browser so the deep-link redirect is handled correctly.
- * Returns an error string on failure, null on success/redirect.
- */
-export async function linkGoogleAccount(): Promise<string | null> {
-  if (!isSupabaseConfigured) return "Supabase not configured.";
-
-  if (isNative) {
-    const { data, error } = await supabase.auth.linkIdentity({
-      provider: "google",
-      options: {
-        redirectTo: "com.nexusjudge.app://auth/callback",
-        skipBrowserRedirect: true,
-      },
-    });
-    if (error) { console.error("[auth] linkIdentity failed:", error.message); return error.message; }
-    const url = (data as { url?: string })?.url;
-    if (url) {
-      const { Browser } = await import("@capacitor/browser");
-      await Browser.open({ url });
-    }
-    return null;
-  }
-
-  // Web: standard redirect flow
-  // Use origin + '/' so the URL matches Supabase's allowed list (https://domain/**
-  // requires at least a trailing slash — bare origin without path is rejected).
-  const { error } = await supabase.auth.linkIdentity({
-    provider: "google",
-    options: { redirectTo: `${window.location.origin}/` },
-  });
-  if (error) { console.error("[auth] linkIdentity failed:", error.message); return error.message; }
-  return null;
-}
-
-/**
- * Upgrade the current anonymous session to an Apple account (same user ID preserved).
- * Mirrors linkGoogleAccount — uses Capacitor browser plugin on native.
- * Returns an error string on failure, null on success/redirect.
- */
-export async function linkAppleAccount(): Promise<string | null> {
-  if (!isSupabaseConfigured) return "Supabase not configured.";
-
-  if (isNative) {
-    const { data, error } = await supabase.auth.linkIdentity({
-      provider: "apple",
-      options: {
-        redirectTo: "com.nexusjudge.app://auth/callback",
-        skipBrowserRedirect: true,
-      },
-    });
-    if (error) { console.error("[auth] linkApple failed:", error.message); return error.message; }
-    const url = (data as { url?: string })?.url;
-    if (url) {
-      const { Browser } = await import("@capacitor/browser");
-      await Browser.open({ url });
-    }
-    return null;
-  }
-
-  const { error } = await supabase.auth.linkIdentity({
-    provider: "apple",
-    options: { redirectTo: window.location.origin },
-  });
-  if (error) { console.error("[auth] linkApple failed:", error.message); return error.message; }
-  return null;
-}
-
-/**
- * Sign in (or sign up) with Apple for users who don't have an existing session.
- * Uses Supabase OAuth — redirects to Apple's login page.
+ * Sign in with Apple. If the caller has an anonymous session, upgrades it via
+ * linkIdentity so their user ID and data are preserved. Otherwise does a fresh
+ * signInWithOAuth (handles both new sign-ups and returning Apple users).
  */
 export async function signInWithApple(): Promise<void> {
   if (!isSupabaseConfigured) return;
 
+  const { data: { session } } = await supabase.auth.getSession();
+  const isAnon = session?.user?.is_anonymous === true;
+
   if (isNative) {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "apple",
-      options: {
-        redirectTo: "com.nexusjudge.app://auth/callback",
-        skipBrowserRedirect: true,
-      },
-    });
+    const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const };
+    const { data, error } = isAnon
+      ? await supabase.auth.linkIdentity({ provider: "apple", options: nativeOpts })
+      : await supabase.auth.signInWithOAuth({ provider: "apple", options: nativeOpts });
     if (error) { console.error("[auth] signInWithApple failed:", error.message); return; }
     const url = (data as { url?: string })?.url;
     if (url) {
@@ -176,27 +107,29 @@ export async function signInWithApple(): Promise<void> {
     return;
   }
 
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "apple",
-    options: { redirectTo: window.location.origin },
-  });
+  const webOpts = { redirectTo: `${window.location.origin}/` };
+  const { error } = isAnon
+    ? await supabase.auth.linkIdentity({ provider: "apple", options: webOpts })
+    : await supabase.auth.signInWithOAuth({ provider: "apple", options: webOpts });
   if (error) console.error("[auth] signInWithApple failed:", error.message);
 }
 
 /**
- * Sign in (or sign up) with Google for users who don't have an existing session.
+ * Sign in with Google. If the caller has an anonymous session, upgrades it via
+ * linkIdentity so their user ID and data are preserved. Otherwise does a fresh
+ * signInWithOAuth (handles both new sign-ups and returning Google users).
  */
 export async function signInWithGoogle(): Promise<void> {
   if (!isSupabaseConfigured) return;
 
+  const { data: { session } } = await supabase.auth.getSession();
+  const isAnon = session?.user?.is_anonymous === true;
+
   if (isNative) {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: "com.nexusjudge.app://auth/callback",
-        skipBrowserRedirect: true,
-      },
-    });
+    const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const };
+    const { data, error } = isAnon
+      ? await supabase.auth.linkIdentity({ provider: "google", options: nativeOpts })
+      : await supabase.auth.signInWithOAuth({ provider: "google", options: nativeOpts });
     if (error) { console.error("[auth] signInWithGoogle failed:", error.message); return; }
     const url = (data as { url?: string })?.url;
     if (url) {
@@ -206,10 +139,10 @@ export async function signInWithGoogle(): Promise<void> {
     return;
   }
 
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: { redirectTo: window.location.origin },
-  });
+  const webOpts = { redirectTo: `${window.location.origin}/` };
+  const { error } = isAnon
+    ? await supabase.auth.linkIdentity({ provider: "google", options: webOpts })
+    : await supabase.auth.signInWithOAuth({ provider: "google", options: webOpts });
   if (error) console.error("[auth] signInWithGoogle failed:", error.message);
 }
 
