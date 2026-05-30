@@ -110,6 +110,8 @@ function App() {
     import("@capacitor/app").then(({ App: CapApp }) => {
       CapApp.addListener("appUrlOpen", async ({ url }) => {
         if (url.startsWith("com.nexusjudge.app://auth/callback")) {
+          const { Browser } = await import("@capacitor/browser");
+          await Browser.close();
           await supabase.auth.exchangeCodeForSession(url);
         }
       }).then((handle: { remove: () => void }) => {
