@@ -142,7 +142,20 @@ function App() {
           return;
         }
 
-        await supabase.auth.exchangeCodeForSession(url);
+        // Supabase returns tokens in the hash fragment for native callbacks
+        // (#access_token=...) rather than a PKCE code in query params (?code=...).
+        // Handle both cases.
+        const fragment = url.includes('#') ? url.split('#')[1] : '';
+        const fp = new URLSearchParams(fragment);
+        const accessToken = fp.get('access_token');
+        const refreshToken = fp.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (error) console.error('[auth] setSession failed:', error.message);
+        } else {
+          const { error } = await supabase.auth.exchangeCodeForSession(url);
+          if (error) console.error('[auth] exchangeCodeForSession failed:', error.message);
+        }
       }).then((handle: { remove: () => void }) => {
         cleanup = () => handle.remove();
       });
