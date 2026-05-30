@@ -102,18 +102,45 @@ function App() {
   }, [authUser?.id]);
 
   // ── Handle OAuth deep-link callback on native (Google / Apple sign-in) ──
-  // After the Capacitor Browser closes, iOS fires appUrlOpen with the redirect URL.
-  // We hand it to Supabase to exchange the code for a session.
+  // iOS fires appUrlOpen when the Supabase callback redirects to our custom scheme.
+  // Two cases:
+  //   1. Success (?code=...)         → exchange code for session
+  //   2. Error (email_exists etc.)   → same recovery as the web handler:
+  //                                    sign out anon session and retry as sign-in
   useEffect(() => {
     if (!isNative) return;
     let cleanup: (() => void) | undefined;
     import("@capacitor/app").then(({ App: CapApp }) => {
       CapApp.addListener("appUrlOpen", async ({ url }) => {
-        if (url.startsWith("com.nexusjudge.app://auth/callback")) {
-          const { Browser } = await import("@capacitor/browser");
-          await Browser.close();
-          await supabase.auth.exchangeCodeForSession(url);
+        if (!url.startsWith("com.nexusjudge.app://auth/callback")) return;
+
+        const { Browser } = await import("@capacitor/browser");
+        await Browser.close();
+
+        // Parse query params from the deep-link URL
+        const qs = url.includes('?') ? url.split('?')[1].split('#')[0] : '';
+        const params = new URLSearchParams(qs);
+        const errorCode = params.get('error_code');
+        const isAlreadyLinked =
+          errorCode === 'email_exists' ||
+          params.get('error') === 'identity_already_linked';
+
+        if (isAlreadyLinked) {
+          // Google account belongs to existing user — clear anon session and
+          // retry as a plain sign-in (signInWithGoogle will use signInWithOAuth
+          // once there is no anonymous session).
+          await signOut();
+          await signInWithGoogle();
+          return;
         }
+
+        if (params.get('error')) {
+          // Other OAuth error — nothing to exchange, just leave the user logged out
+          console.error('[auth] native OAuth error:', params.get('error_description'));
+          return;
+        }
+
+        await supabase.auth.exchangeCodeForSession(url);
       }).then((handle: { remove: () => void }) => {
         cleanup = () => handle.remove();
       });
