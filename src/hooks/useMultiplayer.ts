@@ -44,6 +44,7 @@ import type { Player, ActiveCounters, DayNightState } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { getDeviceId } from "../services/auth";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { App as CapApp } from "@capacitor/app";
 
 // ── Options ───────────────────────────────────────────────────────────────────
 
@@ -478,6 +479,23 @@ export function useMultiplayer(options: UseMultiplayerOptions): UseMultiplayerRe
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomConnected]);
+
+  // ── Auto-rejoin on Capacitor app resume (iOS OS suspension → foreground) ──
+  // visibilitychange fires in browser tabs but misses hard iOS suspensions where
+  // the OS kills the WebSocket. CapApp.appStateChange catches those resumes.
+  useEffect(() => {
+    let listener: Awaited<ReturnType<typeof CapApp.addListener>> | null = null;
+    CapApp.addListener("appStateChange", ({ isActive }) => {
+      if (!isActive) return;
+      const savedCode = localStorage.getItem(STORAGE_KEYS.ROOM_CODE);
+      if (!savedCode || !isSupabaseConfigured || roomConnected) return;
+      handleJoinRoom(savedCode);
+    }).then(l => { listener = l; }).catch(() => {
+      // Not running in Capacitor (web) — no-op
+    });
+    return () => { listener?.remove(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomConnected]);
 

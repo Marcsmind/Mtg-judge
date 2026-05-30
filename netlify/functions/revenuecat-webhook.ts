@@ -31,11 +31,13 @@ export const handler: Handler = async (event) => {
   if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
   // Verify the shared secret header RevenueCat sends
-  if (WEBHOOK_SECRET) {
-    const auth = event.headers["authorization"] ?? event.headers["Authorization"];
-    if (auth !== WEBHOOK_SECRET) {
-      return { statusCode: 401, body: "Unauthorized" };
-    }
+  if (!WEBHOOK_SECRET) {
+    console.error("[revenuecat-webhook] REVENUECAT_WEBHOOK_SECRET env var not set");
+    return { statusCode: 500, body: "Webhook secret not configured" };
+  }
+  const auth = event.headers["authorization"] ?? event.headers["Authorization"];
+  if (auth !== WEBHOOK_SECRET) {
+    return { statusCode: 401, body: "Unauthorized" };
   }
 
   let payload: RCWebhookEvent;

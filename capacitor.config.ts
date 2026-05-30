@@ -4,11 +4,6 @@ const config: CapacitorConfig = {
   appId: 'com.nexusjudge.app',
   appName: 'Arbiter',
   webDir: 'dist',
-  // Live reload — remove this block before building for App Store submission
-  server: {
-    url: 'http://192.168.0.5:5174',
-    cleartext: true,
-  },
   plugins: {
     // Use Capacitor's browser plugin for OAuth redirects (Google, Apple sign-in)
     Browser: {

@@ -101,6 +101,19 @@ export const handler: Handler = async (event) => {
     accessCode   = parsed.accessCode;
     sessionToken = parsed.sessionToken;
     if (!model || !payload) throw new Error("Missing model or payload");
+
+    // Enforce input length limit to prevent token-limit errors and abuse
+    const contents = (payload as Record<string, unknown>).contents;
+    if (Array.isArray(contents) && contents.length > 0) {
+      const lastContent = contents[contents.length - 1] as Record<string, unknown>;
+      const parts = lastContent?.parts;
+      if (Array.isArray(parts)) {
+        const text = (parts[0] as Record<string, unknown>)?.text;
+        if (typeof text === "string" && text.length > 4000) {
+          return { statusCode: 400, body: JSON.stringify({ error: { message: "Question too long (max 4000 characters)." } }) };
+        }
+      }
+    }
   } catch (err) {
     return { statusCode: 400, body: JSON.stringify({ error: { message: `Bad request: ${err}` } }) };
   }

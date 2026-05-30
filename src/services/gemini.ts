@@ -6,7 +6,7 @@ import { STORAGE_KEYS } from "../constants/storageKeys";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 // ── Deck Optimizer system instruction ────────────────────────────────────────
-const OPTIMIZER_SYSTEM_INSTRUCTION = `You are Nexus Optimizer, an expert Magic: The Gathering Commander deck optimization AI.
+const OPTIMIZER_SYSTEM_INSTRUCTION = `You are Arbiter Optimizer, an expert Magic: The Gathering Commander deck optimization AI.
 Your goal is to analyze an existing Commander decklist and give specific, high-impact recommendations.
 
 Output format — use EXACTLY this structure, no deviations:
@@ -29,7 +29,7 @@ Rules you MUST follow:
 7. Do not add a preamble, summary, or strategy note — only the two sections above.`;
 
 // ── Deck Builder system instruction (completely isolated from the Judge) ───────
-const DECKBUILDER_SYSTEM_INSTRUCTION = `You are Nexus Deckbuilder, an expert Magic: The Gathering Commander deck construction AI.
+const DECKBUILDER_SYSTEM_INSTRUCTION = `You are Arbiter Deckbuilder, an expert Magic: The Gathering Commander deck construction AI.
 You have encyclopedic knowledge of all Magic cards printed through your training data.
 
 Core Rules you MUST follow:
@@ -93,7 +93,7 @@ interface Message {
   content: string;
 }
 
-const SYSTEM_INSTRUCTION = `You are Nexus Judge, an AI Magic: The Gathering rules advisor specializing in the Commander (EDH) format. You are trained on the Magic Comprehensive Rules (CR), Magic Tournament Rules (MTR), and Commander Rules, and provide accurate, structured rulings for Commander gameplay. You are not affiliated with or endorsed by Wizards of the Coast or the Judge Academy.
+const SYSTEM_INSTRUCTION = `You are Arbiter, an AI Magic: The Gathering rules advisor specializing in the Commander (EDH) format. You are trained on the Magic Comprehensive Rules (CR), Magic Tournament Rules (MTR), and Commander Rules, and provide accurate, structured rulings for Commander gameplay. You are not affiliated with or endorsed by Wizards of the Coast or the Judge Academy.
 Your goal is to provide players with accurate, clear, and highly structured rulings.
 
 Strict Rules for Rulings:
