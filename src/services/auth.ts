@@ -109,9 +109,11 @@ export async function linkGoogleAccount(): Promise<string | null> {
   }
 
   // Web: standard redirect flow
+  // Use origin + '/' so the URL matches Supabase's allowed list (https://domain/**
+  // requires at least a trailing slash — bare origin without path is rejected).
   const { error } = await supabase.auth.linkIdentity({
     provider: "google",
-    options: { redirectTo: window.location.origin },
+    options: { redirectTo: `${window.location.origin}/` },
   });
   if (error) { console.error("[auth] linkIdentity failed:", error.message); return error.message; }
   return null;
