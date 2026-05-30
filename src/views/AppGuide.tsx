@@ -254,7 +254,7 @@ export const AppGuide: React.FC<AppGuideProps> = ({ onNavigate }) => {
           App Guide
         </h1>
         <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-          A breakdown of every tab and feature in Nexus Judge. Tap any section to expand it, or
+          A breakdown of every tab and feature in Arbiter. Tap any section to expand it, or
           use the <strong>Go →</strong> button to jump straight there.
         </p>
       </div>

@@ -191,7 +191,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
         <Settings size={28} color="var(--accent-purple)" />
         <div>
           <h2 style={{ fontSize: "1.8rem", fontWeight: 700 }}>Settings</h2>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Configure keys and regional options for the Nexus Judge oracle.</p>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Configure keys and regional options for Arbiter.</p>
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
           <div style={{ fontSize: "0.9rem", lineHeight: 1.5 }}>
             <h4 style={{ fontWeight: 600, color: "#fff", marginBottom: "4px" }}>Local Security & Zero Data Leakage</h4>
             <p style={{ color: "var(--text-secondary)" }}>
-              Nexus Judge operates directly inside your web browser. Your API keys are saved exclusively in your browser's private local storage (`localStorage`) and never touch any server except the official Google Gemini API endpoint.
+              Arbiter operates directly inside your web browser. Your API keys are saved exclusively in your browser's private local storage (`localStorage`) and never touch any server except the official Google Gemini API endpoint.
             </p>
           </div>
         </div>

@@ -164,7 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
           {!collapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
               <h1 style={{ fontSize: "1.15rem", fontWeight: 800, letterSpacing: "-0.5px", whiteSpace: "nowrap" }}>
-                NEXUS <span className="gradient-text">JUDGE</span>
+                <span className="gradient-text">ARBITER</span>
               </h1>
               <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", letterSpacing: "1px", textTransform: "uppercase", marginTop: "-1px" }}>
                 Commander Companion
