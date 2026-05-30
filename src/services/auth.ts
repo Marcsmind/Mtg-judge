@@ -83,30 +83,50 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 /**
- * Sign in with Apple. If the caller has an anonymous session, upgrades it via
- * linkIdentity so their user ID and data are preserved. Otherwise does a fresh
- * signInWithOAuth (handles both new sign-ups and returning Apple users).
+ * Sign in with Apple.
+ *
+ * Native iOS: uses the system Sign in with Apple dialog (Face ID / Touch ID)
+ * via @capacitor-community/apple-sign-in + supabase.auth.signInWithIdToken.
+ * This avoids SFSafariViewController entirely — no browser, no redirect loop.
+ *
+ * Web: falls back to Supabase OAuth (browser redirect), same as Google.
  */
 export async function signInWithApple(): Promise<void> {
   if (!isSupabaseConfigured) return;
 
-  const { data: { session } } = await supabase.auth.getSession();
-  const isAnon = session?.user?.is_anonymous === true;
-
   if (isNative) {
-    const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const };
-    const { data, error } = isAnon
-      ? await supabase.auth.linkIdentity({ provider: "apple", options: nativeOpts })
-      : await supabase.auth.signInWithOAuth({ provider: "apple", options: nativeOpts });
-    if (error) { console.error("[auth] signInWithApple failed:", error.message); return; }
-    const url = (data as { url?: string })?.url;
-    if (url) {
-      const { Browser } = await import("@capacitor/browser");
-      await Browser.open({ url });
+    const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
+    const nonce = crypto.randomUUID();
+    let identityToken: string | null = null;
+    try {
+      const { response } = await SignInWithApple.authorize({
+        clientId: "com.nexusjudge.app",
+        redirectURI: "https://rfdrvwyfjylwekbticzu.supabase.co/auth/v1/callback",
+        scopes: "email name",
+        nonce,
+      });
+      identityToken = response.identityToken;
+    } catch (e) {
+      console.error("[auth] signInWithApple native failed:", e);
+      return;
     }
+
+    if (!identityToken) {
+      console.error("[auth] signInWithApple: no identityToken");
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: "apple",
+      token: identityToken,
+      nonce,
+    });
+    if (error) console.error("[auth] signInWithIdToken apple failed:", error.message);
     return;
   }
 
+  const { data: { session } } = await supabase.auth.getSession();
+  const isAnon = session?.user?.is_anonymous === true;
   const webOpts = { redirectTo: `${window.location.origin}/` };
   const { error } = isAnon
     ? await supabase.auth.linkIdentity({ provider: "apple", options: webOpts })
