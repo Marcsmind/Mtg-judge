@@ -725,11 +725,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
       {/* ── Legal / Fan Content Disclaimer ── */}
       <div style={{ padding: "16px 4px", display: "flex", flexDirection: "column", gap: "6px" }}>
         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textAlign: "center", lineHeight: 1.6 }}>
-          Nexus Judge is not affiliated with or endorsed by Wizards of the Coast LLC.<br />
+          Arbiter is not affiliated with or endorsed by Wizards of the Coast LLC.<br />
           Magic: The Gathering is © Wizards of the Coast LLC.<br />
           Card data provided by{" "}
           <a href="https://scryfall.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-muted)", textDecoration: "underline" }}>Scryfall</a>.
-          AI answers may contain errors — verify rulings with an official judge for competitive play.
+          AI answers may contain errors — verify rulings with an official judge for competitive play.<br />
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--text-muted)", textDecoration: "underline" }}>Privacy Policy</a>
         </p>
       </div>
     </div>
