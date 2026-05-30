@@ -123,6 +123,7 @@ function App() {
         const errorCode = params.get('error_code');
         const isAlreadyLinked =
           errorCode === 'email_exists' ||
+          errorCode === 'identity_already_exists' ||
           params.get('error') === 'identity_already_linked';
 
         if (isAlreadyLinked) {
@@ -176,6 +177,7 @@ function App() {
       .replace(/\+/g, ' ');
     const isAlreadyLinked =
       oauthError === 'identity_already_linked' ||
+      oauthError === 'identity_already_exists' ||
       decodeURIComponent(desc).toLowerCase().includes('already linked');
 
     if (isAlreadyLinked) {
