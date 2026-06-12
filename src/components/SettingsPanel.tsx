@@ -232,7 +232,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                     borderRadius: "50%", background: palette.swatch, flexShrink: 0,
                     boxShadow: active ? `0 0 6px ${palette.swatch}` : "none",
                   }} />
-                  {palette.label}
+                  <span style={{ width: "58px", textAlign: "left" }}>{palette.label}</span>
                 </button>
               );
             })}

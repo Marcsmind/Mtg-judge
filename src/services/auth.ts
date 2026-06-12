@@ -96,14 +96,18 @@ export async function signInWithApple(): Promise<void> {
 
   if (isNative) {
     const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
-    const nonce = crypto.randomUUID();
+    const rawNonce = crypto.randomUUID();
+    // Apple expects a SHA-256 hex hash of the nonce in the authorize call.
+    // Supabase receives the raw nonce and hashes it to verify against the JWT.
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawNonce));
+    const hashedNonce = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
     let identityToken: string;
     try {
       const { response } = await SignInWithApple.authorize({
         clientId: "com.nexusjudge.app",
         redirectURI: "https://rfdrvwyfjylwekbticzu.supabase.co/auth/v1/callback",
         scopes: "email name",
-        nonce,
+        nonce: hashedNonce,
       });
       if (!response.identityToken) {
         console.error("[auth] signInWithApple: no identityToken");
@@ -123,7 +127,7 @@ export async function signInWithApple(): Promise<void> {
     const { error } = await supabase.auth.signInWithIdToken({
       provider: "apple",
       token: identityToken,
-      nonce,
+      nonce: rawNonce,
     });
 
     if (!error) return;
@@ -135,7 +139,7 @@ export async function signInWithApple(): Promise<void> {
       const { error: retryError } = await supabase.auth.signInWithIdToken({
         provider: "apple",
         token: identityToken,
-        nonce,
+        nonce: rawNonce,
       });
       if (retryError) {
         console.error("[auth] signInWithIdToken retry failed:", retryError.message);
@@ -170,7 +174,7 @@ export async function signInWithGoogle(forceFresh = false): Promise<void> {
   const isAnon = !forceFresh && session?.user?.is_anonymous === true;
 
   if (isNative) {
-    const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const, queryParams: { prompt: "select_account" } };
+    const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const, ...(isAnon ? { queryParams: { prompt: "select_account" } } : {}) };
     const { data, error } = isAnon
       ? await supabase.auth.linkIdentity({ provider: "google", options: nativeOpts })
       : await supabase.auth.signInWithOAuth({ provider: "google", options: nativeOpts });
@@ -183,7 +187,7 @@ export async function signInWithGoogle(forceFresh = false): Promise<void> {
     return;
   }
 
-  const webOpts = { redirectTo: `${window.location.origin}/`, queryParams: { prompt: "select_account" } };
+  const webOpts = { redirectTo: `${window.location.origin}/`, ...(isAnon ? { queryParams: { prompt: "select_account" } } : {}) };
   const { error } = isAnon
     ? await supabase.auth.linkIdentity({ provider: "google", options: webOpts })
     : await supabase.auth.signInWithOAuth({ provider: "google", options: webOpts });
