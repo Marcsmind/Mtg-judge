@@ -48,7 +48,7 @@ export const CardCodex: React.FC<CardCodexProps> = ({
   // ── Handle card selection (search or history click) ──
   const handleSelectCard = useCallback(
     async (cardName: string) => {
-      setQuery(cardName);
+      setQuery("");
       setSuggestions([]);
       setLoading(true);
       setError("");

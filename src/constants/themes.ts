@@ -70,7 +70,7 @@ export const THEMES: ThemePalette[] = [
   },
   {
     id: "flame",
-    label: "Flame",
+    label: "Mountain",
     swatch: "#f97316",
     emoji: "🔥",
     vars: {

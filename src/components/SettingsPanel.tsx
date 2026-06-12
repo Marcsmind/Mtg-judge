@@ -201,7 +201,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
             <div>
               <p style={{ fontWeight: 600, fontSize: "0.95rem" }}>Theme</p>
               <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                {THEMES.find(t => t.id === theme)?.emoji ?? ""}&nbsp;
                 {THEMES.find(t => t.id === theme)?.label ?? "Void"} palette active
               </p>
             </div>
@@ -216,9 +215,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                   aria-label={`${palette.label} theme`}
                   title={palette.label}
                   style={{
-                    display: "flex", alignItems: "center", gap: "7px",
-                    padding: "7px 14px", borderRadius: "8px", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
+                    padding: "7px 0", borderRadius: "8px", cursor: "pointer",
                     fontWeight: 600, fontSize: "0.82rem",
+                    width: "96px",
                     background: active ? `${palette.swatch}22` : "rgba(255,255,255,0.04)",
                     border: `1.5px solid ${active ? palette.swatch : "rgba(255,255,255,0.08)"}`,
                     color: active ? palette.swatch : "var(--text-muted)",
@@ -232,7 +232,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                     borderRadius: "50%", background: palette.swatch, flexShrink: 0,
                     boxShadow: active ? `0 0 6px ${palette.swatch}` : "none",
                   }} />
-                  {palette.emoji} {palette.label}
+                  {palette.label}
                 </button>
               );
             })}

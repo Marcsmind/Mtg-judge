@@ -15,19 +15,10 @@ import type { SavedDeck } from "../../types/deck";
 import { SetCommanderModal } from "./SetCommanderModal";
 import { CommanderPreviewModal } from "./CommanderPreviewModal";
 import { searchCardFuzzy } from "../../services/scryfall";
-
-// ── MTG-themed emoji avatar presets ──────────────────────────────────────────
+import { TOKEN_TYPES } from "./TokenModal";
 
 // ── Color theme shape (matches LifeCounter's `colors` map) ───────────────────
 interface ColorTheme { bg: string; accent: string; border: string; }
-
-const TOKEN_TYPES: { key: TokenKey; label: string; shortLabel?: string; emoji: string; color: string }[] = [
-  { key: "treasure", label: "Treasure", emoji: "💰", color: "#eab308" },
-  { key: "food",     label: "Food",     emoji: "🍔", color: "#10b981" },
-  { key: "clue",     label: "Clue",     emoji: "🔍", color: "#06b6d4" },
-  { key: "blood",    label: "Blood",    emoji: "🩸", color: "#f43f5e" },
-  { key: "rad",      label: "Radiation",shortLabel: "Rad", emoji: "☢️", color: "#84cc16" },
-];
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface PlayerCardProps {

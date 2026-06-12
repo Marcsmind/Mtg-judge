@@ -705,11 +705,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           ref={inputRef}
           rows={1}
           className="glass-input"
-          placeholder={
-            apiKey
-              ? "Ask a rules question..."
-              : "Mock Mode: Tag cards (Add API Key)"
-          }
+          placeholder="Ask a rules question..."
           value={query}
           onChange={(e) => { 
             const val = e.target.value;
