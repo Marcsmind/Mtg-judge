@@ -145,7 +145,7 @@ export async function signInWithGoogle(forceFresh = false): Promise<void> {
   const isAnon = !forceFresh && session?.user?.is_anonymous === true;
 
   if (isNative) {
-    const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const };
+    const nativeOpts = { redirectTo: "com.nexusjudge.app://auth/callback", skipBrowserRedirect: true as const, queryParams: { prompt: "select_account" } };
     const { data, error } = isAnon
       ? await supabase.auth.linkIdentity({ provider: "google", options: nativeOpts })
       : await supabase.auth.signInWithOAuth({ provider: "google", options: nativeOpts });
@@ -158,7 +158,7 @@ export async function signInWithGoogle(forceFresh = false): Promise<void> {
     return;
   }
 
-  const webOpts = { redirectTo: `${window.location.origin}/` };
+  const webOpts = { redirectTo: `${window.location.origin}/`, queryParams: { prompt: "select_account" } };
   const { error } = isAnon
     ? await supabase.auth.linkIdentity({ provider: "google", options: webOpts })
     : await supabase.auth.signInWithOAuth({ provider: "google", options: webOpts });

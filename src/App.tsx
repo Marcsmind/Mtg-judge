@@ -78,6 +78,7 @@ function App() {
     initAuth().then(user => { if (user) setAuthUser(user); });
     const { unsubscribe } = onAuthStateChange(user => {
       setAuthUser(user);
+      if (user && !user.isAnonymous) setAuthModalOpen(false);
       // Re-init anonymous session after sign-out so the app is never sessionless
       if (!user) initAuth().then(u => { if (u) setAuthUser(u); });
     });

@@ -67,7 +67,11 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
     if (!authUser || authUser.isAnonymous) return;
     setLoading(priceType);
     try {
-      if (isNative && rcPackage) {
+      if (isNative) {
+        if (!rcPackage) {
+          alert("Purchases unavailable — could not connect to the App Store. Please check your connection and try again.");
+          return;
+        }
         // Native: RevenueCat IAP
         const newTier = await purchasePackage(rcPackage);
         if (newTier) {
