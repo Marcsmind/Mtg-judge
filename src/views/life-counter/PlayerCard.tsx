@@ -10,7 +10,7 @@ import {
   ShieldAlert, Skull,
   Star, Coins, Shield, Wand2, Crown
 } from "lucide-react";
-import type { Player, ActiveCounters, TokenKey } from "../../types/game";
+import type { Player, ActiveCounters } from "../../types/game";
 import type { SavedDeck } from "../../types/deck";
 import { SetCommanderModal } from "./SetCommanderModal";
 import { CommanderPreviewModal } from "./CommanderPreviewModal";

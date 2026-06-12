@@ -111,7 +111,12 @@ export async function signInWithApple(): Promise<void> {
       }
       identityToken = response.identityToken;
     } catch (e) {
-      console.error("[auth] signInWithApple native failed:", e);
+      // Silently ignore user cancellations
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("dismissed")) {
+        console.error("[auth] signInWithApple native failed:", e);
+        alert("Apple Sign-In failed. Please try again.");
+      }
       return;
     }
 
@@ -120,7 +125,27 @@ export async function signInWithApple(): Promise<void> {
       token: identityToken,
       nonce,
     });
-    if (error) console.error("[auth] signInWithIdToken apple failed:", error.message);
+
+    if (!error) return;
+
+    // identity_already_exists means this Apple account is linked to an existing
+    // user but we're currently in an anonymous session — sign out and retry.
+    if (error.message?.includes("identity_already_exists") || (error as { code?: string }).code === "identity_already_exists") {
+      await supabase.auth.signOut();
+      const { error: retryError } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: identityToken,
+        nonce,
+      });
+      if (retryError) {
+        console.error("[auth] signInWithIdToken retry failed:", retryError.message);
+        alert(`Apple Sign-In failed: ${retryError.message}`);
+      }
+      return;
+    }
+
+    console.error("[auth] signInWithIdToken apple failed:", error.message);
+    alert(`Apple Sign-In failed: ${error.message}`);
     return;
   }
 
