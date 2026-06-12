@@ -77,15 +77,25 @@ async function checkAndIncrementQuota(identifier: string): Promise<boolean> {
   }
 }
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 export const handler: Handler = async (event) => {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers: CORS_HEADERS, body: "" };
+  }
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
+    return { statusCode: 405, headers: CORS_HEADERS, body: "Method Not Allowed" };
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return {
       statusCode: 500,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ error: { message: "Server API key not configured. Ask the host to set GEMINI_API_KEY in Netlify environment variables." } }),
     };
   }
@@ -115,7 +125,7 @@ export const handler: Handler = async (event) => {
       }
     }
   } catch (err) {
-    return { statusCode: 400, body: JSON.stringify({ error: { message: `Bad request: ${err}` } }) };
+    return { statusCode: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }, body: JSON.stringify({ error: { message: `Bad request: ${err}` } }) };
   }
 
   // ── Quota bypass checks (access code OR verified Pro/trial subscription) ──
@@ -138,7 +148,7 @@ export const handler: Handler = async (event) => {
     if (!withinQuota) {
       return {
         statusCode: 429,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify({
           error: {
             message: `Daily question limit reached (${DAILY_LIMIT}/day on the shared key). Add your own Gemini API key in Settings for unlimited questions.`,
@@ -161,7 +171,7 @@ export const handler: Handler = async (event) => {
   const data = await upstream.json();
   return {
     statusCode: upstream.status,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify(data),
   };
 };

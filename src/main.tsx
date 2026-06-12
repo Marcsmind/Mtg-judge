@@ -6,6 +6,7 @@ import './index.css'
 import './services/analytics' // side-effect import — initialises PostHog on module load
 import App from './App.tsx'
 import { ToastProvider } from './components/Toast.tsx'
+import { AppErrorFallback } from './components/AppErrorFallback.tsx'
 
 // ── Sentry error monitoring ────────────────────────────────────────────────────
 // Set VITE_SENTRY_DSN in .env (and Netlify env vars) after creating a Sentry project.
@@ -15,7 +16,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     dsn: import.meta.env.VITE_SENTRY_DSN as string,
     environment: import.meta.env.MODE,
     tracesSampleRate: 0.1,
-    sendDefaultPii: true,
+    sendDefaultPii: false,
   })
 }
 
@@ -58,8 +59,10 @@ registerSW({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ToastProvider>
-      <App />
-    </ToastProvider>
+    <Sentry.ErrorBoundary fallback={({ error }) => <AppErrorFallback error={error as Error} />}>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </Sentry.ErrorBoundary>
   </StrictMode>,
 )

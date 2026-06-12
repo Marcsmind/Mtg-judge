@@ -1,5 +1,6 @@
 // Gemini AI Service with Card Context Injection (RAG)
 
+import { Capacitor } from "@capacitor/core";
 import { getCardOracleText } from "./scryfall";
 import type { ScryfallCard, ScryfallRuling } from "./scryfall";
 import { STORAGE_KEYS } from "../constants/storageKeys";
@@ -196,7 +197,12 @@ async function fetchGemini(model: string, payload: object, apiKey: string): Prom
     const { data } = await supabase.auth.getSession();
     sessionToken = data.session?.access_token ?? "";
   }
-  return fetch("/.netlify/functions/gemini-proxy", {
+  // In native Capacitor builds the app is served from capacitor://localhost, so
+  // relative paths don't reach Netlify functions — use the absolute site URL instead.
+  const proxyBase = Capacitor.isNativePlatform()
+    ? "https://mtg-judge.netlify.app"
+    : "";
+  return fetch(`${proxyBase}/.netlify/functions/gemini-proxy`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model, payload, accessCode, sessionToken }),
