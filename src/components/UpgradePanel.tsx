@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Crown, Zap, Check, Sparkles, Clock, RotateCcw } from "lucide-react";
 import { track } from "../services/analytics";
 import type { SubscriptionTier } from "../types/subscription";
