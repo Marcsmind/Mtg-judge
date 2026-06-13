@@ -242,7 +242,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             {/* Apple */}
             <button
               type="button"
-              onClick={signInWithApple}
+              onClick={async () => { const err = await signInWithApple(); if (err) setError(err); }}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
                 padding: "11px 16px", borderRadius: "10px", cursor: "pointer",

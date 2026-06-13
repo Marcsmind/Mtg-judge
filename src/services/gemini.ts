@@ -137,45 +137,6 @@ export function buildCardContextPrompt(cards: ScryfallCard[], rulingsMap: Record
   return prompt;
 }
 
-// Simulated local response when API key is missing
-export function getLocalMockResponse(_query: string, cards: ScryfallCard[], rulings: Record<string, ScryfallRuling[]>): string {
-  let response = `✨ **Nexus Judge Mock Mode** ✨\n\n`;
-  response += `*To unlock full AI rules reasoning, please add a **Gemini API Key** in the **Settings** panel (available for free from Google AI Studio).* \n\n`;
-
-  if (cards.length === 0) {
-    response += `I see you have a rules question! However, I don't have any cards tagged or a Gemini API key configured to understand your question. \n\n`;
-    response += `💡 **Tip:** Search for cards in the bar above and tag them to see their official card text and rulings here instantly! You can ask questions like "How does commander tax work?" or search up card details in the **Card Codex** panel on the right.`;
-    return response;
-  }
-
-  response += `I've analyzed the **${cards.map(c => c.name).join(" and ")}** you tagged! Here is the official card information from the Magic archives:\n\n`;
-
-  cards.forEach(card => {
-    response += `### 🎴 **${card.name}**\n`;
-    response += `- **Mana Cost:** \`${card.mana_cost || "N/A"}\`\n`;
-    response += `- **Type:** *${card.type_line}*\n`;
-    response += `- **Oracle Text:**\n  > ${getCardOracleText(card).replace(/\n/g, "\n  > ")}\n\n`;
-
-    const cardRulings = rulings[card.id] || [];
-    if (cardRulings.length > 0) {
-      response += `**Official Gatherer Rulings for ${card.name}:**\n`;
-      cardRulings.slice(0, 3).forEach(r => {
-        response += `- *(${r.published_at})* ${r.comment}\n`;
-      });
-      if (cardRulings.length > 3) {
-        response += `- *And ${cardRulings.length - 3} more rulings (expand in the Card Codex on the right).* \n`;
-      }
-    } else {
-      response += `*No specific Gatherer rulings found for this card. Generally, standard comprehensive rules apply.*\n`;
-    }
-    response += `\n`;
-  });
-
-  response += `\n⚠️ **Please configure a Gemini API Key in Settings** to ask complex combo questions (e.g. interactions, state-based effects) and get a full analysis from the AI Judge!`;
-
-  return response;
-}
-
 // ── Internal fetch router ─────────────────────────────────────────────────────
 // If the caller has their own API key, call Gemini directly.
 // Otherwise route through the Netlify serverless proxy. Trusted users who have

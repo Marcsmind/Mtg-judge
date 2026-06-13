@@ -91,8 +91,8 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
  *
  * Web: falls back to Supabase OAuth (browser redirect), same as Google.
  */
-export async function signInWithApple(): Promise<void> {
-  if (!isSupabaseConfigured) return;
+export async function signInWithApple(): Promise<string | null> {
+  if (!isSupabaseConfigured) return null;
 
   if (isNative) {
     const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
@@ -111,7 +111,7 @@ export async function signInWithApple(): Promise<void> {
       });
       if (!response.identityToken) {
         console.error("[auth] signInWithApple: no identityToken");
-        return;
+        return null;
       }
       identityToken = response.identityToken;
     } catch (e) {
@@ -119,9 +119,9 @@ export async function signInWithApple(): Promise<void> {
       const msg = e instanceof Error ? e.message : String(e);
       if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("dismissed")) {
         console.error("[auth] signInWithApple native failed:", e);
-        alert("Apple Sign-In failed. Please try again.");
+        return "Apple Sign-In failed. Please try again.";
       }
-      return;
+      return null;
     }
 
     const { error } = await supabase.auth.signInWithIdToken({
@@ -130,7 +130,7 @@ export async function signInWithApple(): Promise<void> {
       nonce: rawNonce,
     });
 
-    if (!error) return;
+    if (!error) return null;
 
     // identity_already_exists means this Apple account is linked to an existing
     // user but we're currently in an anonymous session — sign out and retry.
@@ -143,14 +143,13 @@ export async function signInWithApple(): Promise<void> {
       });
       if (retryError) {
         console.error("[auth] signInWithIdToken retry failed:", retryError.message);
-        alert(`Apple Sign-In failed: ${retryError.message}`);
+        return `Apple Sign-In failed: ${retryError.message}`;
       }
-      return;
+      return null;
     }
 
     console.error("[auth] signInWithIdToken apple failed:", error.message);
-    alert(`Apple Sign-In failed: ${error.message}`);
-    return;
+    return `Apple Sign-In failed: ${error.message}`;
   }
 
   const { data: { session } } = await supabase.auth.getSession();
@@ -160,6 +159,7 @@ export async function signInWithApple(): Promise<void> {
     ? await supabase.auth.linkIdentity({ provider: "apple", options: webOpts })
     : await supabase.auth.signInWithOAuth({ provider: "apple", options: webOpts });
   if (error) console.error("[auth] signInWithApple failed:", error.message);
+  return null;
 }
 
 /**

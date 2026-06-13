@@ -45,8 +45,8 @@ export default defineConfig({
       includeAssets: ['favicon.svg', 'pwa-icon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
 
       manifest: {
-        name: 'Nexus Judge',
-        short_name: 'Nexus Judge',
+        name: 'Arbiter',
+        short_name: 'Arbiter',
         description: 'AI-powered Commander MTG Rules Judge & Companion',
         theme_color: '#0a0810',
         background_color: '#0a0810',

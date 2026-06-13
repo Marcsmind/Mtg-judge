@@ -204,5 +204,5 @@ export function getCardImage(card: ScryfallCard): string {
   if (card.card_faces && card.card_faces[0]?.image_uris?.normal) {
     return card.card_faces[0].image_uris.normal;
   }
-  return "https://svgshare.com/i/157u.svg"; // Fallback card back placeholder image
+  return "/card-back.svg";
 }

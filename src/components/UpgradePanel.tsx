@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Crown, Zap, Check, Sparkles, Clock, RotateCcw } from "lucide-react";
 import { track } from "../services/analytics";
 import type { SubscriptionTier } from "../types/subscription";
@@ -47,6 +47,7 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
   const [loading, setLoading] = useState<PriceType | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [offering, setOffering] = useState<RCOffering | null>(null);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [mountTime] = useState(Date.now);
 
   // Fetch RevenueCat offering on native (no-op on web)
@@ -69,7 +70,7 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
     try {
       if (isNative) {
         if (!rcPackage) {
-          alert("Purchases unavailable — could not connect to the App Store. Please check your connection and try again.");
+          setPurchaseError("Purchases unavailable — could not connect to the App Store. Please check your connection and try again.");
           return;
         }
         // Native: RevenueCat IAP
@@ -123,9 +124,14 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
             <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Pro Active</h3>
             <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
               All Pro features unlocked.{" "}
-              <a href="https://billing.stripe.com/p/login/test_00g00000000000000000" target="_blank" rel="noreferrer" style={{ color: "var(--accent-cyan)", textDecoration: "none" }}>
-                Manage subscription →
-              </a>
+              {!isNative && (
+                <a href="https://billing.stripe.com/p/login/test_00g00000000000000000" target="_blank" rel="noreferrer" style={{ color: "var(--accent-cyan)", textDecoration: "none" }}>
+                  Manage subscription →
+                </a>
+              )}
+              {isNative && (
+                <span>Manage your subscription in iPhone Settings → Apple ID → Subscriptions.</span>
+              )}
             </p>
           </div>
         </div>
@@ -254,6 +260,11 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
         </button>
       </div>
 
+      {purchaseError && (
+        <p style={{ fontSize: "0.8rem", color: "var(--accent-rose)", textAlign: "center", padding: "8px 12px", background: "rgba(244,63,94,0.08)", borderRadius: "8px", border: "1px solid rgba(244,63,94,0.2)" }}>
+          {purchaseError}
+        </p>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "center" }}>
         <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center" }}>
           {isNative ? "Billed through the App Store. Cancel anytime." : "Secure checkout via Stripe. Cancel anytime. No hidden fees."}

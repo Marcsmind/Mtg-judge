@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Save, FolderOpen, Trash2, X, Calendar, Users } from "lucide-react";
 import { BottomSheet } from "../../components/BottomSheet";
 
@@ -53,6 +53,11 @@ export const SaveGameModal: React.FC<SaveGameModalProps> = ({
   onDelete,
   onClose,
 }) => {
+  const [confirm, setConfirm] = useState<{ action: () => void; message: string } | null>(null);
+
+  const requestConfirm = (message: string, action: () => void) => setConfirm({ message, action });
+  const resolveConfirm = (ok: boolean) => { if (ok) confirm?.action(); setConfirm(null); };
+
   return (
     <BottomSheet onClose={onClose} zIndex={200} padding="0" maxWidth="520px">
       <div style={{ display: "flex", flexDirection: "column" }}>
@@ -106,6 +111,15 @@ export const SaveGameModal: React.FC<SaveGameModalProps> = ({
           display: "flex", flexDirection: "column", gap: "8px",
           padding: "12px 24px 24px", overflowY: "auto", maxHeight: "55vh",
         }}>
+          {confirm && (
+            <div style={{ margin: "0 0 8px", padding: "12px 16px", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{confirm.message}</p>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={() => resolveConfirm(true)} className="glass-button" style={{ flex: 1, justifyContent: "center", fontSize: "0.82rem", padding: "7px", background: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.4)" }}>Confirm</button>
+                <button onClick={() => resolveConfirm(false)} className="glass-button" style={{ flex: 1, justifyContent: "center", fontSize: "0.82rem", padding: "7px" }}>Cancel</button>
+              </div>
+            </div>
+          )}
           {Array.from({ length: MAX_SLOTS }, (_, i) => {
             const slot = slots[i] ?? null;
             return (
@@ -114,15 +128,14 @@ export const SaveGameModal: React.FC<SaveGameModalProps> = ({
                 index={i}
                 slot={slot}
                 onSave={() => {
-                  if (slot && !window.confirm(`Overwrite Save ${i + 1}?`)) return;
-                  onSave(i);
+                  if (slot) { requestConfirm(`Overwrite Save ${i + 1}?`, () => onSave(i)); } else { onSave(i); }
                 }}
                 onLoad={() => {
                   if (!slot) return;
-                  if (window.confirm(`Load Save ${i + 1}? Unsaved progress will be lost.`)) onLoad(slot);
+                  requestConfirm(`Load Save ${i + 1}? Unsaved progress will be lost.`, () => onLoad(slot));
                 }}
                 onDelete={() => {
-                  if (slot && window.confirm(`Delete Save ${i + 1}?`)) onDelete(i);
+                  if (slot) requestConfirm(`Delete Save ${i + 1}?`, () => onDelete(i));
                 }}
               />
             );
