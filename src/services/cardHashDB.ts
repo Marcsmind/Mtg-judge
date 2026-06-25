@@ -17,7 +17,7 @@ interface DBState {
 const DB_BASE     = '/card-db';
 const IDB_NAME    = 'arbiter-card-db';
 const IDB_STORE   = 'blobs';
-const MAX_HAMMING = 10;   // stricter — false positives filtered by consecutive-frame requirement
+const MAX_HAMMING = 12;   // 3-frame requirement handles false positives; 12 gives real cards room to match
 const REFRESH_MS  = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 let db: DBState | null = null;

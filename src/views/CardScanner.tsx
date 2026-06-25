@@ -32,7 +32,7 @@ function scryfallSmallUrl(id: string): string {
 // ── Scanner ───────────────────────────────────────────────────────────────────
 
 // Require this many consecutive frames showing the same card before committing
-const REQUIRED_FRAMES = 3;
+const REQUIRED_FRAMES = 2;
 
 export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wantedIds, onAddCards, onClose }) => {
   const videoRef  = useRef<HTMLVideoElement>(null);
@@ -101,17 +101,24 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
 
     const { w: vw, h: vh } = videoDims;
 
-    // Constrain scan zone so it always fits in the video frame (handles portrait/landscape video)
-    const zoneW = Math.min(vw * 0.80, vh * (63 / 88) * 0.95);
+    // Use the shorter dimension so the zone fits in both portrait and landscape video
+    const shortSide = Math.min(vw, vh);
+    const zoneW = shortSide * 0.70;
     const zoneH = zoneW * (88 / 63);
     const zoneX = (vw - zoneW) / 2;
     const zoneY = (vh - zoneH) / 2;
 
+    // Art crop constants — matches how the hash database was built (Scryfall art_crop images)
+    const artX = zoneX + zoneW * 0.055;
+    const artY = zoneY + zoneH * 0.105;
+    const artW = zoneW * 0.890;
+    const artH = zoneH * 0.450;
+
     const tick = () => {
       if (video.readyState < 2) return;
 
-      // Hash the full scan zone — more robust than extracting the art sub-region
-      const hash = hashVideoFrame(video, zoneX, zoneY, zoneW, zoneH);
+      // Hash the art crop region to match the database (built from Scryfall art_crop images)
+      const hash = hashVideoFrame(video, artX, artY, artW, artH);
       if (!hash) return;
 
       const card = findCard(hash);
@@ -246,11 +253,11 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
       />
 
-      {/* Scan-zone overlay: 80% wide (matching hash zone), card portrait aspect, centered */}
+      {/* Scan-zone overlay: 70% wide, card portrait aspect, centered */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: '80%', aspectRatio: '63 / 88',
+        width: '70%', aspectRatio: '63 / 88',
         border: `2px solid ${borderColor}`,
         borderRadius: '8px',
         boxShadow: borderGlow,
@@ -294,7 +301,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
 
       {/* Status label (above scan zone) */}
       <div style={{
-        position: 'absolute', top: 'calc(50% - 40vw * 88 / 63 - 28px)',
+        position: 'absolute', top: 'calc(50% - 35vw * 88 / 63 - 28px)',
         left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 2, pointerEvents: 'none',
       }}>
         <span style={{
