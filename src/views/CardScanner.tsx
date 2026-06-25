@@ -25,18 +25,14 @@ interface CardScannerProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// MTG card art crop occupies roughly this fraction of the card frame
-const ART_LEFT   = 0.055;
-const ART_TOP    = 0.105;
-const ART_WIDTH  = 0.890;
-const ART_HEIGHT = 0.450;
-
-// Construct a Scryfall small-image URL without an API call
 function scryfallSmallUrl(id: string): string {
   return `https://cards.scryfall.io/small/front/${id[0]}/${id[1]}/${id}.jpg`;
 }
 
 // ── Scanner ───────────────────────────────────────────────────────────────────
+
+// Require this many consecutive frames showing the same card before committing
+const REQUIRED_FRAMES = 3;
 
 export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wantedIds, onAddCards, onClose }) => {
   const videoRef  = useRef<HTMLVideoElement>(null);
@@ -46,7 +42,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
   const [dbProgress, setDbProgress] = useState(isDBLoaded() ? 100 : 0);
   const [paused,     setPaused]     = useState(false);
   const [cameraErr,  setCameraErr]  = useState<string | null>(null);
-  const [frameState, setFrameState] = useState<'idle' | 'detected' | 'same' | 'wanted'>('idle');
+  const [frameState, setFrameState] = useState<'idle' | 'scanning' | 'detected' | 'same' | 'wanted'>('idle');
   const [wantedAlert, setWantedAlert] = useState<string | null>(null);
 
   const [videoDims,  setVideoDims]  = useState({ w: 0, h: 0 });
@@ -54,9 +50,14 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
   const [globalFoil, setGlobalFoil] = useState(false);
   const [adding,     setAdding]     = useState(false);
 
-  // Suppress re-detecting the same card until the user moves to a new one
-  const lastIdRef = useRef<string | null>(null);
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks consecutive frames of the same card before committing
+  const candidateRef = useRef<{ id: string; count: number } | null>(null);
+  // Suppresses re-detecting the same card until user moves to a new one
+  const lastIdRef  = useRef<string | null>(null);
+  const idleTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stable ref for wantedIds so the scan loop closure never goes stale
+  const wantedIdsRef = useRef(wantedIds);
+  useEffect(() => { wantedIdsRef.current = wantedIds; }, [wantedIds]);
 
   // ── Load hash database ────────────────────────────────────────────────────
 
@@ -100,36 +101,50 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
 
     const { w: vw, h: vh } = videoDims;
 
-    // Scan zone in video-pixel space: 70% wide, card aspect, centered
-    const zoneW = vw * 0.70;
+    // Constrain scan zone so it always fits in the video frame (handles portrait/landscape video)
+    const zoneW = Math.min(vw * 0.80, vh * (63 / 88) * 0.95);
     const zoneH = zoneW * (88 / 63);
     const zoneX = (vw - zoneW) / 2;
     const zoneY = (vh - zoneH) / 2;
 
-    // Art crop sub-region within the scan zone
-    const artX = zoneX + zoneW * ART_LEFT;
-    const artY = zoneY + zoneH * ART_TOP;
-    const artW = zoneW * ART_WIDTH;
-    const artH = zoneH * ART_HEIGHT;
-
     const tick = () => {
       if (video.readyState < 2) return;
-      const hash = hashVideoFrame(video, artX, artY, artW, artH);
+
+      // Hash the full scan zone — more robust than extracting the art sub-region
+      const hash = hashVideoFrame(video, zoneX, zoneY, zoneW, zoneH);
       if (!hash) return;
 
       const card = findCard(hash);
-      if (!card) { setFrameState('idle'); return; }
+      if (!card) {
+        candidateRef.current = null;
+        setFrameState('idle');
+        return;
+      }
 
-      // Same card — stay in current state, don't add again
+      // Already committed and waiting for card to move
       if (card.id === lastIdRef.current) {
         setFrameState('same');
         return;
       }
 
+      // Track consecutive detections of the same candidate
+      if (candidateRef.current?.id === card.id) {
+        candidateRef.current.count++;
+      } else {
+        candidateRef.current = { id: card.id, count: 1 };
+      }
+
+      // Not stable enough yet — show amber "scanning" state
+      if (candidateRef.current.count < REQUIRED_FRAMES) {
+        setFrameState('scanning');
+        return;
+      }
+
+      // Stable match — commit it
+      candidateRef.current = null;
       lastIdRef.current = card.id;
 
-      // Check wants list before setting frame state
-      if (wantedIds.has(card.id)) {
+      if (wantedIdsRef.current.has(card.id)) {
         setFrameState('wanted');
         setWantedAlert(card.n);
         setTimeout(() => { setWantedAlert(null); setFrameState('detected'); }, 3000);
@@ -137,7 +152,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         setFrameState('detected');
       }
 
-      // Merge if already in list, otherwise prepend
       setResults(prev => {
         const existing = prev.find(r => r.meta.id === card.id && r.foil === globalFoil);
         if (existing) {
@@ -146,7 +160,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         return [{ scanId: crypto.randomUUID(), meta: card, imageUri: scryfallSmallUrl(card.id), quantity: 1, foil: globalFoil }, ...prev];
       });
 
-      // After 1s of no movement, allow the same card to be detected again
+      // After 2s, allow re-detection of same card
       if (idleTimer.current) clearTimeout(idleTimer.current);
       idleTimer.current = setTimeout(() => {
         setFrameState('idle');
@@ -165,25 +179,24 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
     setAdding(true);
     setPaused(true);
 
-    // Enrich each unique card with Scryfall data (colors, typeLine etc.)
     const enriched = await Promise.all(
       results.map(async r => {
         const full = await fetchCardById(r.meta.id);
         const card: Omit<CollectionCard, 'id' | 'addedAt'> = {
-          groupId:   defaultGroupId,
+          groupId:    defaultGroupId,
           scryfallId: r.meta.id,
-          name:      r.meta.n,
-          quantity:  r.quantity,
-          foil:      r.foil,
-          colors:    full?.colors ?? full?.color_identity ?? [],
-          typeLine:  full?.type_line ?? '',
-          cmc:       full?.cmc ?? 0,
-          imageUri:  r.imageUri,
-          priceUsd:  r.foil
+          name:       r.meta.n,
+          quantity:   r.quantity,
+          foil:       r.foil,
+          colors:     full?.colors ?? full?.color_identity ?? [],
+          typeLine:   full?.type_line ?? '',
+          cmc:        full?.cmc ?? 0,
+          imageUri:   r.imageUri,
+          priceUsd:   r.foil
             ? parseFloat(full?.prices?.usd_foil ?? '0') || null
             : parseFloat(full?.prices?.usd ?? '0') || null,
-          rarity:    (full as unknown as { rarity?: string })?.rarity ?? 'common',
-          setCode:   r.meta.s,
+          rarity:     (full as unknown as { rarity?: string })?.rarity ?? 'common',
+          setCode:    r.meta.s,
         };
         return card;
       })
@@ -198,27 +211,33 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
   const borderColor =
     frameState === 'wanted'   ? '#fbbf24' :
     frameState === 'detected' ? '#22c55e' :
+    frameState === 'scanning' ? '#f59e0b' :
     frameState === 'same'     ? 'rgba(255,255,255,0.4)' :
                                 'rgba(255,255,255,0.55)';
 
   const borderGlow =
     frameState === 'wanted'   ? '0 0 28px rgba(251,191,36,0.7), inset 0 0 28px rgba(251,191,36,0.1)' :
     frameState === 'detected' ? '0 0 24px rgba(34,197,94,0.6), inset 0 0 24px rgba(34,197,94,0.08)' :
+    frameState === 'scanning' ? '0 0 18px rgba(245,158,11,0.45)' :
                                 'none';
 
   const statusText =
-    dbStatus === 'loading' ? `Loading database… ${dbProgress}%` :
-    dbStatus === 'error'   ? 'Database unavailable — try restarting' :
-    paused                 ? 'Paused' :
+    dbStatus === 'loading'    ? `Loading database… ${dbProgress}%` :
+    dbStatus === 'error'      ? 'Database unavailable — try restarting' :
+    paused                    ? 'Paused' :
     frameState === 'wanted'   ? '⭐ On your Want List!' :
     frameState === 'detected' ? '✓ Card detected!' :
+    frameState === 'scanning' ? '🔍 Identifying…' :
     frameState === 'same'     ? 'Move to next card' :
-                               'Hold card inside the frame';
+                                'Hold card inside the frame';
+
+  // Bottom padding accounts for safe area + bottom nav bar (approx 80px)
+  const NAV_CLEARANCE = 'max(env(safe-area-inset-bottom, 0px) + 80px, 96px)';
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 300, display: 'flex', flexDirection: 'column', userSelect: 'none' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 1000, display: 'flex', flexDirection: 'column', userSelect: 'none' }}>
 
       {/* Camera */}
       <video
@@ -227,11 +246,11 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
       />
 
-      {/* Scan-zone overlay: 70% wide, card portrait aspect, centered */}
+      {/* Scan-zone overlay: 80% wide (matching hash zone), card portrait aspect, centered */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: '70%', aspectRatio: '63 / 88',
+        width: '80%', aspectRatio: '63 / 88',
         border: `2px solid ${borderColor}`,
         borderRadius: '8px',
         boxShadow: borderGlow,
@@ -247,7 +266,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
           zIndex: 5, display: 'flex', alignItems: 'center', gap: '10px',
           background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.6)',
           backdropFilter: 'blur(12px)', borderRadius: '16px', padding: '12px 20px',
-          animation: 'fadeInDown 0.2s ease',
           whiteSpace: 'nowrap',
         }}>
           <span style={{ fontSize: '1.3rem' }}>⭐</span>
@@ -276,23 +294,29 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
 
       {/* Status label (above scan zone) */}
       <div style={{
-        position: 'absolute', top: 'calc(50% - 35vw * 88 / 63 - 28px)',
+        position: 'absolute', top: 'calc(50% - 40vw * 88 / 63 - 28px)',
         left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 2, pointerEvents: 'none',
       }}>
-        <span style={{ color: frameState === 'detected' ? '#22c55e' : 'rgba(255,255,255,0.8)', fontSize: '0.8rem', fontWeight: 600, textShadow: '0 1px 6px rgba(0,0,0,0.9)', background: 'rgba(0,0,0,0.35)', padding: '4px 12px', borderRadius: '20px' }}>
+        <span style={{
+          color: frameState === 'detected' ? '#22c55e' : frameState === 'scanning' ? '#f59e0b' : 'rgba(255,255,255,0.8)',
+          fontSize: '0.8rem', fontWeight: 600,
+          textShadow: '0 1px 6px rgba(0,0,0,0.9)',
+          background: 'rgba(0,0,0,0.35)', padding: '4px 12px', borderRadius: '20px',
+        }}>
           {statusText}
         </span>
       </div>
 
-      {/* Controls (above the tray, or near bottom when no results) */}
+      {/* Controls — sit above the tray and clear the bottom nav */}
       <div style={{
         position: 'absolute',
-        bottom: results.length > 0 ? '200px' : '48px',
+        bottom: results.length > 0
+          ? `calc(188px + ${NAV_CLEARANCE})`
+          : NAV_CLEARANCE,
         left: 0, right: 0, zIndex: 2,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px',
         transition: 'bottom 0.2s',
       }}>
-        {/* Foil toggle */}
         <button
           onClick={() => setGlobalFoil(f => !f)}
           style={{ padding: '9px 18px', borderRadius: '22px', border: `1px solid ${globalFoil ? 'rgba(234,179,8,0.6)' : 'rgba(255,255,255,0.25)'}`, background: globalFoil ? 'rgba(234,179,8,0.2)' : 'rgba(0,0,0,0.5)', color: globalFoil ? '#fbbf24' : '#fff', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', backdropFilter: 'blur(8px)' }}
@@ -300,7 +324,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
           ✨ Foil
         </button>
 
-        {/* Pause / resume */}
         <button
           onClick={() => setPaused(p => !p)}
           style={{ width: '58px', height: '58px', borderRadius: '50%', background: 'rgba(0,0,0,0.65)', border: '2px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', backdropFilter: 'blur(8px)' }}
@@ -308,7 +331,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
           {paused ? <Play size={22} fill="#fff" /> : <Pause size={22} fill="#fff" />}
         </button>
 
-        {/* Add to collection */}
         {results.length > 0 && (
           <button
             onClick={handleAdd}
@@ -320,30 +342,30 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         )}
       </div>
 
-      {/* Scanned-cards tray */}
+      {/* Scanned-cards tray — sits above the bottom nav */}
       {results.length > 0 && (
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 2, height: '188px', background: 'linear-gradient(to top, rgba(0,0,0,0.92) 70%, transparent)' }}>
-          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', height: '100%', alignItems: 'flex-end', padding: '0 16px 24px', scrollbarWidth: 'none' }}>
+        <div style={{
+          position: 'absolute',
+          bottom: NAV_CLEARANCE,
+          left: 0, right: 0, zIndex: 2,
+          height: '188px',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.92) 70%, transparent)',
+        }}>
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', height: '100%', alignItems: 'flex-end', padding: '0 16px 16px', scrollbarWidth: 'none' }}>
             {results.map(r => (
               <div key={r.scanId} style={{ position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-
-                {/* Remove */}
                 <button
                   onClick={() => setResults(prev => prev.filter(x => x.scanId !== r.scanId))}
                   style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', borderRadius: '50%', background: '#ef4444', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
                 >
                   <X size={10} color="#fff" />
                 </button>
-
-                {/* Card image */}
                 <img
                   src={r.imageUri}
                   alt={r.meta.n}
                   style={{ width: '68px', height: '95px', borderRadius: '5px', objectFit: 'cover', border: r.foil ? '2px solid rgba(234,179,8,0.7)' : '1px solid rgba(255,255,255,0.15)' }}
                   onError={e => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
                 />
-
-                {/* Quantity stepper */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <button
                     onClick={() => setResults(prev => prev.map(x => x.scanId === r.scanId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x))}
