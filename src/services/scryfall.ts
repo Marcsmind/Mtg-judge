@@ -9,6 +9,7 @@ export interface ScryfallCard {
   mana_cost?: string;
   type_line?: string;
   cmc?: number;        // Converted mana cost — used for mana-curve chart
+  colors?: string[];
   color_identity?: string[];
   image_uris?: {
     normal?: string;
@@ -158,6 +159,20 @@ export async function searchCardFuzzy(query: string): Promise<ScryfallCard | nul
     return data;
   } catch (err) {
     console.error("Scryfall fuzzy search failed:", err);
+    return null;
+  }
+}
+
+// Fetches a card by its Scryfall UUID — used to enrich scanned cards with colors/type
+export async function fetchCardById(id: string): Promise<ScryfallCard | null> {
+  if (!id) return null;
+  try {
+    const res = await fetch(`https://api.scryfall.com/cards/${encodeURIComponent(id)}`);
+    if (!res.ok) return null;
+    const card = await res.json() as ScryfallCard;
+    setCachedCard(card);
+    return card;
+  } catch {
     return null;
   }
 }

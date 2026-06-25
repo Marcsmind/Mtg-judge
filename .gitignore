@@ -1,3 +1,6 @@
+# Card hash builder — image download cache (~40k files, not for git)
+.card-hash-cache/
+
 # Environment variables — never commit real API keys
 .env
 .env.local

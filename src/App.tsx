@@ -11,11 +11,13 @@ import { TurnOrder } from "./views/TurnOrder";
 import { QuickRules } from "./views/QuickRules";
 import { Leaderboard } from "./views/Leaderboard";
 import { AIJudge } from "./views/AIJudge";
+import { Home } from "./views/Home";
 const DeckBuilder = lazy(() => import("./views/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
 const GameNight  = lazy(() => import("./views/GameNight").then(m => ({ default: m.GameNight })));
 const AppGuide   = lazy(() => import("./views/AppGuide").then(m => ({ default: m.AppGuide })));
 const MoreMenu   = lazy(() => import("./views/MoreMenu").then(m => ({ default: m.MoreMenu })));
-const DraftMode  = lazy(() => import("./views/DraftMode").then(m => ({ default: m.DraftMode })));
+const DraftMode   = lazy(() => import("./views/DraftMode").then(m => ({ default: m.DraftMode })));
+const Collection  = lazy(() => import("./views/Collection").then(m => ({ default: m.Collection })));
 import { STORAGE_KEYS } from "./constants/storageKeys";
 import { applyTheme, DEFAULT_THEME, THEMES } from "./constants/themes";
 import type { ThemeId } from "./constants/themes";
@@ -33,7 +35,7 @@ function App() {
   const [onboardingDone, setOnboardingDone] = useState<boolean>(
     () => localStorage.getItem(STORAGE_KEYS.ONBOARDING_DONE) === "1"
   );
-  const [activeTab, setActiveTab] = useState<TabId>("life");
+  const [activeTab, setActiveTab] = useState<TabId>("home");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const { tier: authTier, trialEndsAt } = useAuth();
@@ -420,6 +422,15 @@ function App() {
 
   const renderActiveView = () => {
     switch (activeTab) {
+      case "home":
+        return (
+          <Home
+            authUser={authUser}
+            tier={tier}
+            onNavigate={handleNavigate}
+            onSignIn={() => setAuthModalOpen(true)}
+          />
+        );
       case "life":
         return (
           <LifeCounter
@@ -492,6 +503,8 @@ function App() {
         return <MoreMenu onNavigate={(tab) => setActiveTab(tab)} />;
       case "draft":
         return <DraftMode />;
+      case "collection":
+        return <Collection />;
       case "guide":
         return <AppGuide onNavigate={(tab) => setActiveTab(tab)} />;
       default:

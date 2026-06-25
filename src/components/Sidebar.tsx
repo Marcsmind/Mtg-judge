@@ -1,5 +1,5 @@
 import React from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, Menu, Wand2, Trophy, Sparkles, MoreHorizontal } from "lucide-react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, Menu, Wand2, Trophy, Sparkles, MoreHorizontal, Home as HomeIcon, BookOpen } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 import { useMobile } from "../hooks/useMobile";
 
@@ -18,8 +18,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
   const isMobile = useMobile(768);
 
   const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
+    { id: "home",        label: "Home",          icon: HomeIcon    },
     { id: "judge",       label: "AI Judge",      icon: Scale       },
     { id: "life",        label: "Life Counter",  icon: Heart       },
+    { id: "collection",  label: "Collection",    icon: BookOpen    },
     { id: "gamenight",   label: "Game Night",    icon: Sparkles    },
     { id: "dice",        label: "Dice & Coins",  icon: Dices       },
     { id: "more",        label: "Menu",          icon: MoreHorizontal },
@@ -61,16 +63,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
     return (
       <aside className="glass-panel" style={{ /* CSS media query handles layout */ }}>
         <nav role="navigation" aria-label="Main navigation" style={{ display: "flex", flex: 1 }}>
-          {/* 1. Judge */}
+          {/* 1. Home */}
+          {makeTabBtn(navItems.find(i => i.id === "home")!, () => setActiveTab("home"))}
+
+          {/* 2. Judge */}
           {makeTabBtn(navItems.find(i => i.id === "judge")!, () => setActiveTab("judge"))}
 
-          {/* 2. Life */}
+          {/* 3. Life */}
           {makeTabBtn(navItems.find(i => i.id === "life")!, () => setActiveTab("life"))}
 
-          {/* 3. Game Night */}
-          {makeTabBtn(navItems.find(i => i.id === "gamenight")!, () => setActiveTab("gamenight"))}
+          {/* 4. Collection */}
+          {makeTabBtn(navItems.find(i => i.id === "collection")!, () => setActiveTab("collection"))}
 
-          {/* 4. Codex */}
+          {/* 5. Codex */}
           <button
             onClick={() => openCodex()}
             aria-label="Card Codex"
@@ -88,9 +93,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
             <Search size={20} />
             <span style={{ fontSize: "0.55rem", lineHeight: 1 }}>Codex</span>
           </button>
-
-          {/* 5. Dice */}
-          {makeTabBtn(navItems.find(i => i.id === "dice")!, () => setActiveTab("dice"))}
 
           {/* 6. More / Menu */}
           <button
