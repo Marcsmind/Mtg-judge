@@ -1271,6 +1271,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           releaseInitiative={releaseInitiative}
           hasMonarchMechanic={activeCounters.monarch}
           hasInitiativeMechanic={activeCounters.initiative}
+          onReset={resetGame}
         />
 
         {/* ── Player Grid / Table View ── */}

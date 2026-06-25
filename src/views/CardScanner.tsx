@@ -129,17 +129,18 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         return;
       }
 
-      // Add to sliding window (drop oldest if full)
-      if (card) {
-        const h = frameHistoryRef.current;
-        if (h.length >= WINDOW_SIZE) h.shift();
-        h.push({ id: card.id, meta: card });
-      } else {
-        // No match this frame — clear history and go idle
-        frameHistoryRef.current = [];
-        setFrameState('idle');
+      // No match this frame — don't clear history, just skip
+      // (camera blur or motion between frames shouldn't wipe accumulated votes)
+      if (!card) {
+        // Only go idle if the window is empty (we never had a candidate)
+        if (frameHistoryRef.current.length === 0) setFrameState('idle');
         return;
       }
+
+      // Add to sliding window (drop oldest if full)
+      const h = frameHistoryRef.current;
+      if (h.length >= WINDOW_SIZE) h.shift();
+      h.push({ id: card.id, meta: card });
 
       // Tally votes across the window
       const votes = new Map<string, { count: number; meta: CardMeta }>();
@@ -180,6 +181,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
       idleTimer.current = setTimeout(() => {
         setFrameState('idle');
         lastIdRef.current = null;
+        frameHistoryRef.current = [];
       }, 2000);
     };
 

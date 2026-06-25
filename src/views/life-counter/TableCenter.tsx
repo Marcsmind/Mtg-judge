@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Crown, Swords, User, Scale } from "lucide-react";
+import { Crown, Swords, User, Scale, RefreshCw } from "lucide-react";
 import type { Player } from "../../types/game";
 
 interface TableCenterProps {
@@ -10,11 +10,12 @@ interface TableCenterProps {
   releaseInitiative: () => void;
   hasMonarchMechanic: boolean;
   hasInitiativeMechanic: boolean;
+  onReset: () => void;
 }
 
 export const TableCenter: React.FC<TableCenterProps> = ({
   players, assignMonarch, releaseMonarch, assignInitiative, releaseInitiative,
-  hasMonarchMechanic, hasInitiativeMechanic
+  hasMonarchMechanic, hasInitiativeMechanic, onReset,
 }) => {
   const monarchPlayer = players.find(p => p.isMonarch);
   const initiativePlayer = players.find(p => p.hasInitiative);
@@ -127,6 +128,23 @@ export const TableCenter: React.FC<TableCenterProps> = ({
           )}
         </div>
       )}
+
+      {/* ── Reset Button ── */}
+      <button
+        onClick={onReset}
+        style={{
+          display: "flex", alignItems: "center", gap: "6px",
+          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: "12px", padding: "6px 14px", cursor: "pointer",
+          color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 600,
+          transition: "all 0.2s ease",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.12)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)"; e.currentTarget.style.color = "#f87171"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+      >
+        <RefreshCw size={14} />
+        <span>Reset</span>
+      </button>
 
       {/* ── Initiative Banner ── */}
       {hasInitiativeMechanic && (
