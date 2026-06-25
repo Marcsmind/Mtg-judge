@@ -31,8 +31,9 @@ function scryfallSmallUrl(id: string): string {
 
 // ── Scanner ───────────────────────────────────────────────────────────────────
 
-// Require this many consecutive frames showing the same card before committing
-const REQUIRED_FRAMES = 2;
+// Sliding window voting: commit when any card wins ≥ VOTE_THRESHOLD of the last WINDOW_SIZE frames
+const WINDOW_SIZE    = 5;
+const VOTE_THRESHOLD = 3;
 
 export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wantedIds, onAddCards, onClose }) => {
   const videoRef  = useRef<HTMLVideoElement>(null);
@@ -50,8 +51,8 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
   const [globalFoil, setGlobalFoil] = useState(false);
   const [adding,     setAdding]     = useState(false);
 
-  // Tracks consecutive frames of the same card before committing
-  const candidateRef = useRef<{ id: string; count: number } | null>(null);
+  // Sliding window of recent frame matches for voting
+  const frameHistoryRef = useRef<Array<{ id: string; meta: CardMeta }>>([]);
   // Suppresses re-detecting the same card until user moves to a new one
   const lastIdRef  = useRef<string | null>(null);
   const idleTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,57 +118,64 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
     const tick = () => {
       if (video.readyState < 2) return;
 
-      // Hash the art crop region to match the database (built from Scryfall art_crop images)
       const hash = hashVideoFrame(video, artX, artY, artW, artH);
       if (!hash) return;
 
       const card = findCard(hash);
-      if (!card) {
-        candidateRef.current = null;
-        setFrameState('idle');
-        return;
-      }
 
-      // Already committed and waiting for card to move
-      if (card.id === lastIdRef.current) {
+      // Already committed this card — keep "same" state, don't add to history
+      if (card && card.id === lastIdRef.current) {
         setFrameState('same');
         return;
       }
 
-      // Track consecutive detections of the same candidate
-      if (candidateRef.current?.id === card.id) {
-        candidateRef.current.count++;
+      // Add to sliding window (drop oldest if full)
+      if (card) {
+        const h = frameHistoryRef.current;
+        if (h.length >= WINDOW_SIZE) h.shift();
+        h.push({ id: card.id, meta: card });
       } else {
-        candidateRef.current = { id: card.id, count: 1 };
+        // No match this frame — clear history and go idle
+        frameHistoryRef.current = [];
+        setFrameState('idle');
+        return;
       }
 
-      // Not stable enough yet — show amber "scanning" state
-      if (candidateRef.current.count < REQUIRED_FRAMES) {
+      // Tally votes across the window
+      const votes = new Map<string, { count: number; meta: CardMeta }>();
+      for (const f of frameHistoryRef.current) {
+        const v = votes.get(f.id);
+        votes.set(f.id, v ? { ...v, count: v.count + 1 } : { count: 1, meta: f.meta });
+      }
+      const [winnerId, winner] = [...votes.entries()].sort((a, b) => b[1].count - a[1].count)[0];
+
+      if (winner.count < VOTE_THRESHOLD) {
         setFrameState('scanning');
         return;
       }
 
-      // Stable match — commit it
-      candidateRef.current = null;
-      lastIdRef.current = card.id;
+      // Commit the winner
+      frameHistoryRef.current = [];
+      lastIdRef.current = winnerId;
+      const committed = winner.meta;
 
-      if (wantedIdsRef.current.has(card.id)) {
+      if (wantedIdsRef.current.has(winnerId)) {
         setFrameState('wanted');
-        setWantedAlert(card.n);
+        setWantedAlert(committed.n);
         setTimeout(() => { setWantedAlert(null); setFrameState('detected'); }, 3000);
       } else {
         setFrameState('detected');
       }
 
       setResults(prev => {
-        const existing = prev.find(r => r.meta.id === card.id && r.foil === globalFoil);
+        const existing = prev.find(r => r.meta.id === winnerId && r.foil === globalFoil);
         if (existing) {
           return prev.map(r => r.scanId === existing.scanId ? { ...r, quantity: r.quantity + 1 } : r);
         }
-        return [{ scanId: crypto.randomUUID(), meta: card, imageUri: scryfallSmallUrl(card.id), quantity: 1, foil: globalFoil }, ...prev];
+        return [{ scanId: crypto.randomUUID(), meta: committed, imageUri: scryfallSmallUrl(winnerId), quantity: 1, foil: globalFoil }, ...prev];
       });
 
-      // After 2s, allow re-detection of same card
+      // After 2s allow re-detection of the same card
       if (idleTimer.current) clearTimeout(idleTimer.current);
       idleTimer.current = setTimeout(() => {
         setFrameState('idle');
@@ -175,7 +183,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
       }, 2000);
     };
 
-    const interval = setInterval(tick, 900);
+    const interval = setInterval(tick, 500);  // faster sampling feeds the voting window
     return () => { clearInterval(interval); if (idleTimer.current) clearTimeout(idleTimer.current); };
   }, [paused, dbStatus, videoDims, globalFoil]);
 
