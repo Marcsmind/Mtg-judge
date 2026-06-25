@@ -52,6 +52,7 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ groupId: initialGroupId, gr
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (query.length < 2) { setResults([]); return; }
     const timer = setTimeout(async () => {
       abortRef.current?.abort();
@@ -269,10 +270,10 @@ export const Collection: React.FC = () => {
   useEffect(() => { if (showNewGroup) newGroupRef.current?.focus(); }, [showNewGroup]);
 
   const toggleColor = (c: ColorSymbol | "C") =>
-    setColorFilters(prev => { const s = new Set(prev); s.has(c) ? s.delete(c) : s.add(c); return s; });
+    setColorFilters(prev => { const s = new Set(prev); if (s.has(c)) s.delete(c); else s.add(c); return s; });
 
   const toggleType = (t: CardType) =>
-    setTypeFilters(prev => { const s = new Set(prev); s.has(t) ? s.delete(t) : s.add(t); return s; });
+    setTypeFilters(prev => { const s = new Set(prev); if (s.has(t)) s.delete(t); else s.add(t); return s; });
 
   const visibleCards = useMemo(() => {
     let result = activeGroupId ? cards.filter(c => c.groupId === activeGroupId) : cards;
