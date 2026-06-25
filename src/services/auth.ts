@@ -276,6 +276,21 @@ export async function deleteAccount(): Promise<string | null> {
   const { error } = await supabase.rpc('delete_user');
   if (error) return error.message;
   await supabase.auth.signOut();
+  // Clear all user-owned local data so nothing lingers after deletion
+  const userDataKeys = [
+    STORAGE_KEYS.SAVED_DECKS,
+    STORAGE_KEYS.SAVED_GAMES,
+    STORAGE_KEYS.AI_CHAT,
+    STORAGE_KEYS.AI_TAGS,
+    STORAGE_KEYS.AI_RULINGS,
+    STORAGE_KEYS.AI_FAVORITES,
+    STORAGE_KEYS.CARD_HISTORY,
+    STORAGE_KEYS.DISPLAY_NAME,
+    STORAGE_KEYS.SUBSCRIPTION_TIER,
+    STORAGE_KEYS.MP_LOBBY_PLAYERS,
+    STORAGE_KEYS.MP_FIRST_PLAYER,
+  ];
+  userDataKeys.forEach(k => localStorage.removeItem(k));
   return null;
 }
 

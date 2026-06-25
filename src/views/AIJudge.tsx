@@ -9,6 +9,7 @@ import {
 } from "../services/scryfall";
 import type { ScryfallCard, ScryfallRuling } from "../services/scryfall";
 import { askGeminiJudge, QUOTA_EXCEEDED_MARKER } from "../services/gemini";
+import { recordPositiveInteraction } from "../services/rateApp";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { useFeature } from "../hooks/useFeature";
 import { useAppStore } from "../store/useAppStore";
@@ -279,6 +280,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           { role: "model", content: judgeResponse },
         ]);
         track("ai_query_sent", { tagged_cards: taggedCards.length });
+        recordPositiveInteraction();
         // Increment the local counter for shared-key free users
         if (!apiKey && !canUnlimitedAI) {
           const next = Math.min(questionsToday + 1, DAILY_LIMIT);

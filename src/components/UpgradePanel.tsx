@@ -269,6 +269,11 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
         <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center" }}>
           {isNative ? "Billed through the App Store. Cancel anytime." : "Secure checkout via Stripe. Cancel anytime. No hidden fees."}
         </p>
+        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textAlign: "center" }}>
+          <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" target="_blank" rel="noreferrer" style={{ color: "var(--text-muted)", textDecoration: "underline" }}>Terms of Use</a>
+          {" · "}
+          <a href="https://arbiterpal.com/privacy" target="_blank" rel="noreferrer" style={{ color: "var(--text-muted)", textDecoration: "underline" }}>Privacy Policy</a>
+        </p>
         {/* Restore Purchases — Apple requires this button in IAP apps */}
         {isNative && (
           <button

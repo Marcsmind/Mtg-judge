@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Settings, Shield, Key, Check, Info, Trash2, Palette, Lock, User2, BookOpen, HelpCircle, ExternalLink, LogIn, LogOut, AlertTriangle } from "lucide-react";
+import { Settings, Shield, Key, Check, Info, Trash2, Palette, User2, BookOpen, HelpCircle, ExternalLink, LogIn, LogOut, AlertTriangle } from "lucide-react";
 import { THEMES } from "../constants/themes";
 import type { ThemeId } from "../constants/themes";
 import type { TabId } from "../constants/tabIds";
@@ -8,6 +8,7 @@ import type { AuthUser } from "../services/auth";
 import { isSupabaseConfigured } from "../services/supabase";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { UpgradePanel } from "./UpgradePanel";
+import { isNative } from "../services/revenueCat";
 import type { SubscriptionTier } from "../types/subscription";
 
 interface SettingsPanelProps {
@@ -105,10 +106,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [accessCodeInput, setAccessCodeInput] = useState(
-    () => localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) || ""
-  );
-  const [accessCodeSaved, setAccessCodeSaved] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState(
     () => localStorage.getItem("nexus_judge_gemini_model") || "gemini-2.5-flash"
@@ -120,25 +117,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setKeyInput(apiKey);
   }, [apiKey]);
-
-  const handleSaveAccessCode = (e: React.SyntheticEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const clean = accessCodeInput.trim().toUpperCase();
-    if (clean) {
-      localStorage.setItem(STORAGE_KEYS.ACCESS_CODE, clean);
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.ACCESS_CODE);
-    }
-    setAccessCodeInput(clean);
-    setAccessCodeSaved(true);
-    setTimeout(() => setAccessCodeSaved(false), 3000);
-  };
-
-  const handleClearAccessCode = () => {
-    localStorage.removeItem(STORAGE_KEYS.ACCESS_CODE);
-    setAccessCodeInput("");
-    setAccessCodeSaved(false);
-  };
 
   const handleSave = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -240,16 +218,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
         </div>
       )}
 
-      {/* Main Settings Panel */}
-      <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* Main Settings Panel — API key entry, hidden on iOS (App Store policy) */}
+      {!isNative && <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "24px" }}>
         
         {/* Intro */}
         <div style={{ display: "flex", gap: "16px", background: "rgba(139, 92, 246, 0.05)", border: "1px solid rgba(139, 92, 246, 0.1)", borderRadius: "10px", padding: "16px" }}>
           <Shield size={24} color="var(--accent-purple)" style={{ flexShrink: 0, marginTop: "2px" }} />
           <div style={{ fontSize: "0.9rem", lineHeight: 1.5 }}>
-            <h4 style={{ fontWeight: 600, color: "#fff", marginBottom: "4px" }}>Local Security & Zero Data Leakage</h4>
+            <h4 style={{ fontWeight: 600, color: "#fff", marginBottom: "4px" }}>Personal API Key (Optional)</h4>
             <p style={{ color: "var(--text-secondary)" }}>
-              Arbiter operates directly inside your web browser. Your API keys are saved exclusively in your browser's private local storage (`localStorage`) and never touch any server except the official Google Gemini API endpoint.
+              Add your own Gemini API key for priority, unlimited access. Your key is stored only in this device's local storage and used solely for AI requests.
             </p>
           </div>
         </div>
@@ -264,8 +242,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
             <p style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
               Required to enable full LLM rules understanding and dynamic combos reasoning.
             </p>
-            <p style={{ color: "var(--accent-emerald)", fontSize: "0.78rem", fontWeight: 500 }}>
-              💡 <strong>Leave blank</strong> to use the shared server key — no personal setup needed for guests.
+            <p style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
+              Leave blank to use the built-in AI (free tier limits apply).
             </p>
           </div>
 
@@ -414,7 +392,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
           </div>
         </div>
 
-      </div>
+      </div>}
 
       {/* ── Account Panel ── */}
       {isSupabaseConfigured && (
@@ -511,7 +489,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                   {!confirmDelete ? (
                     <button
                       onClick={() => setConfirmDelete(true)}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "5px", padding: 0 }}
+                      style={{ background: "rgba(244,63,94,0.06)", border: "1px solid rgba(244,63,94,0.2)", borderRadius: "8px", cursor: "pointer", color: "var(--accent-rose)", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px" }}
                     >
                       <Trash2 size={13} /> Delete Account
                     </button>
@@ -519,9 +497,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px", background: "rgba(244,63,94,0.06)", border: "1px solid rgba(244,63,94,0.2)", borderRadius: "10px", padding: "14px 16px" }}>
                       <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
                         <AlertTriangle size={16} color="var(--accent-rose)" style={{ flexShrink: 0, marginTop: "1px" }} />
-                        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-                          This will permanently delete your account, all saved decks, and game history. <strong style={{ color: "#fff" }}>This cannot be undone.</strong>
-                        </p>
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+                          <p style={{ margin: 0 }}>This will permanently delete your account, all saved decks, and game history. <strong style={{ color: "#fff" }}>This cannot be undone.</strong></p>
+                          <p style={{ margin: 0 }}>If you have an active Pro subscription, cancelling your account does <strong style={{ color: "#fff" }}>not</strong> cancel your App Store subscription. Please cancel it separately in{" "}
+                            <a href="https://apps.apple.com/account/subscriptions" target="_blank" rel="noreferrer" style={{ color: "var(--accent-cyan)", textDecoration: "none" }}>iPhone Settings → Subscriptions</a>
+                            {" "}before deleting.
+                          </p>
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <button
@@ -554,91 +536,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
           )}
         </div>
       )}
-
-      {/* ── Server Access Code Panel ── */}
-      <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "20px" }}>
-
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
-          <Lock size={22} color="var(--accent-gold)" />
-          <div>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Server Access Code</h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-              Enter the code shared by the app owner to use the shared AI key — no personal Gemini key needed.
-            </p>
-          </div>
-        </div>
-
-        {/* Explainer */}
-        <div style={{ display: "flex", gap: "14px", background: "rgba(234,179,8,0.05)", border: "1px solid rgba(234,179,8,0.15)", borderRadius: "10px", padding: "14px" }}>
-          <Lock size={20} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: "2px" }} />
-          <div style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
-            <p style={{ color: "var(--text-secondary)" }}>
-              The app owner sets a private code in their Netlify deployment. When you enter the correct code here,
-              the shared server key is unlocked for you — without exposing the key itself.
-              If you have your own Gemini API key above, it takes priority and this code is not needed.
-            </p>
-          </div>
-        </div>
-
-        {/* Access Code Form */}
-        <form onSubmit={handleSaveAccessCode} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.95rem", fontWeight: 600, color: "var(--text-primary)" }}>
-              <Lock size={15} color="var(--accent-gold)" />
-              Access Code
-            </label>
-          </div>
-
-          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-            <input
-              type="password"
-              className="glass-input"
-              placeholder="Enter the access code…"
-              value={accessCodeInput}
-              onChange={e => setAccessCodeInput(e.target.value)}
-              onFocus={e => { const el = e.currentTarget; setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "nearest" }), 350); }}
-              style={{ flex: 1, fontFamily: "monospace", letterSpacing: "2px" }}
-              autoComplete="off"
-            />
-            {accessCodeInput && (
-              <button
-                type="button"
-                onClick={handleClearAccessCode}
-                className="glass-button"
-                style={{
-                  background: "rgba(244, 63, 94, 0.08)",
-                  borderColor: "rgba(244, 63, 94, 0.15)",
-                  color: "var(--accent-rose)",
-                  padding: "10px 14px"
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(244, 63, 94, 0.2)"}
-                onMouseLeave={e => e.currentTarget.style.background = "rgba(244, 63, 94, 0.08)"}
-                title="Clear Access Code"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
-            <button
-              type="submit"
-              className="glass-button"
-              disabled={accessCodeInput.trim() === (localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) || "")}
-              style={{
-                background: accessCodeSaved ? "var(--accent-emerald)" : "rgba(234,179,8,0.15)",
-                borderColor: accessCodeSaved ? "var(--accent-emerald)" : "rgba(234,179,8,0.35)",
-                color: accessCodeSaved ? "#fff" : "var(--accent-gold)",
-              }}
-            >
-              {accessCodeSaved ? <Check size={16} /> : null}
-              <span>{accessCodeSaved ? "Code Saved!" : "Save Access Code"}</span>
-            </button>
-          </div>
-        </form>
-
-      </div>
 
       {/* ── Upgrade / Plan ── */}
       {isSupabaseConfigured && (

@@ -3,7 +3,6 @@
 import { Capacitor } from "@capacitor/core";
 import { getCardOracleText } from "./scryfall";
 import type { ScryfallCard, ScryfallRuling } from "./scryfall";
-import { STORAGE_KEYS } from "../constants/storageKeys";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 // ── Deck Optimizer system instruction ────────────────────────────────────────
@@ -150,7 +149,6 @@ async function fetchGemini(model: string, payload: object, apiKey: string): Prom
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
     );
   }
-  const accessCode = localStorage.getItem(STORAGE_KEYS.ACCESS_CODE) ?? "";
   // Include the session JWT so the proxy can verify Pro/trial subscription and
   // bypass the daily quota for paying users without revealing their tier client-side.
   let sessionToken = "";
@@ -166,7 +164,7 @@ async function fetchGemini(model: string, payload: object, apiKey: string): Prom
   return fetch(`${proxyBase}/.netlify/functions/gemini-proxy`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, payload, accessCode, sessionToken }),
+    body: JSON.stringify({ model, payload, sessionToken }),
   });
 }
 
