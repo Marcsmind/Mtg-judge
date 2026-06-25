@@ -1,8 +1,20 @@
+export type GroupType = 'collection' | 'wants' | 'trade' | 'custom';
+
+export const GROUP_TYPE_META: Record<GroupType, { label: string; icon: string; color: string }> = {
+  collection: { label: 'Collection', icon: '📦', color: '#c4b5fd' },
+  wants:      { label: 'Want List',  icon: '⭐',  color: '#fbbf24' },
+  trade:      { label: 'Trade Pile', icon: '🔄',  color: '#6ee7b7' },
+  custom:     { label: 'Group',      icon: '',    color: '#c4b5fd' },
+};
+
 export interface CollectionGroup {
   id: string;
   name: string;
+  type: GroupType;
   createdAt: number;
 }
+
+export type SortKey = 'name' | 'price-high' | 'price-low' | 'newest' | 'quantity';
 
 export interface CollectionCard {
   id: string;

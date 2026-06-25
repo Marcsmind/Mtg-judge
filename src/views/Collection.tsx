@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Plus, Search, X, Trash2, ChevronDown, Check, Pencil, Camera } from "lucide-react";
+import { Plus, Search, X, Trash2, ChevronDown, Check, Pencil, Camera, ArrowUpDown } from "lucide-react";
 import { useCollection } from "../hooks/useCollection";
 import { searchCardsWithImages } from "../services/scryfall";
 import type { ScryfallCard } from "../services/scryfall";
-import type { CollectionCard, ColorSymbol, CardType } from "../types/collection";
-import { COLOR_SYMBOLS, CARD_TYPES } from "../types/collection";
+import type { CollectionCard, ColorSymbol, CardType, SortKey } from "../types/collection";
+import { COLOR_SYMBOLS, CARD_TYPES, GROUP_TYPE_META } from "../types/collection";
 import { CardScanner } from "./CardScanner";
 
 // ── Color swatch config ───────────────────────────────────────────────────────
@@ -254,10 +254,11 @@ const CardDetail: React.FC<CardDetailProps> = ({ card, onUpdate, onRemove, onClo
 
 // ── Main Collection view ───────────────────────────────────────────────────────
 export const Collection: React.FC = () => {
-  const { groups, cards, addGroup, renameGroup, deleteGroup, addCard, updateCard, removeCard } = useCollection();
+  const { groups, cards, wantedIds, addGroup, renameGroup, deleteGroup, addCard, updateCard, removeCard } = useCollection();
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null); // null = All
   const [colorFilters, setColorFilters] = useState<Set<ColorSymbol | "C">>(new Set());
   const [typeFilters, setTypeFilters] = useState<Set<CardType>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>('newest');
   const [showAddCard, setShowAddCard] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [selectedCard, setSelectedCard] = useState<CollectionCard | null>(null);
@@ -281,8 +282,17 @@ export const Collection: React.FC = () => {
       result = result.filter(c => [...colorFilters].some(col => cardMatchesColor(c, col)));
     if (typeFilters.size > 0)
       result = result.filter(c => [...typeFilters].some(t => cardMatchesType(c, t)));
-    return result;
-  }, [cards, activeGroupId, colorFilters, typeFilters]);
+    return [...result].sort((a, b) => {
+      switch (sortKey) {
+        case 'name':       return a.name.localeCompare(b.name);
+        case 'price-high': return (b.priceUsd ?? 0) - (a.priceUsd ?? 0);
+        case 'price-low':  return (a.priceUsd ?? 0) - (b.priceUsd ?? 0);
+        case 'quantity':   return b.quantity - a.quantity;
+        case 'newest':
+        default:           return b.addedAt - a.addedAt;
+      }
+    });
+  }, [cards, activeGroupId, colorFilters, typeFilters, sortKey]);
 
   const totalValue = useMemo(() =>
     visibleCards.reduce((sum, c) => sum + (c.priceUsd ?? 0) * c.quantity, 0),
@@ -353,7 +363,7 @@ export const Collection: React.FC = () => {
                 <button onClick={() => setActiveGroupId(g.id)}
                   style={{ padding: "6px 14px", borderRadius: "20px", background: activeGroupId === g.id ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${activeGroupId === g.id ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`, color: activeGroupId === g.id ? "#c4b5fd" : "var(--text-muted, #635e78)", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
                 >
-                  {g.name} ({cards.filter(c => c.groupId === g.id).reduce((s, c) => s + c.quantity, 0)})
+                  {GROUP_TYPE_META[g.type]?.icon && <span style={{ marginRight: "4px" }}>{GROUP_TYPE_META[g.type].icon}</span>}{g.name} ({cards.filter(c => c.groupId === g.id).reduce((s, c) => s + c.quantity, 0)})
                 </button>
               )}
               {activeGroupId === g.id && (
@@ -429,6 +439,16 @@ export const Collection: React.FC = () => {
             <button onClick={() => { setColorFilters(new Set()); setTypeFilters(new Set()); }} style={{ marginLeft: "8px", background: "none", border: "none", color: "var(--text-muted, #635e78)", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline" }}>Clear all</button>
           </div>
         )}
+
+        {/* Sort controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
+          <ArrowUpDown size={13} color="var(--text-muted, #635e78)" />
+          {([ ['newest','Newest'], ['name','A–Z'], ['price-high','$ High'], ['price-low','$ Low'], ['quantity','Qty'] ] as [SortKey, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setSortKey(key)}
+              style={{ padding: "3px 10px", borderRadius: "14px", background: sortKey === key ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${sortKey === key ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.07)"}`, color: sortKey === key ? "#c4b5fd" : "var(--text-muted, #635e78)", fontSize: "0.75rem", cursor: "pointer" }}
+            >{label}</button>
+          ))}
+        </div>
       </div>
 
       {/* Card grid */}
@@ -510,7 +530,8 @@ export const Collection: React.FC = () => {
       {showScanner && (
         <CardScanner
           defaultGroupId={activeGroupId ?? groups[0]?.id ?? ""}
-          onAddCards={cards => cards.forEach(c => addCard(c))}
+          wantedIds={wantedIds}
+          onAddCards={scannedCards => scannedCards.forEach(c => addCard(c))}
           onClose={() => setShowScanner(false)}
         />
       )}

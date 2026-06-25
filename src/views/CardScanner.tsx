@@ -18,6 +18,7 @@ interface ScanResult {
 
 interface CardScannerProps {
   defaultGroupId: string;
+  wantedIds: Set<string>;
   onAddCards: (cards: Omit<CollectionCard, 'id' | 'addedAt'>[]) => void;
   onClose: () => void;
 }
@@ -37,7 +38,7 @@ function scryfallSmallUrl(id: string): string {
 
 // ── Scanner ───────────────────────────────────────────────────────────────────
 
-export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddCards, onClose }) => {
+export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wantedIds, onAddCards, onClose }) => {
   const videoRef  = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -45,7 +46,8 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
   const [dbProgress, setDbProgress] = useState(isDBLoaded() ? 100 : 0);
   const [paused,     setPaused]     = useState(false);
   const [cameraErr,  setCameraErr]  = useState<string | null>(null);
-  const [frameState, setFrameState] = useState<'idle' | 'detected' | 'same'>('idle');
+  const [frameState, setFrameState] = useState<'idle' | 'detected' | 'same' | 'wanted'>('idle');
+  const [wantedAlert, setWantedAlert] = useState<string | null>(null);
 
   const [videoDims,  setVideoDims]  = useState({ w: 0, h: 0 });
   const [results,    setResults]    = useState<ScanResult[]>([]);
@@ -125,7 +127,15 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
       }
 
       lastIdRef.current = card.id;
-      setFrameState('detected');
+
+      // Check wants list before setting frame state
+      if (wantedIds.has(card.id)) {
+        setFrameState('wanted');
+        setWantedAlert(card.n);
+        setTimeout(() => { setWantedAlert(null); setFrameState('detected'); }, 3000);
+      } else {
+        setFrameState('detected');
+      }
 
       // Merge if already in list, otherwise prepend
       setResults(prev => {
@@ -186,14 +196,21 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
   const totalCount = results.reduce((s, r) => s + r.quantity, 0);
 
   const borderColor =
+    frameState === 'wanted'   ? '#fbbf24' :
     frameState === 'detected' ? '#22c55e' :
-    frameState === 'same'     ? '#eab308' :
+    frameState === 'same'     ? 'rgba(255,255,255,0.4)' :
                                 'rgba(255,255,255,0.55)';
+
+  const borderGlow =
+    frameState === 'wanted'   ? '0 0 28px rgba(251,191,36,0.7), inset 0 0 28px rgba(251,191,36,0.1)' :
+    frameState === 'detected' ? '0 0 24px rgba(34,197,94,0.6), inset 0 0 24px rgba(34,197,94,0.08)' :
+                                'none';
 
   const statusText =
     dbStatus === 'loading' ? `Loading database… ${dbProgress}%` :
     dbStatus === 'error'   ? 'Database unavailable — try restarting' :
     paused                 ? 'Paused' :
+    frameState === 'wanted'   ? '⭐ On your Want List!' :
     frameState === 'detected' ? '✓ Card detected!' :
     frameState === 'same'     ? 'Move to next card' :
                                'Hold card inside the frame';
@@ -217,11 +234,29 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         width: '70%', aspectRatio: '63 / 88',
         border: `2px solid ${borderColor}`,
         borderRadius: '8px',
-        boxShadow: frameState === 'detected' ? `0 0 24px rgba(34,197,94,0.6), inset 0 0 24px rgba(34,197,94,0.08)` : 'none',
+        boxShadow: borderGlow,
         transition: 'border-color 0.12s, box-shadow 0.12s',
         pointerEvents: 'none',
         zIndex: 1,
       }} />
+
+      {/* Want List alert banner */}
+      {wantedAlert && (
+        <div style={{
+          position: 'absolute', top: '22%', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 5, display: 'flex', alignItems: 'center', gap: '10px',
+          background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.6)',
+          backdropFilter: 'blur(12px)', borderRadius: '16px', padding: '12px 20px',
+          animation: 'fadeInDown 0.2s ease',
+          whiteSpace: 'nowrap',
+        }}>
+          <span style={{ fontSize: '1.3rem' }}>⭐</span>
+          <div>
+            <div style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.9rem' }}>On your Want List!</div>
+            <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.78rem', marginTop: '1px' }}>{wantedAlert}</div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'env(safe-area-inset-top, 0px) 16px 16px', paddingTop: 'max(env(safe-area-inset-top, 0px), 16px)', background: 'linear-gradient(to bottom, rgba(0,0,0,0.75), transparent)' }}>
