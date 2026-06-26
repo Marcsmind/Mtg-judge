@@ -6,6 +6,7 @@
  * communicates back via callback props.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { flushSync } from "react-dom";
 import {
   ShieldAlert, Skull,
   Star, Coins, Shield, Wand2, Crown
@@ -105,18 +106,9 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
     return () => { if (firstTimerRef.current) clearTimeout(firstTimerRef.current); };
   }, [isFirst]);
 
-  // ── Local life state — updated every tick so number visually rolls ────────
-  // Parent state is only committed on pointer-up (avoids React 18 batching lag)
-  const [displayLife, setDisplayLife] = useState(p.life);
-  const holdDeltaRef = useRef(0);
-  useEffect(() => {
-    if (holdDeltaRef.current === 0) setDisplayLife(p.life);
-  }, [p.life]);
-
   // ── Long-press life adjustment ────────────────────────────────────────────
   const holdTimerRef    = useRef<ReturnType<typeof setTimeout>  | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const holdFiveRef     = useRef<ReturnType<typeof setTimeout>  | null>(null);
 
   // ── Active Life Delta Tracker ───────────────────────────────────────────────
   const [lifeDelta, setLifeDelta] = useState(0);
@@ -139,22 +131,18 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   const startHold = useCallback((delta: number) => {
     holdTimerRef.current = setTimeout(() => {
       holdIntervalRef.current = setInterval(() => {
-        setDisplayLife(prev => prev + delta);
-        holdDeltaRef.current += delta;
+        // flushSync forces an immediate synchronous render each tick,
+        // bypassing React 18 automatic batching so the number visually rolls
+        flushSync(() => { adjustLife(p.id, delta); });
         navigator.vibrate?.([10]);
       }, 100);
     }, 350);
-  }, []);
+  }, [adjustLife, p.id]);
 
   const stopHold = useCallback(() => {
     if (holdTimerRef.current)   { clearTimeout(holdTimerRef.current);   holdTimerRef.current   = null; }
     if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
-    if (holdFiveRef.current)    { clearTimeout(holdFiveRef.current);    holdFiveRef.current    = null; }
-    if (holdDeltaRef.current !== 0) {
-      adjustLife(p.id, holdDeltaRef.current);
-      holdDeltaRef.current = 0;
-    }
-  }, [adjustLife, p.id]);
+  }, []);
 
   // ── Commander modals ──────────────────────────────────────────────────────
   const [setCmdOpen, setSetCmdOpen]       = useState(false);
@@ -390,7 +378,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         <div
           role="button"
           aria-label={`Subtract 1 life from ${p.name} (hold to keep subtracting)`}
-          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); setDisplayLife(prev => prev - 1); holdDeltaRef.current -= 1; startHold(-1); } }}
+          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
           onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; stopHold(); }}
           onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
@@ -441,12 +429,12 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
               textAlign: "center",
               textShadow: `0 0 40px ${playerTheme.accent}50, 0 4px 16px rgba(0,0,0,0.6)`,
               lineHeight: 1, letterSpacing: "-3px",
-              filter: displayLife < 10 ? "drop-shadow(0 0 8px rgba(239,68,68,0.7))" : "none",
-              color: displayLife <= 0 ? "#ef4444" : displayLife < 10 ? "#fca5a5" : "#fff",
+              filter: p.life < 10 ? "drop-shadow(0 0 8px rgba(239,68,68,0.7))" : "none",
+              color: p.life <= 0 ? "#ef4444" : p.life < 10 ? "#fca5a5" : "#fff",
               opacity: (dotColor === "#6b7280" || dotColor === "#eab308") ? 0.3 : 1,
             }}
           >
-            {displayLife}
+            {p.life}
           </span>
 
           {/* Offline/Lagging Overlay */}
@@ -478,7 +466,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         <div
           role="button"
           aria-label={`Add 1 life to ${p.name} (hold to keep adding)`}
-          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); setDisplayLife(prev => prev + 1); holdDeltaRef.current += 1; startHold(1); } }}
+          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
           onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
           onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; stopHold(); }}
           onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
