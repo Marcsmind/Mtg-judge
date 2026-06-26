@@ -106,8 +106,10 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   }, [isFirst]);
 
   // ── Long-press life adjustment ────────────────────────────────────────────
-  const holdTimerRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const holdTimerRef    = useRef<ReturnType<typeof setTimeout>  | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const holdFiveRef     = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const [holdTurbo, setHoldTurbo] = useState(false);
 
   // ── Active Life Delta Tracker ───────────────────────────────────────────────
   const [lifeDelta, setLifeDelta] = useState(0);
@@ -128,17 +130,26 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   }, [p.life]);
 
   const startHold = useCallback((delta: number) => {
+    // After initial delay, repeat by 1; after 2s of repeating, escalate to ×5
+    let turbo = false;
     holdTimerRef.current = setTimeout(() => {
       holdIntervalRef.current = setInterval(() => {
-        adjustLife(p.id, delta);
-        navigator.vibrate?.([20]);
+        adjustLife(p.id, turbo ? delta * 5 : delta);
+        navigator.vibrate?.([15]);
       }, 120);
+      holdFiveRef.current = setTimeout(() => {
+        turbo = true;
+        setHoldTurbo(true);
+        navigator.vibrate?.([30, 60, 30]);
+      }, 2000);
     }, 400);
   }, [adjustLife, p.id]);
 
   const stopHold = useCallback(() => {
-    if (holdTimerRef.current)   { clearTimeout(holdTimerRef.current);   holdTimerRef.current   = null; }
-    if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
+    if (holdTimerRef.current)    { clearTimeout(holdTimerRef.current);    holdTimerRef.current    = null; }
+    if (holdIntervalRef.current)  { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
+    if (holdFiveRef.current)     { clearTimeout(holdFiveRef.current);     holdFiveRef.current     = null; }
+    setHoldTurbo(false);
   }, []);
 
   // ── Commander modals ──────────────────────────────────────────────────────
@@ -417,6 +428,15 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
             >
               {lifeDelta > 0 ? `+${lifeDelta}` : lifeDelta}
             </div>
+          )}
+          {holdTurbo && (
+            <div style={{
+              position: "absolute", bottom: "-4px", left: "50%", transform: "translateX(-50%)",
+              background: "rgba(251,191,36,0.2)", border: "1px solid rgba(251,191,36,0.5)",
+              borderRadius: "8px", padding: "1px 8px",
+              fontSize: "0.65rem", fontWeight: 800, color: "#fbbf24",
+              pointerEvents: "none", zIndex: 10, whiteSpace: "nowrap",
+            }}>×5</div>
           )}
           <span
             className="lc-life-number"
