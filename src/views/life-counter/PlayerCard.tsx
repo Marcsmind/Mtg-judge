@@ -6,7 +6,6 @@
  * communicates back via callback props.
  */
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { flushSync } from "react-dom";
 import {
   ShieldAlert, Skull,
   Star, Coins, Shield, Wand2, Crown
@@ -131,11 +130,9 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   const startHold = useCallback((delta: number) => {
     holdTimerRef.current = setTimeout(() => {
       holdIntervalRef.current = setInterval(() => {
-        // flushSync forces an immediate synchronous render each tick,
-        // bypassing React 18 automatic batching so the number visually rolls
-        flushSync(() => { adjustLife(p.id, delta); });
+        adjustLife(p.id, delta);
         navigator.vibrate?.([10]);
-      }, 100);
+      }, 120);
     }, 350);
   }, [adjustLife, p.id]);
 
@@ -202,6 +199,10 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         position: "relative", overflow: "hidden",
         transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)",
         filter: (!isDefeated && dotColor === "#6b7280") ? "grayscale(0.8) brightness(0.6)" : "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...({"WebkitTouchCallout": "none"} as any),
       }}
     >
       {/* ── Presence dot — only shown during a multiplayer session ── */}
@@ -432,6 +433,11 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
               filter: p.life < 10 ? "drop-shadow(0 0 8px rgba(239,68,68,0.7))" : "none",
               color: p.life <= 0 ? "#ef4444" : p.life < 10 ? "#fca5a5" : "#fff",
               opacity: (dotColor === "#6b7280" || dotColor === "#eab308") ? 0.3 : 1,
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ...({"WebkitTouchCallout": "none"} as any),
+              pointerEvents: "none",
             }}
           >
             {p.life}
