@@ -108,6 +108,66 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   // ── Long-press life adjustment ────────────────────────────────────────────
   const holdTimerRef    = useRef<ReturnType<typeof setTimeout>  | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Stable refs so interval closure never goes stale across re-renders
+  const adjustLifeRef   = useRef(adjustLife);
+  const playerIdRef     = useRef(p.id);
+  useEffect(() => { adjustLifeRef.current = adjustLife; }, [adjustLife]);
+
+  const minusBtnRef = useRef<HTMLDivElement>(null);
+  const plusBtnRef  = useRef<HTMLDivElement>(null);
+
+  const stopHold = useCallback(() => {
+    if (holdTimerRef.current)    { clearTimeout(holdTimerRef.current);   holdTimerRef.current   = null; }
+    if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
+  }, []); // stable — no deps
+
+  const startHold = useCallback((delta: number) => {
+    holdTimerRef.current = setTimeout(() => {
+      holdIntervalRef.current = setInterval(() => {
+        adjustLifeRef.current(playerIdRef.current, delta);
+        navigator.vibrate?.([10]);
+      }, 120);
+    }, 350);
+  }, []); // stable — no deps, uses refs
+
+  // Native touch listeners with passive:false so preventDefault() works on iOS.
+  // This prevents the browser from treating a slow hold as a scroll or text-select
+  // gesture and firing pointercancel before the 350ms timer fires.
+  useEffect(() => {
+    const minus = minusBtnRef.current;
+    const plus  = plusBtnRef.current;
+    if (!minus || !plus) return;
+
+    const onMinusStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      adjustLifeRef.current(playerIdRef.current, -1);
+      startHold(-1);
+    };
+    const onPlusStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      adjustLifeRef.current(playerIdRef.current, 1);
+      startHold(1);
+    };
+    const onEnd = () => stopHold();
+
+    minus.addEventListener('touchstart', onMinusStart, { passive: false });
+    minus.addEventListener('touchend',   onEnd);
+    minus.addEventListener('touchcancel', onEnd);
+    plus.addEventListener('touchstart',  onPlusStart,  { passive: false });
+    plus.addEventListener('touchend',    onEnd);
+    plus.addEventListener('touchcancel', onEnd);
+
+    return () => {
+      minus.removeEventListener('touchstart', onMinusStart);
+      minus.removeEventListener('touchend',   onEnd);
+      minus.removeEventListener('touchcancel', onEnd);
+      plus.removeEventListener('touchstart',  onPlusStart);
+      plus.removeEventListener('touchend',    onEnd);
+      plus.removeEventListener('touchcancel', onEnd);
+    };
+  }, [startHold, stopHold]);
 
   // ── Active Life Delta Tracker ───────────────────────────────────────────────
   const [lifeDelta, setLifeDelta] = useState(0);
@@ -126,20 +186,6 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
       }, 2500); // Wait 2.5s before clearing
     }
   }, [p.life]);
-
-  const startHold = useCallback((delta: number) => {
-    holdTimerRef.current = setTimeout(() => {
-      holdIntervalRef.current = setInterval(() => {
-        adjustLife(p.id, delta);
-        navigator.vibrate?.([10]);
-      }, 120);
-    }, 350);
-  }, [adjustLife, p.id]);
-
-  const stopHold = useCallback(() => {
-    if (holdTimerRef.current)   { clearTimeout(holdTimerRef.current);   holdTimerRef.current   = null; }
-    if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
-  }, []);
 
   // ── Commander modals ──────────────────────────────────────────────────────
   const [setCmdOpen, setSetCmdOpen]       = useState(false);
@@ -377,11 +423,12 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
       >
         {/* Left zone: subtract life */}
         <div
+          ref={minusBtnRef}
           role="button"
           aria-label={`Subtract 1 life from ${p.name} (hold to keep subtracting)`}
-          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
-          onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerCancel={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+          onPointerDown={e => { if (e.pointerType === 'touch') return; if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
+          onPointerUp={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+          onPointerCancel={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
           onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; }}
           onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
           onContextMenu={e => e.preventDefault()}
@@ -471,11 +518,12 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
 
         {/* Right zone: add life */}
         <div
+          ref={plusBtnRef}
           role="button"
           aria-label={`Add 1 life to ${p.name} (hold to keep adding)`}
-          onPointerDown={e => { if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
-          onPointerUp={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerCancel={e => { e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+          onPointerDown={e => { if (e.pointerType === 'touch') return; if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
+          onPointerUp={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+          onPointerCancel={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
           onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; }}
           onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
           onContextMenu={e => e.preventDefault()}
