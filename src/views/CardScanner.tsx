@@ -97,23 +97,21 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
 
     const { w: vw, h: vh } = videoDims;
 
-    // Use the shorter dimension so the zone fits in both portrait and landscape video
+    // Use the shorter video dimension as portrait width — works for both
+    // portrait (720×1280) and landscape (1280×720) video streams
     const shortSide = Math.min(vw, vh);
+    const longSide  = Math.max(vw, vh);
     const zoneW = shortSide * 0.70;
-    const zoneH = zoneW * (88 / 63);
+    const zoneH = Math.min(zoneW * (88 / 63), longSide * 0.92);
     const zoneX = (vw - zoneW) / 2;
     const zoneY = (vh - zoneH) / 2;
-
-    // Art crop constants — matches how the hash database was built (Scryfall art_crop images)
-    const artX = zoneX + zoneW * 0.055;
-    const artY = zoneY + zoneH * 0.105;
-    const artW = zoneW * 0.890;
-    const artH = zoneH * 0.450;
 
     const tick = () => {
       if (video.readyState < 2) return;
 
-      const hash = hashVideoFrame(video, artX, artY, artW, artH);
+      // Hash the full scan zone — database was rebuilt with Scryfall 'small'
+      // (full card) images so we no longer need to extract the art crop subregion
+      const hash = hashVideoFrame(video, zoneX, zoneY, zoneW, zoneH);
       if (!hash) { setFrameState('idle'); return; }
 
       const card = findCard(hash);
@@ -272,6 +270,15 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         </div>
         <div style={{ width: '40px' }} />
       </div>
+
+      {/* Debug: video dimensions — remove after orientation is confirmed */}
+      {videoDims.w > 0 && (
+        <div style={{ position: 'absolute', bottom: '50%', right: '8px', zIndex: 3, pointerEvents: 'none',
+          color: 'rgba(255,255,0,0.8)', fontSize: '10px', fontFamily: 'monospace',
+          background: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px' }}>
+          {videoDims.w}×{videoDims.h}
+        </div>
+      )}
 
       {/* Status label (above scan zone) */}
       <div style={{

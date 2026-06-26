@@ -150,10 +150,12 @@ async function main() {
 
   for (let i = 0; i < cards.length; i++) {
     const card = cards[i];
-    const artUrl = card.image_uris?.art_crop ?? card.card_faces?.[0]?.image_uris?.art_crop;
+    // Use 'small' (full card 146×204) instead of art_crop — scanner hashes the full
+    // card zone so database images must match what the camera captures
+    const artUrl = card.image_uris?.small ?? card.card_faces?.[0]?.image_uris?.small;
     if (!artUrl) continue;
 
-    const cacheFile = join(CACHE_DIR, `${card.id}.json`);
+    const cacheFile = join(CACHE_DIR, `${card.id}_small.json`);
     let hash;
 
     if (existsSync(cacheFile)) {
