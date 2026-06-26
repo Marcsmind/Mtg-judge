@@ -31,9 +31,6 @@ function scryfallSmallUrl(id: string): string {
 
 // ── Scanner ───────────────────────────────────────────────────────────────────
 
-// Sliding window voting: commit when any card wins ≥ VOTE_THRESHOLD of the last WINDOW_SIZE frames
-const WINDOW_SIZE    = 5;
-const VOTE_THRESHOLD = 3;
 
 export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wantedIds, onAddCards, onClose }) => {
   const videoRef  = useRef<HTMLVideoElement>(null);
@@ -43,7 +40,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
   const [dbProgress, setDbProgress] = useState(isDBLoaded() ? 100 : 0);
   const [paused,     setPaused]     = useState(false);
   const [cameraErr,  setCameraErr]  = useState<string | null>(null);
-  const [frameState, setFrameState] = useState<'idle' | 'scanning' | 'detected' | 'same' | 'wanted'>('idle');
+  const [frameState, setFrameState] = useState<'idle' | 'detected' | 'same' | 'wanted'>('idle');
   const [wantedAlert, setWantedAlert] = useState<string | null>(null);
 
   const [videoDims,  setVideoDims]  = useState({ w: 0, h: 0 });
@@ -51,8 +48,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
   const [globalFoil, setGlobalFoil] = useState(false);
   const [adding,     setAdding]     = useState(false);
 
-  // Sliding window of recent frame matches for voting
-  const frameHistoryRef = useRef<Array<{ id: string; meta: CardMeta }>>([]);
   // Suppresses re-detecting the same card until user moves to a new one
   const lastIdRef  = useRef<string | null>(null);
   const idleTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -119,73 +114,45 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
       if (video.readyState < 2) return;
 
       const hash = hashVideoFrame(video, artX, artY, artW, artH);
-      if (!hash) return;
+      if (!hash) { setFrameState('idle'); return; }
 
       const card = findCard(hash);
+      if (!card) { setFrameState('idle'); return; }
 
-      // Already committed this card — keep "same" state, don't add to history
-      if (card && card.id === lastIdRef.current) {
-        setFrameState('same');
+      // Same card still in frame — hold the detected state
+      if (card.id === lastIdRef.current) {
+        setFrameState('detected');
         return;
       }
 
-      // No match this frame — don't clear history, just skip
-      // (camera blur or motion between frames shouldn't wipe accumulated votes)
-      if (!card) {
-        // Only go idle if the window is empty (we never had a candidate)
-        if (frameHistoryRef.current.length === 0) setFrameState('idle');
-        return;
-      }
+      // New card — commit immediately
+      lastIdRef.current = card.id;
 
-      // Add to sliding window (drop oldest if full)
-      const h = frameHistoryRef.current;
-      if (h.length >= WINDOW_SIZE) h.shift();
-      h.push({ id: card.id, meta: card });
-
-      // Tally votes across the window
-      const votes = new Map<string, { count: number; meta: CardMeta }>();
-      for (const f of frameHistoryRef.current) {
-        const v = votes.get(f.id);
-        votes.set(f.id, v ? { ...v, count: v.count + 1 } : { count: 1, meta: f.meta });
-      }
-      const [winnerId, winner] = [...votes.entries()].sort((a, b) => b[1].count - a[1].count)[0];
-
-      if (winner.count < VOTE_THRESHOLD) {
-        setFrameState('scanning');
-        return;
-      }
-
-      // Commit the winner
-      frameHistoryRef.current = [];
-      lastIdRef.current = winnerId;
-      const committed = winner.meta;
-
-      if (wantedIdsRef.current.has(winnerId)) {
+      if (wantedIdsRef.current.has(card.id)) {
         setFrameState('wanted');
-        setWantedAlert(committed.n);
+        setWantedAlert(card.n);
         setTimeout(() => { setWantedAlert(null); setFrameState('detected'); }, 3000);
       } else {
         setFrameState('detected');
       }
 
       setResults(prev => {
-        const existing = prev.find(r => r.meta.id === winnerId && r.foil === globalFoil);
+        const existing = prev.find(r => r.meta.id === card.id && r.foil === globalFoil);
         if (existing) {
           return prev.map(r => r.scanId === existing.scanId ? { ...r, quantity: r.quantity + 1 } : r);
         }
-        return [{ scanId: crypto.randomUUID(), meta: committed, imageUri: scryfallSmallUrl(winnerId), quantity: 1, foil: globalFoil }, ...prev];
+        return [{ scanId: crypto.randomUUID(), meta: card, imageUri: scryfallSmallUrl(card.id), quantity: 1, foil: globalFoil }, ...prev];
       });
 
-      // After 2s allow re-detection of the same card
+      // After 2s without a new card, allow re-scanning the same card
       if (idleTimer.current) clearTimeout(idleTimer.current);
       idleTimer.current = setTimeout(() => {
         setFrameState('idle');
         lastIdRef.current = null;
-        frameHistoryRef.current = [];
       }, 2000);
     };
 
-    const interval = setInterval(tick, 500);  // faster sampling feeds the voting window
+    const interval = setInterval(tick, 800);
     return () => { clearInterval(interval); if (idleTimer.current) clearTimeout(idleTimer.current); };
   }, [paused, dbStatus, videoDims, globalFoil]);
 
@@ -228,23 +195,20 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
   const borderColor =
     frameState === 'wanted'   ? '#fbbf24' :
     frameState === 'detected' ? '#22c55e' :
-    frameState === 'scanning' ? '#f59e0b' :
-    frameState === 'same'     ? 'rgba(255,255,255,0.4)' :
+    frameState === 'same'     ? '#22c55e' :
                                 'rgba(255,255,255,0.55)';
 
   const borderGlow =
     frameState === 'wanted'   ? '0 0 28px rgba(251,191,36,0.7), inset 0 0 28px rgba(251,191,36,0.1)' :
-    frameState === 'detected' ? '0 0 24px rgba(34,197,94,0.6), inset 0 0 24px rgba(34,197,94,0.08)' :
-    frameState === 'scanning' ? '0 0 18px rgba(245,158,11,0.45)' :
+    (frameState === 'detected' || frameState === 'same') ? '0 0 24px rgba(34,197,94,0.6), inset 0 0 24px rgba(34,197,94,0.08)' :
                                 'none';
 
   const statusText =
-    dbStatus === 'loading'    ? `Loading database… ${dbProgress}%` :
-    dbStatus === 'error'      ? 'Database unavailable — try restarting' :
-    paused                    ? 'Paused' :
+    dbStatus === 'loading' ? `Loading database… ${dbProgress}%` :
+    dbStatus === 'error'   ? 'Database unavailable — try restarting' :
+    paused                 ? 'Paused' :
     frameState === 'wanted'   ? '⭐ On your Want List!' :
     frameState === 'detected' ? '✓ Card detected!' :
-    frameState === 'scanning' ? '🔍 Identifying…' :
     frameState === 'same'     ? 'Move to next card' :
                                 'Hold card inside the frame';
 
@@ -315,7 +279,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
         left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 2, pointerEvents: 'none',
       }}>
         <span style={{
-          color: frameState === 'detected' ? '#22c55e' : frameState === 'scanning' ? '#f59e0b' : 'rgba(255,255,255,0.8)',
+          color: (frameState === 'detected' || frameState === 'same') ? '#22c55e' : 'rgba(255,255,255,0.8)',
           fontSize: '0.8rem', fontWeight: 600,
           textShadow: '0 1px 6px rgba(0,0,0,0.9)',
           background: 'rgba(0,0,0,0.35)', padding: '4px 12px', borderRadius: '20px',
