@@ -25,6 +25,26 @@ interface MatchResult {
   winner:  number | null;
 }
 
+// ── Session persistence ────────────────────────────────────────────────────
+
+const DRAFT_KEY = 'arbiter_draft_session';
+
+interface DraftSession {
+  phase:   Phase;
+  config:  DraftConfig | null;
+  drafting?: { globalPick: number };
+  pairings?: { currentRound: number; allMatches: MatchResult[] };
+}
+
+function readSession(): DraftSession | null {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch { return null; }
+}
+
+function patchSession(patch: Partial<DraftSession>) {
+  const prev = readSession() ?? {};
+  localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...prev, ...patch }));
+}
+
 // ── Pairing helpers ────────────────────────────────────────────────────────
 
 function shuffle<T>(arr: T[]): T[] {
@@ -332,9 +352,11 @@ interface DraftingProps {
 
 function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
   const totalPicks   = config.packsEach * config.picksPerPack;
-  const [globalPick,  setGlobalPick]  = useState(0);
+  const [globalPick,  setGlobalPick]  = useState(() => readSession()?.drafting?.globalPick ?? 0);
   const [timerLeft,   setTimerLeft]   = useState(config.timerSeconds);
   const [timerActive, setTimerActive] = useState(config.timerSeconds > 0);
+
+  useEffect(() => { patchSession({ drafting: { globalPick } }); }, [globalPick]);
 
   const currentPack = Math.floor(globalPick / config.picksPerPack) + 1;
   const pickInPack  = (globalPick % config.picksPerPack) + 1;
@@ -501,10 +523,18 @@ interface PairingsProps { config: DraftConfig; onReset: () => void; }
 
 function PairingsScreen({ config, onReset }: PairingsProps) {
   const totalRounds  = config.rounds;
-  const [currentRound, setCurrentRound] = useState(1);
-  const [allMatches,   setAllMatches]   = useState<MatchResult[]>(() =>
-    generatePairings(config.playerCount, 1, [], config.pairingFormat)
+  const [currentRound, setCurrentRound] = useState<number>(() =>
+    readSession()?.pairings?.currentRound ?? 1
   );
+  const [allMatches, setAllMatches] = useState<MatchResult[]>(() => {
+    const saved = readSession()?.pairings?.allMatches;
+    if (saved && Array.isArray(saved) && saved.length > 0) return saved;
+    return generatePairings(config.playerCount, 1, [], config.pairingFormat);
+  });
+
+  useEffect(() => {
+    patchSession({ pairings: { currentRound, allMatches } });
+  }, [currentRound, allMatches]);
 
   const roundMatches  = (r: number) => allMatches.filter(m => m.round === r);
   const roundComplete = (r: number) => roundMatches(r).every(m => m.winner !== null);
@@ -692,11 +722,25 @@ function PairingsScreen({ config, onReset }: PairingsProps) {
 // ── Main View ──────────────────────────────────────────────────────────────
 
 export const DraftMode: React.FC = () => {
-  const [phase,  setPhase]  = useState<Phase>("setup");
-  const [config, setConfig] = useState<DraftConfig | null>(null);
+  const [phase,  setPhase]  = useState<Phase>(() => readSession()?.phase  ?? "setup");
+  const [config, setConfig] = useState<DraftConfig | null>(() => readSession()?.config ?? null);
 
-  const handleStart = (cfg: DraftConfig) => { setConfig(cfg); setPhase("drafting"); };
-  const handleReset = () => { setConfig(null); setPhase("setup"); };
+  const handleStart = (cfg: DraftConfig) => {
+    setConfig(cfg);
+    setPhase("drafting");
+    patchSession({ phase: "drafting", config: cfg, drafting: { globalPick: 0 }, pairings: undefined });
+  };
+
+  const handleDraftComplete = () => {
+    setPhase("pairings");
+    patchSession({ phase: "pairings" });
+  };
+
+  const handleReset = () => {
+    setConfig(null);
+    setPhase("setup");
+    localStorage.removeItem(DRAFT_KEY);
+  };
 
   return (
     <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 16px 32px", display: "flex", flexDirection: "column" }}>
@@ -713,7 +757,7 @@ export const DraftMode: React.FC = () => {
       </div>
 
       {phase === "setup"    && <SetupScreen onStart={handleStart} />}
-      {phase === "drafting" && config && <DraftingScreen config={config} onDraftComplete={() => setPhase("pairings")} onReset={handleReset} />}
+      {phase === "drafting" && config && <DraftingScreen config={config} onDraftComplete={handleDraftComplete} onReset={handleReset} />}
       {phase === "pairings" && config && <PairingsScreen config={config} onReset={handleReset} />}
     </div>
   );
