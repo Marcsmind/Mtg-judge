@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Users, Scale, WifiOff, Copy, Timer, Square, Play, Crown, Skull, Swords, Star, Undo2 } from "lucide-react";
-import { useMobile } from "../hooks/useMobile";
+import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Scale, WifiOff, Copy, Timer, Square, Play, Pause, SkipForward, Crown, Skull, Swords, Star, Undo2, X, BookOpen } from "lucide-react";
+import type { TabId } from "../constants/tabIds";
 import { useGameTimer } from "../hooks/useGameTimer";
 import { loadDecks, recordDeckResult } from "../services/decks";
 import type { SavedDeck } from "../types/deck";
@@ -15,10 +15,12 @@ import { SaveGameModal, MAX_SLOTS } from "./life-counter/SaveGameModal";
 import type { GameSnapshot } from "./life-counter/SaveGameModal";
 import { GameSummaryModal } from "./life-counter/GameSummaryModal";
 import { TokenModal } from "./life-counter/TokenModal";
-import { TaxModal } from "./life-counter/TaxModal";
+import { PlayerProfileModal } from "./life-counter/PlayerProfileModal";
+import { CommanderHubModal } from "./life-counter/CommanderHubModal";
 import { EndGameModal } from "./life-counter/EndGameModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
 import { TableView } from "./life-counter/TableView";
+import { GameProvider } from "./life-counter/GameContext";
 import { DayNightBanner } from "./life-counter/DayNightBanner";
 import { TableCenter } from "./life-counter/TableCenter";
 import { useWakeLock } from "../hooks/useWakeLock";
@@ -81,19 +83,25 @@ function createPlayer(index: number, life: number): Player {
     tokens: { treasure: 0, food: 0, clue: 0, blood: 0, rad: 0 },
     enabledTokens: [],
     tokensOpen: false,
+    mana: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 },
+    storm: 0,
+    energy: 0,
+    experience: 0,
+    generic: 0,
+    ringLevel: 0,
   };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface LifeCounterProps {
-  userId?: string;                   // current auth user — passed from App.tsx
-  /** When starting a Game Night session, App.tsx sets this to the lobby player
-   *  list so LifeCounter can initialize the grid from it. The component key is
-   *  bumped alongside this prop so the lazy useState initializer runs fresh. */
+  userId?: string;
   mpInitLobbyPlayers?: LobbyPlayer[];
-  mpInitFirstPlayer?:  string;       // spin winner — shown with the ⭐ badge briefly
-  onLobbyConsumed?:    () => void;   // called once lobby data is successfully loaded
+  mpInitFirstPlayer?:  string;
+  onLobbyConsumed?:    () => void;
+  onEnterFullscreen?:  () => void;   // called on mount — tells App.tsx to go fullscreen
+  onExitFullscreen?:   () => void;   // called on unmount
+  onNavigate?:         (tab: TabId) => void; // navigate from hub menu
 }
 
 export const LifeCounter: React.FC<LifeCounterProps> = ({
@@ -101,6 +109,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   mpInitLobbyPlayers,
   mpInitFirstPlayer,
   onLobbyConsumed,
+  onEnterFullscreen,
+  onExitFullscreen,
+  onNavigate,
 }) => {
   const { showToast } = useToast();
 
@@ -121,6 +132,12 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     if (mpInitLobbyPlayers && mpInitLobbyPlayers.length > 0) return mpInitLobbyPlayers.length;
     const s = localStorage.getItem(STORAGE_KEYS.PLAYER_COUNT);
     return s ? parseInt(s, 10) : 4;
+  });
+
+  const [layoutMode, setLayoutMode] = useState<'scorekeeper' | 'table'>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.LAYOUT_MODE);
+    if (stored === 'scorekeeper' || stored === 'table') return stored;
+    return 'table';
   });
 
   const [history, setHistory] = useState<string[]>(() => {
@@ -197,11 +214,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const [activeDamageEditor, setActiveDamageEditor] = useState<number | null>(null);
   const [showCountersMenu, setShowCountersMenu] = useState(false);
   const [tokenPlayer, setTokenPlayer] = useState<number | null>(null);
-  const [taxPlayer, setTaxPlayer] = useState<number | null>(null);
+  const [hubPlayer, setHubPlayer] = useState<number | null>(null);
+  const [setupPlayer, setSetupPlayer] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // ── Mobile breakpoint ──
-  const isMobile = useMobile(768);
 
   // ── Saved decks (for SetCommanderModal "From My Decks" picker) ──
   const [savedDecks] = useState<SavedDeck[]>(() => loadDecks());
@@ -228,6 +244,20 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
       return Array(MAX_SLOTS).fill(null);
     }
   });
+
+  // ── Turn timer ──
+  const [turnTimerEnabled, setTurnTimerEnabled] = useState<boolean>(
+    () => localStorage.getItem(STORAGE_KEYS.TURN_TIMER_ENABLED) === "true"
+  );
+  const [turnTimerDuration, setTurnTimerDuration] = useState<number>(
+    () => parseInt(localStorage.getItem(STORAGE_KEYS.TURN_TIMER_DURATION) || "180", 10)
+  );
+  const [turnTimerRemaining, setTurnTimerRemaining] = useState<number>(
+    () => parseInt(localStorage.getItem(STORAGE_KEYS.TURN_TIMER_DURATION) || "180", 10)
+  );
+  const [turnTimerRunning, setTurnTimerRunning] = useState(false);
+  const turnTimerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
   // ── Undo stack (max 15 snapshots) ──
   const [undoStack, setUndoStack] = useState<Player[][]>([]);
@@ -360,6 +390,34 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, []);
+
+  // ── Fullscreen enter/exit ──
+  useEffect(() => {
+    onEnterFullscreen?.();
+    return () => onExitFullscreen?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Turn timer countdown ──
+  useEffect(() => {
+    if (!turnTimerRunning) {
+      if (turnTimerIntervalRef.current) clearInterval(turnTimerIntervalRef.current);
+      return;
+    }
+    turnTimerIntervalRef.current = setInterval(() => {
+      setTurnTimerRemaining(prev => {
+        if (prev <= 1) {
+          setTurnTimerRunning(false);
+          navigator.vibrate?.([200, 100, 200]);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (turnTimerIntervalRef.current) clearInterval(turnTimerIntervalRef.current);
+    };
+  }, [turnTimerRunning]);
 
 
   // ── Save-game helpers ─────────────────────────────────────────────────────
@@ -520,13 +578,27 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const clearPlayerCommander = (playerId: number) => {
     scheduleBroadcast();
     setPlayers(prev => prev.map(p =>
-      p.id === playerId ? { ...p, commanderName: undefined, deckId: undefined } : p
+      p.id === playerId ? { ...p, commanderName: undefined, partnerCommanderName: undefined, deckId: undefined, artOffsetX: undefined, artOffsetY: undefined, artZoom: undefined, artUsePartner: undefined } : p
     ));
   };
 
-  const setAvatar = (playerId: number, emoji: string) => {
-    scheduleBroadcast();
-    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, avatar: emoji } : p));
+  const setPartnerCommander = (playerId: number, name: string) => {
+    setPlayers(prev => prev.map(p =>
+      p.id === playerId ? { ...p, partnerCommanderName: name || undefined } : p
+    ));
+  };
+
+  const clearPartnerCommander = (playerId: number) => {
+    setPlayers(prev => prev.map(p =>
+      p.id === playerId ? { ...p, partnerCommanderName: undefined, artUsePartner: undefined } : p
+    ));
+  };
+
+
+  const updatePlayerArt = (playerId: number, x: number, y: number, zoom: number | undefined) => {
+    setPlayers(prev => prev.map(p =>
+      p.id === playerId ? { ...p, artOffsetX: x, artOffsetY: y, artZoom: zoom } : p
+    ));
   };
 
   const revivePlayer = (playerId: number) => {
@@ -623,6 +695,49 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     }));
   };
 
+  const adjustMana = (playerId: number, color: import("../types/game").ManaKey, delta: number) => {
+    setPlayers(prev => prev.map(p => {
+      if (p.id !== playerId) return p;
+      return { ...p, mana: { ...p.mana, [color]: Math.max(0, (p.mana?.[color] ?? 0) + delta) } };
+    }));
+  };
+
+  const adjustStorm = (playerId: number, delta: number) => {
+    setPlayers(prev => prev.map(p => {
+      if (p.id !== playerId) return p;
+      return { ...p, storm: Math.max(0, (p.storm ?? 0) + delta) };
+    }));
+  };
+
+  const clearMana = (playerId: number) => {
+    setPlayers(prev => prev.map(p => {
+      if (p.id !== playerId) return p;
+      return { ...p, mana: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }, storm: 0 };
+    }));
+  };
+
+  type CounterKey = "generic" | "energy" | "poison" | "experience" | "ringLevel" | "storm" | "rad";
+
+  const adjustCounter = (playerId: number, key: CounterKey, delta: number) => {
+    setPlayers(prev => prev.map(p => {
+      if (p.id !== playerId) return p;
+      const maxVals: Partial<Record<CounterKey, number>> = { poison: 10, ringLevel: 4 };
+      const max = maxVals[key];
+      if (key === "rad") {
+        return { ...p, rad: Math.min(max ?? 999, Math.max(0, (p.rad ?? 0) + delta)) };
+      }
+      const current = (p as unknown as Record<string, number>)[key] ?? 0;
+      return { ...p, [key]: Math.min(max ?? 999, Math.max(0, current + delta)) };
+    }));
+  };
+
+  const clearCounters = (playerId: number) => {
+    setPlayers(prev => prev.map(p => {
+      if (p.id !== playerId) return p;
+      return { ...p, poison: 0, rad: 0, energy: 0, experience: 0, generic: 0, storm: 0, ringLevel: 0, isMonarch: false, hasInitiative: false, cityBlessing: false };
+    }));
+  };
+
   const adjustCommanderDamage = (targetId: number, sourceId: number, suffix: string, amount: number) => {
     const target = players.find(p => p.id === targetId);
     const src    = players.find(p => p.id === sourceId);
@@ -658,17 +773,123 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
 
 
-  const getGridStyle = () => {
-    if (isMobile) {
-      // 1-column for duels (full-width cards), 2-column for 3+ players
-      return playerCount <= 2
-        ? { gridTemplateColumns: "1fr", gridTemplateRows: "1fr 1fr" }
-        : { gridTemplateColumns: "1fr 1fr", gridTemplateRows: playerCount <= 4 ? "1fr 1fr" : "1fr 1fr 1fr" };
-    }
-    if (playerCount <= 4) return { gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr" };
-    if (playerCount <= 6) return { gridTemplateColumns: "1fr 1fr 1fr", gridTemplateRows: "1fr 1fr" };
-    return { gridTemplateColumns: "1fr 1fr 1fr 1fr", gridTemplateRows: "1fr 1fr" };
+  // ── Turn timer helpers ──
+  const formatTurnTimer = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
   };
+
+  const resetTurnTimer = () => {
+    setTurnTimerRemaining(turnTimerDuration);
+    setTurnTimerRunning(false);
+  };
+
+
+  // ── Dynamic layout SVG previews ──
+  const FILL_ACTIVE = "var(--accent-purple)";
+  const FILL_INACTIVE = "rgba(255,255,255,0.35)";
+
+  // Scorekeeper icon: all cells same brightness — everyone faces the phone holder
+  const getScorekeeperSvg = (n: number, fill: string): React.ReactNode => {
+    const f = fill;
+    if (n === 2) return (
+      // 2P stacked: two full-width portrait cards, one above the other
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="2" y="1" width="22" height="9" rx="2" fill={f} opacity="0.55" />
+        <rect x="2" y="12" width="22" height="9" rx="2" fill={f} />
+      </svg>
+    );
+    if (n === 3) return (
+      // 3P: 1 wide top (180°, dim) + hub + 2 bottom (270°/90°)
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="24" height="7" rx="2" fill={f} opacity="0.45" />
+        <rect x="1" y="10" width="11" height="11" rx="2" fill={f} />
+        <rect x="14" y="10" width="11" height="11" rx="2" fill={f} />
+      </svg>
+    );
+    if (n === 4) return (
+      // 4P: 1 wide top (180°, dim) + 2 middle (270°/90°) + hub + 1 wide bottom (0°)
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="24" height="5" rx="1.5" fill={f} opacity="0.45" />
+        <rect x="1" y="8" width="11" height="5" rx="1.5" fill={f} />
+        <rect x="14" y="8" width="11" height="5" rx="1.5" fill={f} />
+        <rect x="1" y="15" width="24" height="6" rx="1.5" fill={f} />
+      </svg>
+    );
+    if (n === 5) return (
+      // 5P: 1 wide top (180°, dim) + hub + 2×2 grid (270°/90°)
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="24" height="5" rx="1.5" fill={f} opacity="0.45" />
+        <rect x="1" y="8" width="11" height="6" rx="1.5" fill={f} />
+        <rect x="14" y="8" width="11" height="6" rx="1.5" fill={f} />
+        <rect x="1" y="16" width="11" height="5" rx="1.5" fill={f} />
+        <rect x="14" y="16" width="11" height="5" rx="1.5" fill={f} />
+      </svg>
+    );
+    // 6P: 1 wide top (180°, dim) + 2×2 middle + hub + 1 wide bottom (0°)
+    return (
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="24" height="4" rx="1.5" fill={f} opacity="0.45" />
+        <rect x="1" y="6" width="11" height="4" rx="1.5" fill={f} />
+        <rect x="14" y="6" width="11" height="4" rx="1.5" fill={f} />
+        <rect x="1" y="11" width="11" height="4" rx="1.5" fill={f} />
+        <rect x="14" y="11" width="11" height="4" rx="1.5" fill={f} />
+        <rect x="1" y="16" width="24" height="5" rx="1.5" fill={f} />
+      </svg>
+    );
+  };
+
+  // Table icon: top-row cells dimmer — those players face away (toward them), bottom-row cells bright (facing you)
+  const getTableSvg = (n: number, fill: string): React.ReactNode => {
+    const f = fill;
+    const fDim = fill === FILL_ACTIVE ? "rgba(139,92,246,0.38)" : "rgba(255,255,255,0.18)";
+    if (n === 2) return (
+      // 2P side-by-side: two tall portrait cards next to each other
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="11" height="20" rx="2" fill={f} />
+        <rect x="14" y="1" width="11" height="20" rx="2" fill={fDim} />
+      </svg>
+    );
+    if (n === 3) return (
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="11" height="9" rx="2" fill={fDim} />
+        <rect x="14" y="1" width="11" height="9" rx="2" fill={fDim} />
+        <rect x="1" y="12" width="24" height="9" rx="2" fill={f} />
+      </svg>
+    );
+    if (n === 4) return (
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="11" height="9" rx="2" fill={fDim} />
+        <rect x="14" y="1" width="11" height="9" rx="2" fill={fDim} />
+        <rect x="1" y="12" width="11" height="9" rx="2" fill={f} />
+        <rect x="14" y="12" width="11" height="9" rx="2" fill={f} />
+      </svg>
+    );
+    if (n === 5) return (
+      // 5P: 2×2 top (dim, rotated) + hub + 1 wide bottom (0°, normal)
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="14" y="1" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="1" y="8" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="14" y="8" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="1" y="15" width="24" height="6" rx="1.5" fill={f} />
+      </svg>
+    );
+    // 6P: 2 dim rows + hub + 1 bright row (3×2 grid split by hub)
+    return (
+      <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+        <rect x="1" y="1" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="14" y="1" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="1" y="8" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="14" y="8" width="11" height="5" rx="1.5" fill={fDim} />
+        <rect x="1" y="15" width="11" height="6" rx="1.5" fill={f} />
+        <rect x="14" y="15" width="11" height="6" rx="1.5" fill={f} />
+      </svg>
+    );
+  };
+
+
 
   const hasAnyActive = Object.values(activeCounters).some(Boolean);
   const activeCount  = Object.values(activeCounters).filter(Boolean).length;
@@ -676,7 +897,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="life-counter-root" style={{ display: "flex", gap: "16px", overflow: "hidden" }}>
+    <div className="life-counter-root" style={{ position: "relative", display: "flex", gap: "16px", overflow: "hidden" }}>
 
       {/* ── Screen-reader announcements for room status changes (aria-live) ── */}
       <div
@@ -692,15 +913,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
       {/* ── Main Column ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflow: "hidden", minWidth: 0 }}>
 
-        {/* ── Title Row (always visible) ── */}
-        <div style={{ display: "flex", alignItems: "center", paddingBottom: "8px", borderBottom: showControlsModal ? "1px solid var(--border-color)" : "none", flexShrink: 0, gap: "8px" }}>
-          {/* Heading — takes remaining space */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
-            <Users size={20} color="var(--accent-purple)" />
-            <div>
-              <h2 style={{ fontSize: "1.1rem", fontWeight: 700, lineHeight: 1.1 }}>Life Counter</h2>
-            </div>
-          </div>
+        {/* ── Title Row — hidden for all layouts (hub bar is in-grid for 2P–6P) ── */}
+        {playerCount > 6 && <div style={{ display: "flex", alignItems: "center", flexShrink: 0, gap: "8px", paddingBottom: "2px" }}>
+          <div style={{ flex: 1 }} />
 
           {/* Live / Reconnecting badge — shown when multiplayer is active */}
           {roomConnected && roomCode && (
@@ -739,71 +954,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             )
           )}
 
-          {/* ── Game Timer widget ── */}
-          <div style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
-            {/* Mode toggle */}
-            <button
-              onClick={() => { resetTimer(); setTimerMode(prev => prev === "up" ? "down" : "up"); }}
-              title={timerMode === "up" ? "Switch to countdown (45 min)" : "Switch to count up"}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                color: timerMode === "down" ? "var(--accent-purple)" : "var(--text-muted)",
-                display: "flex", alignItems: "center", padding: "4px",
-                transition: "color 0.15s ease",
-              }}
-            >
-              <Timer size={13} />
-            </button>
-            {/* Time display */}
-            <span
-              style={{
-                fontSize: "0.82rem", fontWeight: 700, fontFamily: "'Outfit', monospace",
-                minWidth: "42px", textAlign: "center",
-                color: timerColor,
-                transition: "color 0.3s ease",
-              }}
-            >
-              {formatTime(timerSeconds)}
-            </span>
-            {/* Play / Stop */}
-            <button
-              onClick={toggleTimer}
-              aria-label={timerRunning ? "Stop timer" : "Start timer"}
-              title={timerRunning ? "Stop timer" : "Start timer"}
-              style={{
-                background: timerRunning ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${timerRunning ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.08)"}`,
-                borderRadius: "6px", padding: "5px 7px",
-                color: timerRunning ? "var(--accent-rose)" : "var(--text-secondary)",
-                cursor: "pointer", display: "flex", alignItems: "center",
-                transition: "all 0.15s ease",
-              }}
-            >
-              {timerRunning ? <Square size={11} /> : <Play size={11} />}
-            </button>
-          </div>
 
           <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-            {/* AI Judge (Top Bar) - Only show if > 2 players */}
-            {players.length > 2 && (
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))}
-                aria-label="Ask AI Judge"
-                title="Ask AI Judge"
-                className="touch-icon-btn"
-                style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "8px", padding: "7px 10px",
-                  color: "var(--accent-purple)",
-                  cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
-                  transition: "all 0.15s ease", flexShrink: 0,
-                }}
-              >
-                <Scale size={14} />
-              </button>
-            )}
 
             {/* Quick undo button — always visible once there's something to undo */}
             {undoStack.length > 0 && (
@@ -845,26 +997,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               <History size={14} />
             </button>
 
-            {/* Resync Button (only if connected) */}
-            {roomConnected && roomCode && (
-              <button
-                onClick={() => handleJoinRoom(roomCode)}
-                aria-label="Resync Game State"
-                title="Resync Game State"
-                className="touch-icon-btn"
-                style={{
-                  display: "flex", alignItems: "center", gap: "6px",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "8px", padding: "7px 10px",
-                  color: "var(--accent-cyan)",
-                  cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
-                  transition: "all 0.15s ease", flexShrink: 0,
-                }}
-              >
-                <RefreshCw size={14} />
-              </button>
-            )}
 
             {/* Controls toggle — hamburger */}
             <button
@@ -885,7 +1017,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               <Menu size={14} />
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* ── Modals for Settings and History ── */}
         {showHistoryModal && (
@@ -904,6 +1036,19 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 <Settings2 size={24} color="var(--text-secondary)" />
               </div>
               <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800 }}>Game Setup</h2>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => setShowControlsModal(false)}
+                style={{
+                  background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: "20px", padding: "6px 16px", color: "#fff",
+                  fontWeight: 700, fontSize: "0.82rem", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "6px",
+                }}
+              >
+                <X size={14} />
+                <span>Done</span>
+              </button>
             </div>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -943,6 +1088,108 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                     {num}P
                   </button>
                 ))}
+              </div>
+
+              {/* Layout Picker — hidden for 2P (always scorekeeper), icons adapt for 3P+ */}
+              {playerCount > 2 && <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.5px", textTransform: "uppercase", whiteSpace: "nowrap" }}>Layout</span>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {([
+                    { mode: 'scorekeeper' as const, label: 'Scorekeeper', desc: 'All cards face one direction — one person tracks everyone' },
+                    { mode: 'table' as const,       label: 'Table',       desc: 'Top-row cards flip 180° — each player reads their own card' },
+                  ]).map(({ mode, desc }) => {
+                    const isActive = layoutMode === mode;
+                    const fill = isActive ? FILL_ACTIVE : FILL_INACTIVE;
+                    return (
+                      <button
+                        key={mode}
+                        onClick={() => { setLayoutMode(mode); localStorage.setItem(STORAGE_KEYS.LAYOUT_MODE, mode); }}
+                        title={desc}
+                        style={{
+                          width: "52px", height: "42px", borderRadius: "8px", cursor: "pointer",
+                          background: isActive ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
+                          border: `1.5px solid ${isActive ? "var(--accent-purple)" : "rgba(255,255,255,0.1)"}`,
+                          padding: "5px", display: "flex", alignItems: "center", justifyContent: "center",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {mode === 'scorekeeper'
+                          ? getScorekeeperSvg(playerCount, fill)
+                          : getTableSvg(playerCount, fill)
+                        }
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>}
+
+              {/* Turn Timer toggle */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "8px 12px" }}>
+                <div>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 600 }}>Turn Timer</div>
+                  <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Countdown per turn — pause/next visible on screen</div>
+                </div>
+                <button
+                  onClick={() => { const next = !turnTimerEnabled; setTurnTimerEnabled(next); localStorage.setItem(STORAGE_KEYS.TURN_TIMER_ENABLED, String(next)); if (!next) { setTurnTimerRunning(false); resetTurnTimer(); } }}
+                  style={{
+                    width: "40px", height: "22px", borderRadius: "11px", border: "none", cursor: "pointer",
+                    background: turnTimerEnabled ? "var(--accent-emerald)" : "rgba(255,255,255,0.15)",
+                    position: "relative", transition: "background 0.2s ease", flexShrink: 0,
+                  }}
+                >
+                  <div style={{
+                    position: "absolute", top: "3px", left: turnTimerEnabled ? "21px" : "3px",
+                    width: "16px", height: "16px", borderRadius: "50%", background: "#fff",
+                    transition: "left 0.2s ease",
+                  }} />
+                </button>
+              </div>
+
+              {/* Turn timer duration picker (shown when enabled) */}
+              {turnTimerEnabled && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, whiteSpace: "nowrap" }}>Per turn:</span>
+                  {[60, 120, 180, 300, 420].map(secs => (
+                    <button
+                      key={secs}
+                      onClick={() => { setTurnTimerDuration(secs); setTurnTimerRemaining(secs); setTurnTimerRunning(false); localStorage.setItem(STORAGE_KEYS.TURN_TIMER_DURATION, String(secs)); }}
+                      style={{
+                        background: turnTimerDuration === secs ? "var(--accent-emerald)" : "rgba(255,255,255,0.06)",
+                        color: turnTimerDuration === secs ? "#fff" : "var(--text-secondary)",
+                        border: "none", borderRadius: "6px", padding: "4px 10px",
+                        fontWeight: 600, fontSize: "0.75rem", cursor: "pointer",
+                      }}
+                    >
+                      {secs < 60 ? `${secs}s` : `${secs / 60}m`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Game Timer (in hub) */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 0" }}>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, whiteSpace: "nowrap", letterSpacing: "0.5px", textTransform: "uppercase" }}>Game Timer:</span>
+                <button
+                  onClick={() => { resetTimer(); setTimerMode(prev => prev === "up" ? "down" : "up"); }}
+                  title={timerMode === "up" ? "Switch to countdown" : "Switch to count-up"}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: timerMode === "down" ? "var(--accent-purple)" : "var(--text-muted)", display: "flex", alignItems: "center", padding: "4px" }}
+                >
+                  <Timer size={13} />
+                </button>
+                <span style={{ fontSize: "0.9rem", fontWeight: 700, fontFamily: "'Outfit', monospace", color: timerColor, minWidth: "46px" }}>
+                  {formatTime(timerSeconds)}
+                </span>
+                <button
+                  onClick={toggleTimer}
+                  style={{ background: timerRunning ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)", border: `1px solid ${timerRunning ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.1)"}`, borderRadius: "6px", padding: "4px 8px", color: timerRunning ? "var(--accent-rose)" : "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center" }}
+                >
+                  {timerRunning ? <Square size={11} /> : <Play size={11} />}
+                </button>
+                {roomConnected && roomCode && (
+                  <button onClick={() => handleJoinRoom(roomCode)} title="Resync" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-cyan)", display: "flex", alignItems: "center", padding: "4px" }}>
+                    <RefreshCw size={13} />
+                  </button>
+                )}
               </div>
 
               {/* Mechanics Menu */}
@@ -1234,6 +1481,32 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 </>
               )}
             </div>
+
+            {/* ── Navigate ── */}
+            {onNavigate && (
+              <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px", marginTop: "4px" }}>
+                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: "10px" }}>Navigate</div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {([
+                    { tab: "home",       label: "Home",       icon: "🏠" },
+                    { tab: "dice",       label: "Dice",       icon: "🎲" },
+                    { tab: "turns",      label: "Turn Order", icon: "🔄" },
+                    { tab: "collection", label: "Collection", icon: "📦" },
+                    { tab: "leaderboard",label: "Leaderboard",icon: "🏆" },
+                  ] as { tab: TabId; label: string; icon: string }[]).map(({ tab, label, icon }) => (
+                    <button
+                      key={tab}
+                      onClick={() => { setShowControlsModal(false); onNavigate(tab); }}
+                      className="glass-button"
+                      style={{ fontSize: "0.75rem", padding: "6px 12px" }}
+                    >
+                      <span>{icon}</span>
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </BottomSheet>
         )}
 
@@ -1262,75 +1535,287 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           </div>
         )}
 
-        {/* ── Table Center (Monarch / Initiative) ── */}
-        <TableCenter
-          players={players}
-          assignMonarch={assignMonarch}
-          releaseMonarch={releaseMonarch}
-          assignInitiative={assignInitiative}
-          releaseInitiative={releaseInitiative}
-          hasMonarchMechanic={activeCounters.monarch}
-          hasInitiativeMechanic={activeCounters.initiative}
-          onReset={resetGame}
-        />
-
-        {/* ── Player Grid / Table View ── */}
-        {myPlayerIndex !== null ? (
-          <TableView
-            players={players}
-            myIndex={myPlayerIndex}
-            colors={colors}
-            activeCounters={activeCounters}
-            heartbeatTimes={heartbeatTimes}
-            adjustLife={adjustLife}
-            adjustPoison={adjustPoison}
-            renamePlayer={renamePlayer}
-            setAvatar={setAvatar}
-            toggleCityBlessing={toggleCityBlessing}
-            togglePlayerTokensPanel={setTokenPlayer}
-            togglePlayerTaxPanel={setTaxPlayer}
-            setActiveDamageEditor={setActiveDamageEditor}
-            revivePlayer={revivePlayer}
-            firstPlayerName={firstPlayerName}
-            showFirstFlash={showFirstFlash}
-            activePlayerIndex={activePlayerIndex}
-            savedDecks={savedDecks}
-            onSetCommander={setPlayerCommander}
-            onClearCommander={clearPlayerCommander}
-          />
-        ) : (
-          <div className="life-counter-player-grid" style={{ flex: 1, display: "grid", gap: "12px", gridAutoRows: "minmax(0, 1fr)", ...getGridStyle(), minHeight: 0, overflow: "hidden" }}>
-            {players.map((p, idx) => {
-              const playerTheme = colors[p.colorName] || colors.purple;
-              return (
-                <PlayerCard
-                  key={p.id}
-                  p={p}
-                  players={players}
-                  playerTheme={playerTheme}
-                  activeCounters={activeCounters}
-                  colors={colors}
-                  adjustLife={adjustLife}
-                  adjustPoison={adjustPoison}
-                  renamePlayer={renamePlayer}
-                  setAvatar={setAvatar}
-                  toggleCityBlessing={toggleCityBlessing}
-                  togglePlayerTokensPanel={setTokenPlayer}
-                  togglePlayerTaxPanel={setTaxPlayer}
-                  setActiveDamageEditor={setActiveDamageEditor}
-                  revivePlayer={revivePlayer}
-                  isFirst={firstPlayerName !== null && p.name === firstPlayerName}
-                  isActiveTurn={showFirstFlash && idx === activePlayerIndex}
-                  isLocalPlayer={myPlayerIndex === null || idx === myPlayerIndex}
-                  commanderName={p.commanderName}
-                  onSetCommander={setPlayerCommander}
-                  onClearCommander={clearPlayerCommander}
-                  savedDecks={savedDecks}
-                  lastHeartbeat={roomConnected ? heartbeatTimes.get(idx) : undefined}
-                />
+        {/* ── 2-Player Layout ── */}
+        {playerCount === 2 ? (
+          <GameProvider
+            state={{ players, activeCounters, colors, savedDecks, playerCount, layoutMode }}
+            actions={{
+              adjustLife, adjustPoison, renamePlayer, toggleCityBlessing,
+              togglePlayerTokensPanel: (id) => setTokenPlayer(id),
+              openCommanderHub:        (id) => setHubPlayer(id),
+              openPlayerSetup:         (id) => setSetupPlayer(id),
+              setActiveDamageEditor, revivePlayer,
+              onSetCommander: setPlayerCommander, onClearCommander: clearPlayerCommander,
+            }}
+          >
+            {/* Compact icon-only hub bar — reused in both 2P layouts */}
+            {(() => {
+              const hubBar = (
+                <div style={{
+                  flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center",
+                  gap: "4px", padding: "6px 12px",
+                  background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)",
+                }}>
+                  {/* Room badge */}
+                  {roomConnected && roomCode && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: "4px",
+                      background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)",
+                      borderRadius: "20px", padding: "3px 8px", marginRight: "4px",
+                    }}>
+                      <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
+                      <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--accent-emerald)" }}>{roomCode}</span>
+                    </div>
+                  )}
+                  {/* Turn timer inline (2P) */}
+                  {turnTimerEnabled && (
+                    <>
+                      <span style={{
+                        fontSize: "1rem", fontWeight: 900, fontFamily: "'Outfit', monospace",
+                        color: turnTimerRemaining === 0 ? "#ef4444" : turnTimerRemaining < 30 ? "#f59e0b" : "#fff",
+                        minWidth: "42px", textAlign: "center",
+                      }}>{formatTurnTimer(turnTimerRemaining)}</span>
+                      <button onClick={() => setTurnTimerRunning(r => !r)} style={{ background: "none", border: "none", cursor: "pointer", color: turnTimerRunning ? "#ef4444" : "var(--text-secondary)", padding: "6px", display: "flex" }}>
+                        {turnTimerRunning ? <Pause size={16} /> : <Play size={16} />}
+                      </button>
+                      <button onClick={resetTurnTimer} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "6px", display: "flex" }}>
+                        <SkipForward size={16} />
+                      </button>
+                      <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.12)", margin: "0 4px" }} />
+                    </>
+                  )}
+                  {/* Undo */}
+                  {undoStack.length > 0 && (
+                    <button onClick={handleUndo} aria-label="Undo" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}>
+                      <Undo2 size={20} />
+                    </button>
+                  )}
+                  {/* History */}
+                  <button onClick={() => setShowHistoryModal(true)} aria-label="History" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
+                    <History size={20} />
+                  </button>
+                  {/* Settings hub */}
+                  <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
+                    <Menu size={20} />
+                  </button>
+                  {/* AI Judge */}
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}>
+                    <Scale size={20} />
+                  </button>
+                  {/* Card Codex */}
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-cyan)", padding: "8px", display: "flex" }}>
+                    <BookOpen size={20} />
+                  </button>
+                </div>
               );
-            })}
-          </div>
+
+              const cardProps = (idx: number) => ({
+                p: players[idx],
+                isFirst: firstPlayerName !== null && players[idx].name === firstPlayerName,
+                isActiveTurn: showFirstFlash && idx === activePlayerIndex,
+                isLocalPlayer: myPlayerIndex === null || idx === myPlayerIndex,
+                lastHeartbeat: roomConnected ? heartbeatTimes.get(idx) : undefined,
+              });
+
+              // 2P: always stacked — top card (rotated 180°) → hub → bottom card (normal)
+              return (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "6px", padding: "6px 10px" }}>
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <PlayerCard {...cardProps(0)} rotate={true} />
+                  </div>
+                  {hubBar}
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <PlayerCard {...cardProps(1)} rotate={false} />
+                  </div>
+                </div>
+              );
+            })()}
+          </GameProvider>
+        ) : (
+          /* ── 3P–6P Layout: orientation-aware, hub bar in-grid ── */
+          <GameProvider
+            state={{ players, activeCounters, colors, savedDecks, playerCount, layoutMode }}
+            actions={{
+              adjustLife, adjustPoison, renamePlayer, toggleCityBlessing,
+              togglePlayerTokensPanel: (id) => setTokenPlayer(id),
+              openCommanderHub:        (id) => setHubPlayer(id),
+              openPlayerSetup:         (id) => setSetupPlayer(id),
+              setActiveDamageEditor, revivePlayer,
+              onSetCommander: setPlayerCommander, onClearCommander: clearPlayerCommander,
+            }}
+          >
+            {myPlayerIndex !== null ? (
+              /* Online multiplayer — each device shows its own card view */
+              <>
+                <TableCenter
+                  players={players}
+                  assignMonarch={assignMonarch}
+                  releaseMonarch={releaseMonarch}
+                  assignInitiative={assignInitiative}
+                  releaseInitiative={releaseInitiative}
+                  hasMonarchMechanic={activeCounters.monarch}
+                  hasInitiativeMechanic={activeCounters.initiative}
+                />
+                <TableView
+                  players={players}
+                  myIndex={myPlayerIndex}
+                  heartbeatTimes={heartbeatTimes}
+                  firstPlayerName={firstPlayerName}
+                  showFirstFlash={showFirstFlash}
+                  activePlayerIndex={activePlayerIndex}
+                />
+              </>
+            ) : (() => {
+              /* Local play — explicit rotation layouts for 3–6 players */
+
+              /* Compact icon-only hub bar (shared across all player counts) */
+              const hubBar = (
+                <div style={{ flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center", gap: "4px", padding: "6px 12px", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)" }}>
+                  {roomConnected && roomCode && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "20px", padding: "3px 8px", marginRight: "4px" }}>
+                      <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
+                      <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--accent-emerald)" }}>{roomCode}</span>
+                    </div>
+                  )}
+                  {turnTimerEnabled && (
+                    <>
+                      <span style={{ fontSize: "1rem", fontWeight: 900, fontFamily: "'Outfit', monospace", color: turnTimerRemaining === 0 ? "#ef4444" : turnTimerRemaining < 30 ? "#f59e0b" : "#fff", minWidth: "42px", textAlign: "center" }}>{formatTurnTimer(turnTimerRemaining)}</span>
+                      <button onClick={() => setTurnTimerRunning(r => !r)} style={{ background: "none", border: "none", cursor: "pointer", color: turnTimerRunning ? "#ef4444" : "var(--text-secondary)", padding: "6px", display: "flex" }}>{turnTimerRunning ? <Pause size={16} /> : <Play size={16} />}</button>
+                      <button onClick={resetTurnTimer} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "6px", display: "flex" }}><SkipForward size={16} /></button>
+                      <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.12)", margin: "0 4px" }} />
+                    </>
+                  )}
+                  {undoStack.length > 0 && (
+                    <button onClick={handleUndo} aria-label="Undo" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}><Undo2 size={20} /></button>
+                  )}
+                  <button onClick={() => setShowHistoryModal(true)} aria-label="History" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><History size={20} /></button>
+                  <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Menu size={20} /></button>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}><Scale size={20} /></button>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-cyan)", padding: "8px", display: "flex" }}><BookOpen size={20} /></button>
+                </div>
+              );
+
+              /* Rotation wrapper: fills parent cell properly for 90°/270° via container queries.
+                 Also injects gridRotation so PlayerCard can counter-rotate its damage grid. */
+              const rf = (deg: number, content: React.ReactNode): React.ReactNode => {
+                const withRot = React.isValidElement(content)
+                  ? React.cloneElement(content as React.ReactElement<{ gridRotation?: number }>, { gridRotation: deg })
+                  : content;
+                if (deg === 90 || deg === 270) return (
+                  <div style={{ containerType: "size", width: "100%", height: "100%", position: "relative", overflow: "hidden" } as React.CSSProperties}>
+                    <div style={{ position: "absolute", top: "50%", left: "50%", width: "100cqh", height: "100cqw", transform: `translate(-50%, -50%) rotate(${deg}deg)` } as React.CSSProperties}>
+                      {withRot}
+                    </div>
+                  </div>
+                );
+                if (deg === 180) return <div style={{ width: "100%", height: "100%", transform: "rotate(180deg)" }}>{withRot}</div>;
+                return <div style={{ width: "100%", height: "100%" }}>{withRot}</div>;
+              };
+
+              /* Card props for a given player index */
+              const cp = (idx: number) => ({
+                p: players[idx],
+                isFirst: firstPlayerName !== null && players[idx].name === firstPlayerName,
+                isActiveTurn: showFirstFlash && idx === activePlayerIndex,
+                isLocalPlayer: true as const,
+                lastHeartbeat: undefined as undefined,
+              });
+
+              /* Two side-by-side rotated cards (left=90°, right=270° — face outward) */
+              const row2 = (L: number, R: number): React.ReactNode => (
+                <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: 0, gap: "4px" }}>
+                  {rf(90, <PlayerCard {...cp(L)} />)}
+                  {rf(270, <PlayerCard {...cp(R)} />)}
+                </div>
+              );
+
+              /* ── 3P ──────────────────────────────────────────────────────────── */
+              if (playerCount === 3) {
+                return layoutMode === 'scorekeeper' ? (
+                  /* scorekeeper: P[1](180°) + hub + [P[0](90°)|P[2](270°)] */
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                    <div style={{ flex: 1, minHeight: 0 }}>{rf(180, <PlayerCard {...cp(1)} />)}</div>
+                    {hubBar}
+                    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: 0, gap: "4px" }}>
+                      {rf(90, <PlayerCard {...cp(0)} />)}
+                      {rf(270, <PlayerCard {...cp(2)} />)}
+                    </div>
+                  </div>
+                ) : (
+                  /* table: [P[1](90°)|P[2](270°)] + hub + P[0](0°) */
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: 0, gap: "4px" }}>
+                      {rf(90, <PlayerCard {...cp(1)} />)}
+                      {rf(270, <PlayerCard {...cp(2)} />)}
+                    </div>
+                    {hubBar}
+                    <div style={{ flex: 1, minHeight: 0 }}>{rf(0, <PlayerCard {...cp(0)} />)}</div>
+                  </div>
+                );
+              }
+
+              /* ── 4P ──────────────────────────────────────────────────────────── */
+              if (playerCount === 4) {
+                return layoutMode === 'table' ? (
+                  /* table: [P[1](270°)|P[2](90°)] + hub + [P[0](270°)|P[3](90°)] */
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                    {row2(1, 2)}
+                    {hubBar}
+                    {row2(0, 3)}
+                  </div>
+                ) : (
+                  /* scorekeeper: P[2](180°) + [P[1](270°)|P[3](90°)] + hub + P[0](0°) */
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                    <div style={{ flex: 1, minHeight: 0 }}>{rf(180, <PlayerCard {...cp(2)} />)}</div>
+                    {row2(1, 3)}
+                    {hubBar}
+                    <div style={{ flex: 1, minHeight: 0 }}>{rf(0, <PlayerCard {...cp(0)} />)}</div>
+                  </div>
+                );
+              }
+
+              /* ── 5P ──────────────────────────────────────────────────────────── */
+              if (playerCount === 5) {
+                return layoutMode === 'scorekeeper' ? (
+                  /* scorekeeper: P[2](180°) + hub + [P[1](270°)|P[3](90°)] + [P[0](270°)|P[4](90°)] */
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                    <div style={{ flex: 1, minHeight: 0 }}>{rf(180, <PlayerCard {...cp(2)} />)}</div>
+                    {hubBar}
+                    {row2(1, 3)}
+                    {row2(0, 4)}
+                  </div>
+                ) : (
+                  /* table: [P[2](270°)|P[3](90°)] + [P[1](270°)|P[4](90°)] + hub + P[0](0°) */
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                    {row2(2, 3)}
+                    {row2(1, 4)}
+                    {hubBar}
+                    <div style={{ flex: 1, minHeight: 0 }}>{rf(0, <PlayerCard {...cp(0)} />)}</div>
+                  </div>
+                );
+              }
+
+              /* ── 6P ──────────────────────────────────────────────────────────── */
+              return layoutMode === 'table' ? (
+                /* table: [P[2](270°)|P[3](90°)] + [P[1](270°)|P[4](90°)] + hub + [P[0](270°)|P[5](90°)] */
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                  {row2(2, 3)}
+                  {row2(1, 4)}
+                  {hubBar}
+                  {row2(0, 5)}
+                </div>
+              ) : (
+                /* scorekeeper: P[3](180°) + [P[2](270°)|P[4](90°)] + [P[1](270°)|P[5](90°)] + hub + P[0](0°) */
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, gap: "4px" }}>
+                  <div style={{ flex: 1, minHeight: 0 }}>{rf(180, <PlayerCard {...cp(3)} />)}</div>
+                  {row2(2, 4)}
+                  {row2(1, 5)}
+                  {hubBar}
+                  <div style={{ flex: 1, minHeight: 0 }}>{rf(0, <PlayerCard {...cp(0)} />)}</div>
+                </div>
+              );
+            })()}
+          </GameProvider>
         )}
 
       </div>
@@ -1415,15 +1900,54 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         />
       )}
 
-      {taxPlayer !== null && (
-        <TaxModal
-          targetPlayerId={taxPlayer}
-          players={players}
-          onClose={() => setTaxPlayer(null)}
-          adjustTax={adjustTax}
-          togglePartner={togglePartner}
-        />
-      )}
+      {/* Player Profile Modal — name + commander + art adjustment (portrait, at root level) */}
+      {setupPlayer !== null && (() => {
+        const sp = players.find(pl => pl.id === setupPlayer);
+        if (!sp) return null;
+        return (
+          <PlayerProfileModal
+            player={sp}
+            savedDecks={savedDecks}
+            onRename={(name) => renamePlayer(setupPlayer, name)}
+            onConfirm={(name, deckId) => { const id = setupPlayer!; setPlayerCommander(id, name, deckId); setSetupPlayer(null); if (name) setTimeout(() => setHubPlayer(id), 60); }}
+            onClear={() => { clearPlayerCommander(setupPlayer); setSetupPlayer(null); }}
+            onUpdateArt={(x, y, zoom) => updatePlayerArt(setupPlayer, x, y, zoom)}
+            onClose={() => setSetupPlayer(null)}
+            onTogglePartner={() => togglePartner(setupPlayer!)}
+            onSetPartner={(name) => setPartnerCommander(setupPlayer!, name)}
+            onClearPartner={() => clearPartnerCommander(setupPlayer!)}
+          />
+        );
+      })()}
+
+      {/* Commander Hub Modal — 3-tab hub (portrait, at root level) */}
+      {hubPlayer !== null && (() => {
+        const hp = players.find(pl => pl.id === hubPlayer);
+        if (!hp) return null;
+        return (
+          <CommanderHubModal
+            player={hp}
+            onUpdateArt={(x, y, zoom) => updatePlayerArt(hubPlayer, x, y, zoom)}
+            onClearCommander={() => clearPlayerCommander(hubPlayer)}
+            onSetPartnerCommander={(name) => setPartnerCommander(hubPlayer, name)}
+            onClearPartnerCommander={() => clearPartnerCommander(hubPlayer)}
+            adjustTax={adjustTax}
+            togglePartner={togglePartner}
+            adjustCounter={adjustCounter}
+            clearCounters={clearCounters}
+            assignMonarch={assignMonarch}
+            releaseMonarch={releaseMonarch}
+            assignInitiative={assignInitiative}
+            releaseInitiative={releaseInitiative}
+            toggleCityBlessing={toggleCityBlessing}
+            adjustMana={adjustMana}
+            adjustStorm={adjustStorm}
+            clearMana={clearMana}
+            onOpenEdit={() => { setHubPlayer(null); setTimeout(() => setSetupPlayer(hubPlayer), 60); }}
+            onClose={() => setHubPlayer(null)}
+          />
+        );
+      })()}
 
     </div>
   );
