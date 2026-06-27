@@ -473,11 +473,12 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
               {cells.map(cell => {
                 const isSelf = cell.playerIdx === selfIdx;
                 const srcPlayer = players[cell.playerIdx];
-                const dmg = (!isSelf && srcPlayer)
+                const dmgVals = (!isSelf && srcPlayer)
                   ? Object.entries(p.commanderDamage)
                       .filter(([key]) => key.startsWith(String(srcPlayer.id)))
-                      .reduce((sum, [, val]) => sum + val, 0)
-                  : 0;
+                      .map(([, val]) => val)
+                  : [];
+                const dmg = dmgVals.length > 0 ? Math.max(...dmgVals) : 0;
                 const danger = !isSelf && dmg >= 15;
                 const srcColor = srcPlayer ? (colors[srcPlayer.colorName]?.accent || "#999") : "#999";
 
@@ -500,20 +501,13 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "2px", transform: cellTextRotate }}>
+                    <div style={{ display: "flex", alignItems: "center", transform: cellTextRotate }}>
                       {isSelf ? (
                         <Crown size={8} color={playerTheme.accent} strokeWidth={2.5} />
-                      ) : srcPlayer && (
-                        <>
-                          <span style={{ fontSize: "0.52rem", fontWeight: 600, color: dmg > 0 ? srcColor : "rgba(255,255,255,0.18)", lineHeight: 1 }}>
-                            {srcPlayer.name.slice(0, 1)}
-                          </span>
-                          {dmg > 0 && (
-                            <span style={{ fontSize: "0.6rem", fontWeight: 900, color: dmg >= 21 ? "#ef4444" : dmg >= 15 ? "#fca5a5" : "#fff", lineHeight: 1 }}>
-                              {dmg}
-                            </span>
-                          )}
-                        </>
+                      ) : srcPlayer && dmg > 0 && (
+                        <span style={{ fontSize: "0.65rem", fontWeight: 900, color: dmg >= 21 ? "#ef4444" : srcColor, lineHeight: 1 }}>
+                          {dmg}
+                        </span>
                       )}
                     </div>
                   </div>
