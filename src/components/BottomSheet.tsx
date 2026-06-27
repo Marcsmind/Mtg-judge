@@ -73,7 +73,15 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
     <>
       {/* Backdrop */}
       <div
-        onClick={onClose}
+        onPointerDown={(e) => {
+          const a = document.activeElement;
+          if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) {
+            // preventDefault cancels the blur+click chain so the keyboard stays open
+            e.preventDefault();
+            return;
+          }
+          onClose();
+        }}
         style={{
           position:          "fixed",
           inset:             0,

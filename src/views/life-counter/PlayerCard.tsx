@@ -364,12 +364,9 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
             key={lifeDelta}
             style={{
               position: "absolute",
-              ...(playerCount === 2
-                ? { left: "50%", top: "50%", transform: "translate(-50%, -50%)" }
-                : {
-                    ...(lifeDelta > 0 ? { right: "10px" } : { left: "10px" }),
-                    top: "6px",
-                  }
+              ...(playerCount >= 6
+                ? { ...(lifeDelta > 0 ? { right: "10px" } : { left: "10px" }), top: "6px" }
+                : { left: "50%", top: "4px", transform: "translateX(-50%)" }
               ),
               pointerEvents: "none", zIndex: 10,
             }}
@@ -465,7 +462,9 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
                 gridTemplateColumns: gridCols,
                 gridTemplateRows: gridRowsTemplate,
                 gap: "2px",
-                width: playerCount === 2 ? "72px" : "56px", height: playerCount === 2 ? "72px" : "56px", flexShrink: 0, overflow: "hidden",
+                width: playerCount === 2 ? "72px" : playerCount >= 6 ? "68px" : "56px",
+                height: playerCount === 2 ? "72px" : playerCount >= 6 ? "68px" : "56px",
+                flexShrink: 0, overflow: "hidden",
                 transform: counterRotate,
                 transformOrigin: "center",
               }}
