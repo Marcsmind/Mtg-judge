@@ -208,6 +208,29 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         ...({"WebkitTouchCallout": "none"} as any),
       }}
     >
+      {/* Full-card touch zones — left half subtracts, right half adds.
+          z-index 2 so they sit above normal-flow content but below header/grid (z:3) and crown (z:5). */}
+      <div
+        ref={minusBtnRef}
+        role="button"
+        aria-label={`Subtract life from ${p.name}`}
+        onPointerDown={e => { if (e.pointerType === 'touch') return; if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
+        onPointerUp={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+        onPointerCancel={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+        onContextMenu={e => e.preventDefault()}
+        style={{ position: "absolute", inset: "0 50% 0 0", zIndex: 2, touchAction: "none", cursor: "pointer" }}
+      />
+      <div
+        ref={plusBtnRef}
+        role="button"
+        aria-label={`Add life to ${p.name}`}
+        onPointerDown={e => { if (e.pointerType === 'touch') return; if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
+        onPointerUp={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+        onPointerCancel={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
+        onContextMenu={e => e.preventDefault()}
+        style={{ position: "absolute", inset: "0 0 0 50%", zIndex: 2, touchAction: "none", cursor: "pointer" }}
+      />
+
       {/* Presence dot */}
       {dotColor && (
         <div
@@ -292,6 +315,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
           paddingRight: (activeCounters.monarch || activeCounters.initiative) ? "44px" : "0",
           padding: "0", width: "100%", textAlign: "left",
           minHeight: "24px", flexShrink: 0,
+          position: "relative", zIndex: 3,
         }}
       >
         {/* Player name */}
@@ -362,20 +386,9 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
           </div>
         )}
 
-        {/* Left zone: subtract */}
-        <div
-          ref={minusBtnRef}
-          role="button"
-          aria-label={`Subtract 1 life from ${p.name} (hold to keep subtracting)`}
-          onPointerDown={e => { if (e.pointerType === 'touch') return; if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, -1); startHold(-1); } }}
-          onPointerUp={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerCancel={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; }}
-          onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
-          onContextMenu={e => e.preventDefault()}
-          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", userSelect: "none", touchAction: "none" }}
-        >
-          <span className="lc-adj-icon" style={{ fontSize: "1.6rem", fontWeight: 300, color: "#fff", opacity: 0.40, lineHeight: 1, userSelect: "none", transition: "opacity 0.12s ease" }}>−</span>
+        {/* Left zone: subtract (visual only — touch handled by absolute zone) */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <span className="lc-adj-icon" style={{ fontSize: "1.6rem", fontWeight: 300, color: "#fff", opacity: 0.40, lineHeight: 1, userSelect: "none" }}>−</span>
         </div>
 
         {/* Center: life number */}
@@ -425,20 +438,9 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
           )}
         </div>
 
-        {/* Right zone: add */}
-        <div
-          ref={plusBtnRef}
-          role="button"
-          aria-label={`Add 1 life to ${p.name} (hold to keep adding)`}
-          onPointerDown={e => { if (e.pointerType === 'touch') return; if (e.isPrimary) { e.currentTarget.setPointerCapture(e.pointerId); adjustLife(p.id, 1); startHold(1); } }}
-          onPointerUp={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerCancel={e => { if (e.pointerType === 'touch') return; e.currentTarget.releasePointerCapture(e.pointerId); stopHold(); }}
-          onPointerLeave={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.40"; }}
-          onPointerEnter={e => { const el = e.currentTarget.querySelector(".lc-adj-icon") as HTMLElement | null; if (el) el.style.opacity = "0.8"; }}
-          onContextMenu={e => e.preventDefault()}
-          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", userSelect: "none", touchAction: "none" }}
-        >
-          <span className="lc-adj-icon" style={{ fontSize: "1.6rem", fontWeight: 300, color: "#fff", opacity: 0.40, lineHeight: 1, userSelect: "none", transition: "opacity 0.12s ease" }}>+</span>
+        {/* Right zone: add (visual only — touch handled by absolute zone) */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <span className="lc-adj-icon" style={{ fontSize: "1.6rem", fontWeight: 300, color: "#fff", opacity: 0.40, lineHeight: 1, userSelect: "none" }}>+</span>
         </div>
       </div>
 
@@ -452,7 +454,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         const cellTextRotate = gridRotation !== 0 ? `rotate(${gridRotation}deg)` : undefined;
 
         return (
-          <div className="lc-bottom-row" style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "5px" }}>
+          <div className="lc-bottom-row" style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "5px", position: "relative", zIndex: 3 }}>
             {/* Commander Damage Grid — tap anywhere to open damage modal */}
             <div
               onClick={() => setActiveDamageEditor(p.id)}
