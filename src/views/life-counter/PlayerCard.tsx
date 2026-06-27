@@ -465,7 +465,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
                 gridTemplateColumns: gridCols,
                 gridTemplateRows: gridRowsTemplate,
                 gap: "2px",
-                width: playerCount === 2 ? "72px" : "56px", height: playerCount === 2 ? "72px" : "56px", flexShrink: 0,
+                width: playerCount === 2 ? "72px" : "56px", height: playerCount === 2 ? "72px" : "56px", flexShrink: 0, overflow: "hidden",
                 transform: counterRotate,
                 transformOrigin: "center",
               }}
@@ -498,7 +498,6 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
                         : "rgba(255,255,255,0.05)"}`,
                       borderRadius: "3px",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      overflow: "hidden",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "2px", transform: cellTextRotate }}>

@@ -95,6 +95,7 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
   const [partnerSuggestions, setPartnerSuggestions] = useState<ScryfallCard[]>([]);
   const [showPartnerSug, setShowPartnerSug]         = useState(false);
   const partnerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const partnerInputRef    = useRef<HTMLInputElement>(null);
 
   // Swipe detection
   const touchStartX    = useRef(0);
@@ -352,59 +353,65 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
       {p.partnerMode && (
         <div style={{ marginBottom: "12px" }}>
           <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: "6px" }}>Partner Commander</div>
-          {p.partnerCommanderName ? (
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)",
-              borderRadius: "10px", padding: "10px 12px",
-            }}>
-              <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#fff" }}>{p.partnerCommanderName}</span>
-              <button
-                onClick={onClearPartnerCommander}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "4px", display: "flex" }}
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ) : (
-            <div style={{ position: "relative" }}>
-              <input
-                value={partnerInput}
-                onChange={e => onPartnerInputChange(e.target.value)}
-                onFocus={() => partnerInput.length >= 2 && setShowPartnerSug(true)}
-                onBlur={() => setTimeout(() => setShowPartnerSug(false), 150)}
-                placeholder="Search partner commander…"
-                style={{
-                  width: "100%", padding: "10px 12px", boxSizing: "border-box",
-                  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: "10px", color: "#fff", fontSize: "0.88rem",
-                  outline: "none",
-                }}
-              />
-              {showPartnerSug && partnerSuggestions.length > 0 && (
-                <div style={{
-                  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-                  background: "#1e1a2e", border: "1px solid rgba(139,92,246,0.3)",
-                  borderRadius: "10px", zIndex: 10, overflow: "hidden",
-                }}>
-                  {partnerSuggestions.map(s => (
-                    <button
-                      key={s.name}
-                      onMouseDown={() => confirmPartner(s.name)}
-                      style={{
-                        display: "block", width: "100%", textAlign: "left",
-                        padding: "10px 14px", background: "none", border: "none",
-                        color: "var(--text-primary)", fontSize: "0.85rem", cursor: "pointer",
-                        borderBottom: "1px solid rgba(255,255,255,0.05)",
-                      }}
-                    >
-                      {s.name}
-                    </button>
+          {/* Input is always mounted so iOS focus() works within the tap gesture */}
+          <div style={{ position: "relative" }}>
+            <input
+              ref={partnerInputRef}
+              value={partnerInput}
+              onChange={e => onPartnerInputChange(e.target.value)}
+              onFocus={() => partnerInput.length >= 2 && setShowPartnerSug(true)}
+              onBlur={() => setTimeout(() => setShowPartnerSug(false), 150)}
+              placeholder="Search partner commander…"
+              style={{
+                width: "100%", padding: "10px 12px", boxSizing: "border-box",
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: "10px", color: "#fff", fontSize: "0.88rem",
+                outline: "none",
+              }}
+            />
+            {showPartnerSug && partnerSuggestions.length > 0 && (
+              <div style={{
+                position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+                background: "#1e1a2e", border: "1px solid rgba(139,92,246,0.3)",
+                borderRadius: "10px", zIndex: 10, overflow: "hidden",
+              }}>
+                {partnerSuggestions.map(s => (
+                  <button
+                    key={s.name}
+                    onMouseDown={() => confirmPartner(s.name)}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left",
+                      padding: "10px 14px", background: "none", border: "none",
+                      color: "var(--text-primary)", fontSize: "0.85rem", cursor: "pointer",
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    {s.name}
+                  </button>
                   ))}
                 </div>
               )}
+            {/* Display overlay — sits on top of the input when a partner is already set */}
+            {p.partnerCommanderName && (
+              <div style={{
+                position: "absolute", inset: 0,
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)",
+                borderRadius: "10px", padding: "0 12px",
+              }}>
+                <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#fff" }}>{p.partnerCommanderName}</span>
+                <button
+                  onClick={() => {
+                    onClearPartnerCommander();
+                    requestAnimationFrame(() => partnerInputRef.current?.focus());
+                  }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "4px", display: "flex" }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
             </div>
-          )}
         </div>
       )}
 
