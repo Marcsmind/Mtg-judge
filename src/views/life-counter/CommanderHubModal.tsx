@@ -403,7 +403,6 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
                 <button
                   onClick={() => {
                     onClearPartnerCommander();
-                    requestAnimationFrame(() => partnerInputRef.current?.focus());
                   }}
                   style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "4px", display: "flex" }}
                 >

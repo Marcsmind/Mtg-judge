@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Scale, WifiOff, Copy, Timer, Square, Play, Pause, SkipForward, Crown, Skull, Swords, Star, Undo2, X, BookOpen } from "lucide-react";
+import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Scale, WifiOff, Copy, Timer, Square, Play, Pause, SkipForward, Crown, Skull, Swords, Star, Undo2, X, BookOpen, Home } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 import { useGameTimer } from "../hooks/useGameTimer";
 import { loadDecks, recordDeckResult } from "../services/decks";
@@ -233,6 +233,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
   // Modals
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showHomeConfirm,  setShowHomeConfirm]  = useState(false);
   const [savedGames, setSavedGames] = useState<(GameSnapshot | null)[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SAVED_GAMES);
@@ -1606,6 +1607,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                   <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-cyan)", padding: "8px", display: "flex" }}>
                     <BookOpen size={20} />
                   </button>
+                  {/* Home */}
+                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "8px", display: "flex" }}>
+                    <Home size={20} />
+                  </button>
                 </div>
               );
 
@@ -1692,6 +1697,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                   <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Menu size={20} /></button>
                   <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}><Scale size={20} /></button>
                   <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-cyan)", padding: "8px", display: "flex" }}><BookOpen size={20} /></button>
+                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "8px", display: "flex" }}><Home size={20} /></button>
                 </div>
               );
 
@@ -1863,6 +1869,32 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           onSkip={() => { setShowEndGame(false); doReset(false); }}
           onCancel={() => setShowEndGame(false)}
         />
+      )}
+
+      {/* ── Home Confirm ── */}
+      {showHomeConfirm && (
+        <BottomSheet onClose={() => setShowHomeConfirm(false)} zIndex={300} maxWidth="380px" padding="24px">
+          <h3 style={{ margin: "0 0 8px", fontSize: "1.1rem", fontWeight: 600 }}>Leave Game?</h3>
+          <p style={{ margin: "0 0 20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            Your current game is still in progress. Are you sure you want to go home?
+          </p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => setShowHomeConfirm(false)}
+              className="glass-button"
+              style={{ flex: 1 }}
+            >
+              Stay
+            </button>
+            <button
+              onClick={() => { setShowHomeConfirm(false); onNavigate?.("home"); }}
+              className="glass-button"
+              style={{ flex: 1, background: "rgba(99,102,241,0.1)", borderColor: "rgba(99,102,241,0.25)", color: "#818cf8" }}
+            >
+              Go Home
+            </button>
+          </div>
+        </BottomSheet>
       )}
 
       {/* ── Reset Confirm ── replaces window.confirm() for iOS PWA compatibility */}
