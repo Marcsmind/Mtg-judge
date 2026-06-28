@@ -1587,7 +1587,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                   )}
                   {/* Undo */}
                   {undoStack.length > 0 && (
-                    <button onClick={handleUndo} aria-label="Undo" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}>
+                    <button onClick={handleUndo} aria-label="Undo" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
                       <Undo2 size={20} />
                     </button>
                   )}
@@ -1600,15 +1600,15 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                     <Menu size={20} />
                   </button>
                   {/* AI Judge */}
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
                     <Scale size={20} />
                   </button>
                   {/* Card Codex */}
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-cyan)", padding: "8px", display: "flex" }}>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
                     <BookOpen size={20} />
                   </button>
                   {/* Home */}
-                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "8px", display: "flex" }}>
+                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
                     <Home size={20} />
                   </button>
                 </div>
@@ -1691,13 +1691,13 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                     </>
                   )}
                   {undoStack.length > 0 && (
-                    <button onClick={handleUndo} aria-label="Undo" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}><Undo2 size={20} /></button>
+                    <button onClick={handleUndo} aria-label="Undo" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Undo2 size={20} /></button>
                   )}
                   <button onClick={() => setShowHistoryModal(true)} aria-label="History" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><History size={20} /></button>
                   <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Menu size={20} /></button>
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-purple)", padding: "8px", display: "flex" }}><Scale size={20} /></button>
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-cyan)", padding: "8px", display: "flex" }}><BookOpen size={20} /></button>
-                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "8px", display: "flex" }}><Home size={20} /></button>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Scale size={20} /></button>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><BookOpen size={20} /></button>
+                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Home size={20} /></button>
                 </div>
               );
 

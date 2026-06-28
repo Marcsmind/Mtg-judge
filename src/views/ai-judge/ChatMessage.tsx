@@ -115,14 +115,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   // remounts every <strong> element, and click events fired during that window
   // are swallowed — the card-name-to-Codex click regression.
   const markdownComponents = useMemo((): Components => ({
-    // Override <strong> (produced by **text**) to handle three cases:
-    //   1. "settings"   → link that opens the Settings panel
-    //   2. MTG keyword  → shows a hover tooltip with a definition
-    //   3. anything else → treated as a card name; opens Card Codex
+    // Override <strong> (produced by **text**) to handle four cases:
+    //   1. "settings"      → link that opens the Settings panel
+    //   2. brand/UI terms  → styled bold, no interaction
+    //   3. MTG keyword     → tap/hover tooltip with a definition
+    //   4. anything else   → treated as a card name; opens Card Codex
     strong: ({ children }) => {
-      // Safely flatten children to a plain string.
-      // react-markdown v10 passes simple text as a bare string; fall back to
-      // recursive extraction for any nested React nodes (e.g. emphasis inside bold).
       const extractText = (node: React.ReactNode): string => {
         if (typeof node === "string") return node;
         if (typeof node === "number") return String(node);
@@ -154,9 +152,24 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         );
       }
 
-      // 2. MTG keyword → tooltip on hover
+      // 2. Brand/UI terms — styled but not interactive (not real card names)
+      if (lower === "arbiter") {
+        return (
+          <strong style={{ color: "var(--accent-purple)", fontWeight: 700, cursor: "default" }}>
+            {text}
+          </strong>
+        );
+      }
+
+      // 3. MTG keyword → tap-or-hover tooltip with definition
       const keywordDef = MTG_KEYWORDS[lower];
       if (keywordDef) {
+        const showTooltip = (e: React.MouseEvent) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          // Prefer above the tapped text to avoid overlapping the bottom search/input UI
+          const y = rect.top >= 150 ? rect.top - 150 : rect.bottom + 8;
+          setTooltip({ term: text, text: keywordDef, x: rect.left, y });
+        };
         return (
           <strong
             style={{
@@ -166,15 +179,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               fontWeight: 700,
             }}
             title={keywordDef}
-            onMouseEnter={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setTooltip({
-                term: text,
-                text: keywordDef,
-                x: rect.left,
-                y: rect.bottom + 6,
-              });
+            onClick={(e) => {
+              if (tooltip?.term === lower) {
+                setTooltip(null);
+              } else {
+                showTooltip(e);
+              }
             }}
+            onMouseEnter={showTooltip}
             onMouseLeave={() => setTooltip(null)}
           >
             {text}
@@ -182,12 +194,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         );
       }
 
-      // 3. Card name → click to open floating preview
+      // 4. Card name → click to open floating preview
       return (
         <strong
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
-            // Don't open codex immediately, show floating preview
             fetchCardPreview(text, rect.left, rect.top - 10);
           }}
           style={{
@@ -207,7 +218,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </strong>
       );
     },
-  }), [onOpenCodex, onGoToSettings, fetchCardPreview]);
+  }), [onOpenCodex, onGoToSettings, fetchCardPreview, tooltip]);
 
   return (
     <>
@@ -216,8 +227,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         <div
           style={{
             position: "fixed",
-            left: Math.min(tooltip.x, window.innerWidth - 320),
-            top: tooltip.y,
+            left: Math.min(Math.max(8, tooltip.x), window.innerWidth - 320),
+            top: Math.max(8, tooltip.y),
             zIndex: 9999,
             maxWidth: "300px",
             background: "rgba(16, 12, 28, 0.98)",
