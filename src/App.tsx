@@ -36,6 +36,7 @@ function App() {
     () => localStorage.getItem(STORAGE_KEYS.ONBOARDING_DONE) === "1"
   );
   const [activeTab, setActiveTab] = useState<TabId>("home");
+  const [lifecounterFullscreen, setLifecounterFullscreen] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const { tier: authTier, trialEndsAt } = useAuth();
@@ -270,6 +271,9 @@ function App() {
       import("@capacitor/keyboard").then(({ Keyboard }) => {
         Keyboard.addListener("keyboardWillShow", (info) => {
           setIsKeyboardOpen(true);
+          // Skip --app-height shrink when a modal input is focused — prevents
+          // the centered panel from jumping upward and dismissing the keyboard.
+          if (document.activeElement?.closest(".glass-panel")) return;
           document.documentElement.style.setProperty(
             "--app-height",
             `${window.innerHeight - info.keyboardHeight}px`,
@@ -326,11 +330,18 @@ function App() {
   // ── Global Event Listeners ──
   useEffect(() => {
     const handleOpenJudge  = () => setJudgeOpen(true);
+    const handleOpenCodex  = (e: Event) => {
+      const term = (e as CustomEvent<{ term?: string }>).detail?.term;
+      if (term) setCodexSearch(term);
+      setCodexOpen(true);
+    };
     const handleGoSettings = () => { setActiveTab("settings"); setJudgeOpen(false); };
-    window.addEventListener("open-ai-judge",   handleOpenJudge);
-    window.addEventListener("go-to-settings",  handleGoSettings);
+    window.addEventListener("open-ai-judge",  handleOpenJudge);
+    window.addEventListener("open-codex",     handleOpenCodex);
+    window.addEventListener("go-to-settings", handleGoSettings);
     return () => {
       window.removeEventListener("open-ai-judge",  handleOpenJudge);
+      window.removeEventListener("open-codex",     handleOpenCodex);
       window.removeEventListener("go-to-settings", handleGoSettings);
     };
   }, []);
@@ -411,6 +422,10 @@ function App() {
     setGeminiModel(savedModel);
   };
 
+  useEffect(() => {
+    if (activeTab !== "life") setLifecounterFullscreen(false);
+  }, [activeTab]);
+
   const handleNavigate = (tab: TabId) => {
     if (tab === "judge") {
       setJudgeOpen(true);
@@ -442,6 +457,9 @@ function App() {
               setMpLobbyPlayers([]);
               setMpSpinWinner(null);
             }}
+            onEnterFullscreen={() => setLifecounterFullscreen(true)}
+            onExitFullscreen={() => setLifecounterFullscreen(false)}
+            onNavigate={handleNavigate}
           />
         );
       case "gamenight":
@@ -508,13 +526,15 @@ function App() {
       case "guide":
         return <AppGuide onNavigate={(tab) => setActiveTab(tab)} />;
       default:
-        // Default to life counter if an unknown tab is selected somehow
         return (
           <LifeCounter
             key={mpGameKey}
             userId={authUser?.id}
             mpInitLobbyPlayers={mpLobbyPlayers.length > 0 ? mpLobbyPlayers : undefined}
             mpInitFirstPlayer={mpSpinWinner ?? undefined}
+            onEnterFullscreen={() => setLifecounterFullscreen(true)}
+            onExitFullscreen={() => setLifecounterFullscreen(false)}
+            onNavigate={handleNavigate}
           />
         );
     }
@@ -522,18 +542,28 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* Sidebar Navigation */}
-      <Sidebar
-        activeTab={judgeOpen ? "judge" : activeTab}
-        setActiveTab={handleNavigate}
-        openCodex={() => setCodexOpen(true)}
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={toggleSidebar}
-        isKeyboardOpen={isKeyboardOpen}
-      />
+      {/* Sidebar Navigation — hidden when life counter is fullscreen */}
+      {!lifecounterFullscreen && (
+        <Sidebar
+          activeTab={judgeOpen ? "judge" : activeTab}
+          setActiveTab={handleNavigate}
+          openCodex={() => setCodexOpen(true)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebar}
+          isKeyboardOpen={isKeyboardOpen}
+        />
+      )}
 
       {/* Main Feature View */}
-      <main className={`main-content${isKeyboardOpen ? " keyboard-open" : ""}`}>
+      <main
+        className={lifecounterFullscreen ? "" : `main-content${isKeyboardOpen ? " keyboard-open" : ""}`}
+        style={lifecounterFullscreen ? {
+          position: "fixed", inset: 0, zIndex: 90,
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+          background: "var(--bg-deep)",
+        } : undefined}
+      >
         <Suspense fallback={
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", fontSize: "0.9rem" }}>
             Loading…
