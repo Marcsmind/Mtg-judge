@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Scale, Heart, Wand2, Sparkles, Crown, LogIn, ChevronRight, Clock } from "lucide-react";
+import { Scale, Heart, Wand2, Sparkles, Crown, LogIn, ChevronRight, Clock, Settings } from "lucide-react";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import type { TabId } from "../constants/tabIds";
 import type { AuthUser } from "../services/auth";
@@ -11,6 +11,8 @@ interface HomeProps {
   tier: SubscriptionTier;
   onNavigate: (tab: TabId) => void;
   onSignIn: () => void;
+  onOpenProfile: () => void;
+  onGoToSettings: () => void;
 }
 
 interface Message { role: "user" | "model"; content: string; }
@@ -20,7 +22,12 @@ function readJson<T>(key: string): T | null {
   try { return JSON.parse(localStorage.getItem(key) ?? "null"); } catch { return null; }
 }
 
-export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn }) => {
+export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn, onOpenProfile, onGoToSettings }) => {
+  const avatarUrl = localStorage.getItem(STORAGE_KEYS.PROFILE_AVATAR);
+  const profileName = localStorage.getItem(STORAGE_KEYS.PROFILE_NAME) ?? localStorage.getItem(STORAGE_KEYS.DISPLAY_NAME) ?? "";
+  const initials = profileName
+    ? profileName.slice(0, 2).toUpperCase()
+    : authUser?.email ? authUser.email.slice(0, 2).toUpperCase() : "?";
   const isAnonymous = !authUser || authUser.isAnonymous;
   const isPro = tier === "pro" || tier === "lifetime";
 
@@ -39,7 +46,7 @@ export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn
   }, []);
 
   const quickActions: { id: TabId; label: string; sub: string; icon: React.ElementType; color: string; glow: string }[] = [
-    { id: "judge",    label: "AI Judge",     sub: "Ask a rules question",    icon: Scale,    color: "var(--accent-purple)", glow: "rgba(139,92,246,0.15)" },
+    { id: "judge",    label: "AI Judge",     sub: "Ask a rules question",    icon: Scale,    color: "var(--accent-purple)", glow: "color-mix(in srgb, var(--accent-purple) 15%, transparent)" },
     { id: "life",     label: "Life Counter", sub: "Start a new game",        icon: Heart,    color: "var(--accent-rose)",   glow: "rgba(244,63,94,0.12)"  },
     { id: "deck",     label: "Deck Builder", sub: "Build or manage decks",   icon: Wand2,    color: "var(--accent-cyan)",   glow: "rgba(6,182,212,0.12)"  },
     { id: "gamenight",label: "Game Night",   sub: "Host a Commander pod",    icon: Sparkles, color: "var(--accent-gold)",   glow: "rgba(234,179,8,0.12)"  },
@@ -54,7 +61,7 @@ export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn
           width: "44px", height: "44px", borderRadius: "12px", flexShrink: 0,
           background: "linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 0 18px rgba(139,92,246,0.4)",
+          boxShadow: "0 0 18px color-mix(in srgb, var(--accent-purple) 40%, transparent)",
         }}>
           <Scale size={22} color="#fff" />
         </div>
@@ -66,17 +73,45 @@ export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn
             Commander Companion
           </p>
         </div>
-        {isPro && (
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "5px", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "20px", padding: "4px 10px" }}>
-            <Crown size={12} color="var(--accent-purple)" />
-            <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--accent-purple)", letterSpacing: "0.06em" }}>PRO</span>
-          </div>
-        )}
+
+        {/* Right side: PRO badge + settings + profile */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
+          {isPro && (
+            <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "color-mix(in srgb, var(--accent-purple) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)", borderRadius: "20px", padding: "4px 10px" }}>
+              <Crown size={12} color="var(--accent-purple)" />
+              <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--accent-purple)", letterSpacing: "0.06em" }}>PRO</span>
+            </div>
+          )}
+          {/* Settings */}
+          <button
+            onClick={onGoToSettings}
+            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", width: "38px", height: "38px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+          >
+            <Settings size={18} color="var(--text-secondary)" />
+          </button>
+          {/* Profile avatar */}
+          <button
+            onClick={onOpenProfile}
+            style={{
+              width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
+              background: avatarUrl ? "transparent" : "linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%)",
+              border: "2px solid color-mix(in srgb, var(--accent-purple) 50%, transparent)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              overflow: "hidden", cursor: "pointer",
+              boxShadow: "0 0 10px color-mix(in srgb, var(--accent-purple) 25%, transparent)",
+            }}
+          >
+            {avatarUrl
+              ? <img src={avatarUrl} alt="profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#fff" }}>{initials}</span>
+            }
+          </button>
+        </div>
       </div>
 
       {/* Account CTA — anonymous only */}
       {isAnonymous && (
-        <div style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(6,182,212,0.06) 100%)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: "16px", padding: "20px" }}>
+        <div style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 10%, transparent) 0%, rgba(6,182,212,0.06) 100%)", border: "1px solid color-mix(in srgb, var(--accent-purple) 25%, transparent)", borderRadius: "16px", padding: "20px" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "6px" }}>Save your progress</h2>
           <p style={{ fontSize: "0.84rem", color: "var(--text-secondary)", lineHeight: 1.55, marginBottom: "16px" }}>
             Create a free account to sync your decks, game history, and AI rulings across all your devices.
@@ -85,7 +120,7 @@ export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn
             onClick={onSignIn}
             style={{
               display: "inline-flex", alignItems: "center", gap: "8px",
-              background: "linear-gradient(135deg, var(--accent-purple) 0%, rgba(139,92,246,0.8) 100%)",
+              background: "linear-gradient(135deg, var(--accent-purple) 0%, color-mix(in srgb, var(--accent-purple) 80%, transparent) 100%)",
               border: "none", borderRadius: "10px", padding: "10px 18px",
               color: "#fff", fontSize: "0.88rem", fontWeight: 700, cursor: "pointer",
             }}
@@ -135,7 +170,7 @@ export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn
               <button
                 onClick={() => onNavigate("judge")}
                 style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px", background: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: "12px", cursor: "pointer", textAlign: "left", width: "100%" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(139,92,246,0.4)"}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "color-mix(in srgb, var(--accent-purple) 40%, transparent)"}
                 onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-color)"}
               >
                 <Scale size={16} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
@@ -190,11 +225,11 @@ export const Home: React.FC<HomeProps> = ({ authUser, tier, onNavigate, onSignIn
           onClick={() => onNavigate("settings")}
           style={{
             display: "flex", alignItems: "center", gap: "12px", padding: "16px 18px",
-            background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)",
+            background: "color-mix(in srgb, var(--accent-purple) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 20%, transparent)",
             borderRadius: "14px", cursor: "pointer", textAlign: "left", width: "100%",
           }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"}
-          onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(139,92,246,0.2)"}
+          onMouseEnter={e => e.currentTarget.style.borderColor = "color-mix(in srgb, var(--accent-purple) 50%, transparent)"}
+          onMouseLeave={e => e.currentTarget.style.borderColor = "color-mix(in srgb, var(--accent-purple) 20%, transparent)"}
         >
           <Crown size={18} color="var(--accent-purple)" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1 }}>

@@ -1,5 +1,5 @@
 import React from "react";
-import { Scale, Heart, Dices, Shuffle, Settings, Search, Menu, Wand2, Trophy, Sparkles, MoreHorizontal, Home as HomeIcon, BookOpen } from "lucide-react";
+import { Scale, Heart, Dices, Shuffle, Settings, Search, Menu, Wand2, Trophy, Sparkles, MoreHorizontal, Home as HomeIcon, Library } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 import { useMobile } from "../hooks/useMobile";
 
@@ -21,7 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
     { id: "home",        label: "Home",          icon: HomeIcon    },
     { id: "judge",       label: "AI Judge",      icon: Scale       },
     { id: "life",        label: "Life Counter",  icon: Heart       },
-    { id: "collection",  label: "Collection",    icon: BookOpen    },
+    { id: "collection",  label: "Collection",    icon: Library     },
     { id: "gamenight",   label: "Game Night",    icon: Sparkles    },
     { id: "dice",        label: "Dice & Coins",  icon: Dices       },
     { id: "more",        label: "Menu",          icon: MoreHorizontal },
@@ -47,9 +47,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
             flex: 1, display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
             gap: "3px", padding: "6px 4px",
-            background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
+            background: isActive ? "rgba(255,255,255,0.14)" : "transparent",
             border: "none", borderRadius: "8px",
-            color: isActive ? "var(--accent-purple)" : "var(--text-muted)",
+            color: isActive ? "#fff" : "var(--text-muted)",
             fontSize: "0.55rem", fontWeight: isActive ? 700 : 500,
             cursor: "pointer", transition: "all 0.15s ease",
           }}
@@ -102,9 +102,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
               flex: 1, display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center",
               gap: "3px", padding: "6px 4px",
-              background: activeTab === "more" ? "rgba(139,92,246,0.12)" : "transparent",
+              background: activeTab === "more" ? "rgba(255,255,255,0.14)" : "transparent",
               border: "none", borderRadius: "8px",
-              color: activeTab === "more" ? "var(--accent-purple)" : "var(--text-muted)",
+              color: activeTab === "more" ? "#fff" : "var(--text-muted)",
               fontSize: "0.55rem", fontWeight: activeTab === "more" ? 700 : 500,
               cursor: "pointer", transition: "all 0.15s ease",
             }}
@@ -155,7 +155,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
               width: "38px", height: "38px", borderRadius: "10px", flexShrink: 0,
               background: "linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-cyan) 100%)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 0 15px rgba(139,92,246,0.4)",
+              boxShadow: "0 0 15px color-mix(in srgb, var(--accent-purple) 40%, transparent)",
               animation: "pulse-glow 3s infinite",
             }}
           >
@@ -221,7 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
                   gap: "12px",
                   width: "100%",
                   padding: collapsed ? "12px 0" : "11px 12px",
-                  background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
+                  background: isActive ? "rgba(255,255,255,0.14)" : "transparent",
                   border: "none",
                   borderRadius: "8px",
                   color: isActive ? "#fff" : "var(--text-secondary)",
@@ -274,7 +274,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, openC
             justifyContent: collapsed ? "center" : "flex-start",
             gap: "12px", width: "100%",
             padding: collapsed ? "11px 0" : "11px 12px",
-            background: activeTab === "settings" ? "rgba(139,92,246,0.12)" : "transparent",
+            background: activeTab === "settings" ? "rgba(255,255,255,0.14)" : "transparent",
             border: "none", borderRadius: "8px",
             color: activeTab === "settings" ? "#fff" : "var(--text-secondary)",
             fontSize: "0.93rem", fontWeight: activeTab === "settings" ? 600 : 500,

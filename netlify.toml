@@ -11,4 +11,4 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.scryfall.com https://*.scryfall.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://api.scryfall.com https://*.scryfall.io https://*.sentry.io https://us.i.posthog.com https://us-assets.i.posthog.com; font-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self';"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.scryfall.com https://*.scryfall.io; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://vision.googleapis.com https://api.scryfall.com https://*.scryfall.io https://*.sentry.io https://us.i.posthog.com https://us-assets.i.posthog.com; font-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self';"

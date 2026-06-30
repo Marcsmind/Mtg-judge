@@ -39,4 +39,10 @@ export const STORAGE_KEYS = {
   ONBOARDING_DONE:      "nexus_onboarding_done",           // "1" after first-launch flow completes
   COLLECTION_GROUPS:    "nexus_collection_groups",         // CollectionGroup[] JSON
   COLLECTION_CARDS:     "nexus_collection_cards",          // CollectionCard[] JSON
+  LAYOUT_MODE:          "nexus_judge_layout_mode",         // 'symmetric' | 'featured'
+  TURN_TIMER_ENABLED:  "nexus_judge_turn_timer_enabled",  // "true" | "false"
+  TURN_TIMER_DURATION: "nexus_judge_turn_timer_duration", // seconds per turn, default 180
+  ROTATE_ENABLED:      "nexus_judge_rotate_enabled",      // "true" | "false", default true
+  PROFILE_AVATAR:      "nexus_profile_avatar",            // art_crop URL chosen as profile picture
+  PROFILE_NAME:        "nexus_profile_name",              // display name (profile-specific override)
 } as const;

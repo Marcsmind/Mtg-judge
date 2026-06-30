@@ -1,5 +1,5 @@
 import React from "react";
-import { Shuffle, Wand2, Trophy, Settings, ChevronRight, Package } from "lucide-react";
+import { Shuffle, Wand2, Trophy, Settings, ChevronRight, Package, Library } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 
 interface MoreMenuProps {
@@ -8,6 +8,7 @@ interface MoreMenuProps {
 
 export const MoreMenu: React.FC<MoreMenuProps> = ({ onNavigate }) => {
   const menuItems = [
+    { id: "collection",  label: "My Collection", icon: Library,  color: "var(--accent-emerald)" },
     { id: "turns",       label: "Turn Order",   icon: Shuffle,  color: "var(--accent-purple)" },
     { id: "draft",       label: "Draft Mode",   icon: Package,  color: "var(--accent-cyan)"   },
     { id: "deck",        label: "Deck Builder", icon: Wand2,    color: "#a78bfa"               },

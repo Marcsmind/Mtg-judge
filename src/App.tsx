@@ -12,6 +12,7 @@ import { QuickRules } from "./views/QuickRules";
 import { Leaderboard } from "./views/Leaderboard";
 import { AIJudge } from "./views/AIJudge";
 import { Home } from "./views/Home";
+import { ProfileModal } from "./views/ProfileModal";
 const DeckBuilder = lazy(() => import("./views/DeckBuilder").then(m => ({ default: m.DeckBuilder })));
 const GameNight  = lazy(() => import("./views/GameNight").then(m => ({ default: m.GameNight })));
 const AppGuide   = lazy(() => import("./views/AppGuide").then(m => ({ default: m.AppGuide })));
@@ -45,6 +46,7 @@ function App() {
   const [optimisticTier, setOptimisticTier] = useState<import("./types/subscription").SubscriptionTier | null>(null);
   const tier = optimisticTier ?? authTier;
   const [codexOpen, setCodexOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [judgeOpen, setJudgeOpen] = useState(false);
   const [codexSearch, setCodexSearch] = useState("");
 
@@ -249,7 +251,7 @@ function App() {
       el.innerText = "🎉 Upgrade successful! Your plan is being activated…";
       Object.assign(el.style, {
         position: "fixed", bottom: "80px", left: "50%", transform: "translateX(-50%)",
-        background: "rgba(10,8,16,0.96)", border: "1px solid rgba(139,92,246,0.5)",
+        background: "rgba(10,8,16,0.96)", border: "1px solid color-mix(in srgb, var(--accent-purple) 50%, transparent)",
         borderRadius: "12px", padding: "12px 20px", color: "#fff",
         fontSize: "0.9rem", fontWeight: 600, zIndex: "9999",
         boxShadow: "0 8px 32px rgba(0,0,0,0.7)", backdropFilter: "blur(12px)",
@@ -444,6 +446,8 @@ function App() {
             tier={tier}
             onNavigate={handleNavigate}
             onSignIn={() => setAuthModalOpen(true)}
+            onOpenProfile={() => setProfileOpen(true)}
+            onGoToSettings={() => setActiveTab("settings")}
           />
         );
       case "life":
@@ -585,6 +589,15 @@ function App() {
         isOpen={codexOpen}
         onClose={() => { setCodexOpen(false); setCodexSearch(""); }}
         initialSearch={codexSearch}
+      />
+
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={profileOpen}
+        authUser={authUser}
+        onClose={() => setProfileOpen(false)}
+        onSignIn={() => { setProfileOpen(false); setAuthModalOpen(true); }}
+        onSignOut={handleSignOut}
       />
 
       {/* First-launch onboarding */}
