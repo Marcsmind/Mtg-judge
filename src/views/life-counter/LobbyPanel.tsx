@@ -212,7 +212,7 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
         </div>
         {/* Room code pill */}
         <div style={{
-          background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)",
+          background: "color-mix(in srgb, var(--accent-purple) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)",
           borderRadius: "8px", padding: "4px 12px", fontFamily: "monospace",
           fontSize: "1.1rem", fontWeight: 800, letterSpacing: "4px",
           color: "var(--accent-purple)",
@@ -296,7 +296,7 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
             <div style={{
               display: "flex", alignItems: "center", gap: "10px",
               padding: "8px 10px", borderRadius: "10px",
-              background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)",
+              background: "color-mix(in srgb, var(--accent-purple) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 25%, transparent)",
             }}>
               {/* Card art thumbnail */}
               <img
@@ -375,7 +375,7 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
                         key={i}
                         onMouseDown={() => handleSelectSuggestion(name)}
                         onMouseEnter={e => {
-                          e.currentTarget.style.background = "rgba(139,92,246,0.12)";
+                          e.currentTarget.style.background = "rgba(255,255,255,0.14)";
                           handleSuggestionHover(name);
                         }}
                         onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
@@ -406,8 +406,8 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
                     <div style={{
                       display: "flex", gap: "10px", alignItems: "flex-start",
                       padding: "10px 12px",
-                      background: "rgba(139,92,246,0.06)",
-                      borderTop: "1px solid rgba(139,92,246,0.2)",
+                      background: "color-mix(in srgb, var(--accent-purple) 6%, transparent)",
+                      borderTop: "1px solid color-mix(in srgb, var(--accent-purple) 20%, transparent)",
                     }}>
                       {/* Card image */}
                       <img
@@ -472,18 +472,18 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
                   }}
                   style={{
                     padding: "4px 10px", borderRadius: "7px",
-                    background: selfPlayer.deckId === deck.id ? "rgba(139,92,246,0.18)" : "rgba(139,92,246,0.07)",
-                    border: `1px solid ${selfPlayer.deckId === deck.id ? "rgba(139,92,246,0.5)" : "rgba(139,92,246,0.2)"}`,
+                    background: selfPlayer.deckId === deck.id ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)",
+                    border: `1px solid ${selfPlayer.deckId === deck.id ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.14)"}`,
                     color: selfPlayer.deckId === deck.id ? "var(--text-primary)" : "var(--text-secondary)",
                     fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
                     transition: "all 0.15s ease",
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = "rgba(139,92,246,0.18)";
+                    e.currentTarget.style.background = "rgba(255,255,255,0.16)";
                     e.currentTarget.style.color = "var(--text-primary)";
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = selfPlayer.deckId === deck.id ? "rgba(139,92,246,0.18)" : "rgba(139,92,246,0.07)";
+                    e.currentTarget.style.background = selfPlayer.deckId === deck.id ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)";
                     e.currentTarget.style.color = selfPlayer.deckId === deck.id ? "var(--text-primary)" : "var(--text-secondary)";
                   }}
                 >
@@ -547,8 +547,8 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
             <div key={p.deviceId} style={{
               display: "flex", alignItems: "center", gap: "10px",
               padding: "8px 10px", borderRadius: "8px",
-              background: isSelf ? "rgba(139,92,246,0.06)" : "rgba(255,255,255,0.02)",
-              border: `1px solid ${isSelf ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.05)"}`,
+              background: isSelf ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.02)",
+              border: `1px solid ${isSelf ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.05)"}`,
             }}>
               {/* Color dot */}
               <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: colorAccent, flexShrink: 0 }} />
@@ -599,13 +599,13 @@ export const LobbyPanel: React.FC<LobbyPanelProps> = ({
             display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
             padding: "12px 20px", borderRadius: "12px", cursor: allReady ? "pointer" : "not-allowed",
             background: allReady
-              ? "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(6,182,212,0.15))"
+              ? "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 25%, transparent), rgba(6,182,212,0.15))"
               : "rgba(255,255,255,0.04)",
-            border: `1.5px solid ${allReady ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
+            border: `1.5px solid ${allReady ? "color-mix(in srgb, var(--accent-purple) 50%, transparent)" : "rgba(255,255,255,0.08)"}`,
             color: allReady ? "#fff" : "var(--text-muted)",
             fontSize: "0.95rem", fontWeight: 700,
             opacity: allReady ? 1 : 0.6,
-            boxShadow: allReady ? "0 0 20px rgba(139,92,246,0.25)" : "none",
+            boxShadow: allReady ? "0 0 20px color-mix(in srgb, var(--accent-purple) 25%, transparent)" : "none",
             transition: "all 0.2s ease",
           }}
         >

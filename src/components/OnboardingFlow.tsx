@@ -8,8 +8,8 @@ interface OnboardingFlowProps {
 const SLIDES = [
   {
     icon: Gavel,
-    iconColor: "#8b5cf6",
-    iconBg: "rgba(139,92,246,0.15)",
+    iconColor: "var(--accent-purple)",
+    iconBg: "color-mix(in srgb, var(--accent-purple) 15%, transparent)",
     title: "AI Rules Judge",
     body: "Got a rules dispute? Ask the AI Judge. It reads the actual oracle text and rulings for every card you mention — just type @CardName to pull it in.",
     hint: "Powered by Google Gemini · Free 5 questions/day",
@@ -100,12 +100,16 @@ export function OnboardingFlow({ onDone }: OnboardingFlowProps) {
             height: "88px",
             borderRadius: "24px",
             background: iconBg,
-            border: `1px solid ${iconColor}40`,
+            border: iconColor.startsWith("var(")
+              ? `1px solid color-mix(in srgb, ${iconColor} 25%, transparent)`
+              : `1px solid ${iconColor}40`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             marginBottom: "28px",
-            boxShadow: `0 0 40px ${iconColor}20`,
+            boxShadow: iconColor.startsWith("var(")
+              ? `0 0 40px color-mix(in srgb, ${iconColor} 13%, transparent)`
+              : `0 0 40px ${iconColor}20`,
           }}
         >
           <Icon size={40} color={iconColor} strokeWidth={1.5} />
@@ -172,7 +176,7 @@ export function OnboardingFlow({ onDone }: OnboardingFlowProps) {
         style={{
           marginTop: "24px",
           padding: "14px 36px",
-          background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+          background: "linear-gradient(135deg, var(--accent-purple), #6d28d9)",
           border: "none",
           borderRadius: "12px",
           color: "#fff",
@@ -182,7 +186,7 @@ export function OnboardingFlow({ onDone }: OnboardingFlowProps) {
           display: "flex",
           alignItems: "center",
           gap: "8px",
-          boxShadow: "0 4px 20px rgba(139,92,246,0.4)",
+          boxShadow: "0 4px 20px color-mix(in srgb, var(--accent-purple) 40%, transparent)",
           transition: "transform 0.15s, box-shadow 0.15s",
         }}
         onMouseDown={e => (e.currentTarget.style.transform = "scale(0.97)")}

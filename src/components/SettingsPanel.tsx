@@ -222,7 +222,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
       {!isNative && <div className="glass-panel" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "24px" }}>
         
         {/* Intro */}
-        <div style={{ display: "flex", gap: "16px", background: "rgba(139, 92, 246, 0.05)", border: "1px solid rgba(139, 92, 246, 0.1)", borderRadius: "10px", padding: "16px" }}>
+        <div style={{ display: "flex", gap: "16px", background: "color-mix(in srgb, var(--accent-purple) 5%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 10%, transparent)", borderRadius: "10px", padding: "16px" }}>
           <Shield size={24} color="var(--accent-purple)" style={{ flexShrink: 0, marginTop: "2px" }} />
           <div style={{ fontSize: "0.9rem", lineHeight: 1.5 }}>
             <h4 style={{ fontWeight: 600, color: "#fff", marginBottom: "4px" }}>Personal API Key (Optional)</h4>
@@ -410,7 +410,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
           {/* Not signed in — show sign-in CTA */}
           {(!authUser || authUser.isAnonymous) && (
             <>
-              <div style={{ display: "flex", gap: "14px", background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.15)", borderRadius: "10px", padding: "14px 16px" }}>
+              <div style={{ display: "flex", gap: "14px", background: "color-mix(in srgb, var(--accent-purple) 5%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 15%, transparent)", borderRadius: "10px", padding: "14px 16px" }}>
                 <div style={{ fontSize: "0.88rem", lineHeight: 1.55, color: "var(--text-secondary)" }}>
                   <strong style={{ color: "#fff", display: "block", marginBottom: "4px" }}>Playing without an account</strong>
                   Decks and history are saved to this browser only. Create a free account to access your data from any device.
@@ -421,7 +421,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                   <button
                     onClick={onSignIn}
                     className="glass-button"
-                    style={{ padding: "10px 18px", fontSize: "0.9rem", fontWeight: 600, background: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.4)", color: "var(--accent-purple)", flex: 1 }}
+                    style={{ padding: "10px 18px", fontSize: "0.9rem", fontWeight: 600, background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)", color: "var(--accent-purple)", flex: 1 }}
                   >
                     <LogIn size={15} />
                     <span>Sign In / Create Account</span>
@@ -469,8 +469,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
                     className="glass-button"
                     disabled={!displayName.trim()}
                     style={{
-                      background: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.15)",
-                      borderColor: displayNameSaved ? "var(--accent-emerald)" : "rgba(139,92,246,0.4)",
+                      background: displayNameSaved ? "var(--accent-emerald)" : "color-mix(in srgb, var(--accent-purple) 15%, transparent)",
+                      borderColor: displayNameSaved ? "var(--accent-emerald)" : "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
                       color: "#fff",
                     }}
                   >
@@ -551,7 +551,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ apiKey, setApiKey,
           <Info size={22} color="var(--accent-cyan)" />
           <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0 }}>App Resources</h2>
         </div>
-        
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
           <button
             onClick={() => onNavigate && onNavigate("rules")}

@@ -33,8 +33,15 @@ export interface ScryfallCard {
     eur?: string;
     eur_foil?: string;
   };
-  rulings_uri: string;
+  rulings_uri?: string;
   scryfall_uri: string;
+  set?: string;
+  set_name?: string;
+  collector_number?: string;
+  rarity?: string;
+  released_at?: string;
+  legalities?: Record<string, string>;
+  prints_search_uri?: string;
 }
 
 export interface ScryfallRuling {
@@ -194,6 +201,32 @@ export async function fetchCardRulings(cardId: string): Promise<ScryfallRuling[]
     return rulings;
   } catch (err) {
     console.error("Scryfall rulings fetch failed:", err);
+    return [];
+  }
+}
+
+// Fetches every printing of a card (used by the "All Prints" picker) — cached 7 days
+export async function fetchCardPrints(printsSearchUri: string): Promise<ScryfallCard[]> {
+  if (!printsSearchUri) return [];
+  const cacheKey = CACHE_PREFIX + "prints_" + printsSearchUri;
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const cached: { cards: ScryfallCard[]; ts: number } = JSON.parse(raw);
+      if (Date.now() - cached.ts < CACHE_TTL) return cached.cards;
+      localStorage.removeItem(cacheKey);
+    }
+  } catch { /* ignore cache read errors */ }
+
+  try {
+    const res = await fetch(`${printsSearchUri}${printsSearchUri.includes("?") ? "&" : "?"}order=released&dir=desc`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const cards: ScryfallCard[] = data.data || [];
+    try { localStorage.setItem(cacheKey, JSON.stringify({ cards, ts: Date.now() })); } catch { /* localStorage full */ }
+    return cards;
+  } catch (err) {
+    console.error("Scryfall prints fetch failed:", err);
     return [];
   }
 }

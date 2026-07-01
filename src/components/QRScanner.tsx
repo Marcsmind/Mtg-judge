@@ -106,7 +106,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
           <p style={{ color: "var(--accent-rose)", fontSize: "0.9rem", margin: 0 }}>{error}</p>
           <button
             onClick={onClose}
-            style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "10px", color: "var(--text-primary)", padding: "12px 28px", cursor: "pointer", fontSize: "0.9rem", fontWeight: 600 }}
+            style={{ background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)", borderRadius: "10px", color: "var(--text-primary)", padding: "12px 28px", cursor: "pointer", fontSize: "0.9rem", fontWeight: 600 }}
           >
             Close
           </button>
@@ -118,8 +118,8 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
             style={{
               width: "280px", height: "280px",
               borderRadius: "16px", overflow: "hidden",
-              border: "2px solid rgba(139,92,246,0.4)",
-              boxShadow: "0 0 40px rgba(139,92,246,0.2)",
+              border: "2px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)",
+              boxShadow: "0 0 40px color-mix(in srgb, var(--accent-purple) 20%, transparent)",
             }}
           />
           <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center" }}>

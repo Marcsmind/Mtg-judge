@@ -3,7 +3,7 @@
  *
  * Imported by:
  *   - src/views/LifeCounter.tsx
- *   - src/views/life-counter/CommanderDamageModal.tsx
+ *   - src/views/life-counter/CommanderHubModal.tsx
  *   - src/views/life-counter/GameSummaryModal.tsx
  *   - src/services/multiplayerSync.ts
  *
@@ -12,6 +12,17 @@
  */
 
 export type TokenKey = "treasure" | "food" | "clue" | "blood" | "rad";
+
+export interface PlayerMana {
+  W: number;
+  U: number;
+  B: number;
+  R: number;
+  G: number;
+  C: number;
+}
+
+export type ManaKey = keyof PlayerMana;
 
 export interface PlayerTokens {
   treasure: number;
@@ -39,8 +50,21 @@ export interface Player {
   tokens: PlayerTokens;
   enabledTokens: TokenKey[];
   tokensOpen: boolean;
-  commanderName?: string;  // set from multiplayer lobby or in-game wand button
-  deckId?: string;         // links to a SavedDeck for per-deck win tracking (local only)
+  // Mana pool (tracked in ManaModal, not shown on card)
+  mana: PlayerMana;
+  storm: number;
+  // Numeric counters (tracked in CountersModal, not shown on card)
+  energy: number;
+  experience: number;
+  generic: number;
+  ringLevel: number;  // 0 = not tempted, 1–4 = ring stages
+  commanderName?: string;        // set from multiplayer lobby or in-game wand button
+  partnerCommanderName?: string; // secondary commander for partner pairs
+  deckId?: string;               // links to a SavedDeck for per-deck win tracking (local only)
+  artOffsetX?: number;     // 0–100, background-position X; default 50
+  artOffsetY?: number;     // 0–100, background-position Y; default 35 (faces tend to be upper)
+  artZoom?: number;        // percentage of element width; undefined = CSS 'cover'
+  artUsePartner?: boolean; // if true, background art comes from partnerCommanderName
 }
 
 // ── Multiplayer Lobby ──────────────────────────────────────────────────────────

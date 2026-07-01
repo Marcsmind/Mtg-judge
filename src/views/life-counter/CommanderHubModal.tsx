@@ -3,20 +3,22 @@ import { BottomSheet } from "../../components/BottomSheet";
 import { searchCardFuzzy, getCardImage } from "../../services/scryfall";
 import type { ScryfallCard } from "../../services/scryfall";
 import type { Player, ManaKey } from "../../types/game";
-import { Crown, Trash2, X } from "lucide-react";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-type HubTab = "commander" | "counters" | "mana";
+import type { ColorTheme, HubTab } from "./GameContext";
+import {
+  Crown, Trash2, X, Pencil, Plus, Check,
+  CloudLightning, Hexagon, Zap, Skull, Star, CircleDot, Radiation,
+  ChevronLeft, ChevronRight,
+} from "lucide-react";
 
 type CounterKey = "generic" | "energy" | "poison" | "experience" | "ringLevel" | "storm" | "rad";
 
 export interface CommanderHubModalProps {
   player: Player;
+  allPlayers: Player[];
+  colors: Record<string, ColorTheme>;
 
-  onUpdateArt: (x: number, y: number, zoom: number | undefined) => void;
+  onSetArtSource: (usePartner: boolean) => void;
   onClearCommander: () => void;
-  onSetPartnerCommander: (name: string) => void;
   onClearPartnerCommander: () => void;
 
   adjustTax: (id: number, isPartner: boolean, amount: number) => void;
@@ -33,6 +35,8 @@ export interface CommanderHubModalProps {
   adjustMana: (id: number, color: ManaKey, delta: number) => void;
   adjustStorm: (id: number, delta: number) => void;
   clearMana: (id: number) => void;
+
+  onAdjustDamage: (targetId: number, sourceId: number, suffix: string, amount: number) => void;
 
   onOpenEdit: () => void;
   onClose: () => void;
@@ -58,31 +62,37 @@ const RING_STAGES = [
   "Dominated",
 ];
 
-const COUNTER_DEFS: { key: CounterKey; label: string; emoji: string; color: string; max?: number }[] = [
-  { key: "storm",      label: "Storm",      emoji: "⛈",  color: "#818cf8" },
-  { key: "generic",    label: "Generic",    emoji: "⬡",  color: "#94a3b8" },
-  { key: "energy",     label: "Energy",     emoji: "⚡", color: "#fbbf24" },
-  { key: "poison",     label: "Poison",     emoji: "💀", color: "#10b981", max: 10 },
-  { key: "experience", label: "Experience", emoji: "⭐", color: "#a78bfa" },
-  { key: "ringLevel",  label: "The Ring",   emoji: "💍", color: "#c084fc", max: 4 },
-  { key: "rad",        label: "Radiation",  emoji: "☢️", color: "#84cc16" },
+const COUNTER_DEFS: { key: CounterKey; label: string; Icon: React.ElementType; color: string; max?: number }[] = [
+  { key: "storm",      label: "Storm",      Icon: CloudLightning, color: "#818cf8" },
+  { key: "generic",    label: "Generic",    Icon: Hexagon,        color: "#94a3b8" },
+  { key: "energy",     label: "Energy",     Icon: Zap,            color: "#fbbf24" },
+  { key: "poison",     label: "Poison",     Icon: Skull,          color: "#10b981", max: 10 },
+  { key: "experience", label: "Experience", Icon: Star,           color: "#a78bfa" },
+  { key: "ringLevel",  label: "The Ring",   Icon: CircleDot,      color: "#c084fc", max: 4 },
+  { key: "rad",        label: "Radiation",  Icon: Radiation,      color: "#84cc16" },
 ];
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
   player: p,
-  onUpdateArt, onClearCommander,
-  onSetPartnerCommander, onClearPartnerCommander,
+  allPlayers, colors,
+  onSetArtSource, onClearCommander,
+  onClearPartnerCommander,
   adjustTax, togglePartner,
   adjustCounter, clearCounters,
   assignMonarch, releaseMonarch, assignInitiative, releaseInitiative, toggleCityBlessing,
   adjustMana, adjustStorm, clearMana,
+  onAdjustDamage,
   onOpenEdit, onClose,
   initialTab = "commander",
 }) => {
   const [activeTab, setActiveTab] = useState<HubTab>(initialTab);
-  const [flipped, setFlipped] = useState(false);
+
+  // Zoom overlay state
+  const [zoomedCardSide, setZoomedCardSide] = useState<"main" | "partner" | null>(null);
+  const [rulings, setRulings] = useState<{ published_at: string; comment: string }[] | null>(null);
+  const [rulingsLoading, setRulingsLoading] = useState(false);
 
   // Commander card images
   const [mainCard, setMainCard]       = useState<ScryfallCard | null>(null);
@@ -90,19 +100,16 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
   const [mainLoading, setMainLoading] = useState(false);
   const [partnerLoading, setPartnerLoading] = useState(false);
 
-  // Partner search
-  const [partnerInput, setPartnerInput]           = useState(p.partnerCommanderName ?? "");
-  const [partnerSuggestions, setPartnerSuggestions] = useState<ScryfallCard[]>([]);
-  const [showPartnerSug, setShowPartnerSug]         = useState(false);
-  const partnerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const partnerInputRef    = useRef<HTMLInputElement>(null);
-
-  // Swipe detection
+  // Tab-swipe detection
   const touchStartX    = useRef(0);
   const touchStartTime = useRef(0);
   const touchStartEl   = useRef<EventTarget | null>(null);
 
-  const TAB_ORDER: HubTab[] = ["commander", "counters", "mana"];
+  // Zoom-overlay swipe detection (separate refs to avoid conflict)
+  const zoomTouchX    = useRef(0);
+  const zoomTouchTime = useRef(0);
+
+  const TAB_ORDER: HubTab[] = ["commander", "damage", "counters", "mana"];
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current    = e.touches[0].clientX;
@@ -118,7 +125,8 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
     const dt = Date.now() - touchStartTime.current;
     if (Math.abs(dx) > 50 && dt < 400) {
       const idx = TAB_ORDER.indexOf(activeTab);
-      if (dx < 0 && idx < 2) setActiveTab(TAB_ORDER[idx + 1]);
+      const last = TAB_ORDER.length - 1;
+      if (dx < 0 && idx < last) setActiveTab(TAB_ORDER[idx + 1]);
       if (dx > 0 && idx > 0) setActiveTab(TAB_ORDER[idx - 1]);
     }
   };
@@ -145,29 +153,20 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
     return () => { cancelled = true; };
   }, [p.partnerCommanderName]);
 
-  // Keep partnerInput in sync so clearing the partner resets the search field
-  useEffect(() => { setPartnerInput(p.partnerCommanderName ?? ""); }, [p.partnerCommanderName]);
-
-  // Partner autocomplete debounce
-  const onPartnerInputChange = (val: string) => {
-    setPartnerInput(val);
-    if (partnerDebounceRef.current) clearTimeout(partnerDebounceRef.current);
-    if (val.length < 2) { setPartnerSuggestions([]); setShowPartnerSug(false); return; }
-    partnerDebounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(val)}&include_extras=false`);
-        const json = await res.json();
-        setPartnerSuggestions((json.data ?? []).slice(0, 6).map((name: string) => ({ name } as ScryfallCard)));
-        setShowPartnerSug(true);
-      } catch { /* ignore */ }
-    }, 280);
-  };
-
-  const confirmPartner = (name: string) => {
-    onSetPartnerCommander(name);
-    setPartnerInput(name);
-    setShowPartnerSug(false);
-  };
+  // Fetch Scryfall rulings when zoom is opened or switched
+  useEffect(() => {
+    if (!zoomedCardSide) return;
+    const card = zoomedCardSide === "main" ? mainCard : partnerCard;
+    setRulings(null);
+    if (!card?.rulings_uri) { setRulings([]); return; }
+    setRulingsLoading(true);
+    let cancelled = false;
+    fetch(card.rulings_uri)
+      .then(r => r.json())
+      .then(data => { if (!cancelled) { setRulings(data.data ?? []); setRulingsLoading(false); } })
+      .catch(() => { if (!cancelled) { setRulings([]); setRulingsLoading(false); } });
+    return () => { cancelled = true; };
+  }, [zoomedCardSide, mainCard, partnerCard]);
 
   // Derive values
   const getCounterVal = (key: CounterKey): number => {
@@ -186,28 +185,34 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
 
   // ── Tab bar ──────────────────────────────────────────────────────────────────
 
+  const TAB_LABELS: Record<HubTab, string> = {
+    commander: "Commander",
+    damage:    "Damage",
+    counters:  "Counters",
+    mana:      "Mana",
+  };
+
   const TabBar = () => (
     <div style={{
       display: "flex", gap: "4px",
       background: "rgba(0,0,0,0.3)", borderRadius: "10px", padding: "3px",
       marginBottom: "16px",
     }}>
-      {(["commander", "counters", "mana"] as HubTab[]).map(tab => (
+      {TAB_ORDER.map(tab => (
         <button
           key={tab}
           onClick={() => setActiveTab(tab)}
           style={{
             flex: 1, padding: "8px 4px",
-            background: activeTab === tab ? "rgba(139,92,246,0.35)" : "transparent",
-            border: activeTab === tab ? "1px solid rgba(139,92,246,0.5)" : "1px solid transparent",
+            background: activeTab === tab ? "rgba(255,255,255,0.16)" : "transparent",
+            border: activeTab === tab ? "1px solid rgba(255,255,255,0.3)" : "1px solid transparent",
             borderRadius: "8px",
             color: activeTab === tab ? "#fff" : "var(--text-muted)",
-            fontSize: "0.75rem", fontWeight: activeTab === tab ? 700 : 500,
+            fontSize: "0.72rem", fontWeight: activeTab === tab ? 700 : 500,
             cursor: "pointer", transition: "all 0.15s",
-            textTransform: "capitalize",
           }}
         >
-          {tab === "commander" ? "⚔ Commander" : tab === "counters" ? "🎯 Counters" : "🔮 Mana"}
+          {TAB_LABELS[tab]}
         </button>
       ))}
     </div>
@@ -215,76 +220,69 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
 
   // ── Commander Tab ─────────────────────────────────────────────────────────────
 
-  const CommanderTab = () => (
-    <div>
-      {/* Card flip display */}
-      <div
-        style={{ perspective: "800px", marginBottom: "12px", cursor: hasPartner ? "pointer" : "default" }}
-        onClick={() => hasPartner && setFlipped(f => !f)}
-      >
-        <div style={{
-          position: "relative", transformStyle: "preserve-3d",
-          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-          transition: "transform 0.45s ease",
-          height: "200px",
-        }}>
-          {/* Front: main commander */}
-          <div style={{
-            position: "absolute", inset: 0, backfaceVisibility: "hidden",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            {!p.commanderName ? (
-              <div style={{
-                width: "140px", height: "196px", borderRadius: "10px",
-                background: "rgba(255,255,255,0.05)", border: "2px dashed rgba(255,255,255,0.15)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px",
-              }}>
-                <Crown size={28} color="rgba(255,255,255,0.25)" />
-                <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", textAlign: "center" }}>No commander set</span>
-              </div>
-            ) : mainLoading ? (
-              <div style={{ width: "140px", height: "196px", borderRadius: "10px", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Loading…</span>
-              </div>
-            ) : mainImgSrc ? (
-              <img src={mainImgSrc} alt={p.commanderName} style={{ height: "196px", borderRadius: "10px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }} />
-            ) : (
-              <div style={{
-                width: "140px", height: "196px", borderRadius: "10px",
-                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", padding: "12px" }}>{p.commanderName}</span>
-              </div>
-            )}
-          </div>
-          {/* Back: partner commander */}
-          {hasPartner && (
+  const CommanderTab = () => {
+    const renderCardSlot = (side: "main" | "partner") => {
+      const name    = side === "main" ? p.commanderName : p.partnerCommanderName;
+      const img     = side === "main" ? mainImgSrc      : partnerImgSrc;
+      const loading = side === "main" ? mainLoading     : partnerLoading;
+      return (
+        <div
+          onClick={() => name && setZoomedCardSide(side)}
+          style={{ cursor: name ? "pointer" : "default", borderRadius: "8px" }}
+        >
+          {!name ? (
             <div style={{
-              position: "absolute", inset: 0, backfaceVisibility: "hidden",
-              transform: "rotateY(180deg)",
-              display: "flex", alignItems: "center", justifyContent: "center",
+              width: hasPartner ? "130px" : "150px",
+              height: hasPartner ? "182px" : "210px",
+              borderRadius: "10px",
+              background: "rgba(255,255,255,0.05)", border: "2px dashed rgba(255,255,255,0.15)",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px",
             }}>
-              {partnerLoading ? (
-                <div style={{ width: "140px", height: "196px", borderRadius: "10px", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Loading…</span>
-                </div>
-              ) : partnerImgSrc ? (
-                <img src={partnerImgSrc} alt={p.partnerCommanderName} style={{ height: "196px", borderRadius: "10px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)" }} />
-              ) : (
-                <div style={{ width: "140px", height: "196px", borderRadius: "10px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", padding: "12px" }}>{p.partnerCommanderName}</span>
-                </div>
-              )}
+              <Crown size={hasPartner ? 22 : 28} color="rgba(255,255,255,0.25)" />
+              <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "0 10px" }}>
+                {side === "main" ? "No commander set" : "No partner set"}
+              </span>
+            </div>
+          ) : loading ? (
+            <div style={{ width: hasPartner ? "130px" : "150px", height: hasPartner ? "182px" : "210px", borderRadius: "10px", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>Loading…</span>
+            </div>
+          ) : img ? (
+            <img
+              src={img} alt={name}
+              style={{ width: hasPartner ? "130px" : "150px", borderRadius: "10px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)", display: "block" }}
+            />
+          ) : (
+            <div style={{ width: hasPartner ? "130px" : "150px", height: hasPartner ? "182px" : "210px", borderRadius: "10px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textAlign: "center", padding: "12px" }}>{name}</span>
             </div>
           )}
         </div>
+      );
+    };
+
+    return (
+    <div>
+      {/* Side-by-side card display */}
+      <div style={{ display: "flex", gap: hasPartner ? "12px" : 0, justifyContent: "center", marginBottom: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+          {hasPartner && <span style={{ fontSize: "0.58rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 600 }}>Commander</span>}
+          {renderCardSlot("main")}
+          {p.commanderName && <span style={{ fontSize: "0.58rem", color: "var(--text-muted)" }}>Tap to view</span>}
+        </div>
         {hasPartner && (
-          <div style={{ textAlign: "center", fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "4px" }}>
-            Tap to flip • {flipped ? (p.partnerCommanderName ?? "Partner") : (p.commanderName ?? "Main")}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+            <span style={{ fontSize: "0.58rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 600 }}>Partner</span>
+            {renderCardSlot("partner")}
+            {p.partnerCommanderName && <span style={{ fontSize: "0.58rem", color: "var(--text-muted)" }}>Tap to view</span>}
           </div>
         )}
       </div>
+      {hasPartner && (p.commanderName || p.partnerCommanderName) && (
+        <div style={{ textAlign: "center", fontSize: "0.6rem", color: "var(--text-muted)", marginBottom: "10px" }}>
+          Tap a card • Swipe left/right in the detail view to switch
+        </div>
+      )}
 
       {/* Art source selector (when both commanders are set) */}
       {p.commanderName && p.partnerCommanderName && (
@@ -297,11 +295,11 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
             return (
               <button
                 key={label}
-                onClick={() => onUpdateArt(p.artOffsetX ?? 50, p.artOffsetY ?? 35, p.artZoom)}
+                onClick={() => onSetArtSource(artPartner)}
                 style={{
                   flex: 1, padding: "7px 4px",
-                  background: active ? "rgba(139,92,246,0.25)" : "rgba(0,0,0,0.25)",
-                  border: `1px solid ${active ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
+                  background: active ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.25)",
+                  border: `1px solid ${active ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`,
                   borderRadius: "8px",
                   color: active ? "#fff" : "var(--text-muted)",
                   fontSize: "0.68rem", fontWeight: active ? 700 : 500,
@@ -320,7 +318,7 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
         {p.commanderName ? (
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)",
+            background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)",
             borderRadius: "10px", padding: "10px 12px",
           }}>
             <div>
@@ -339,7 +337,7 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
             onClick={() => { onClose(); setTimeout(onOpenEdit, 60); }}
             style={{
               width: "100%", padding: "12px",
-              background: "rgba(139,92,246,0.15)", border: "1px dashed rgba(139,92,246,0.4)",
+              background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)", border: "1px dashed color-mix(in srgb, var(--accent-purple) 40%, transparent)",
               borderRadius: "10px", color: "var(--accent-purple)", fontWeight: 600,
               fontSize: "0.9rem", cursor: "pointer",
             }}
@@ -353,64 +351,34 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
       {p.partnerMode && (
         <div style={{ marginBottom: "12px" }}>
           <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: "6px" }}>Partner Commander</div>
-          {/* Input is always mounted so iOS focus() works within the tap gesture */}
-          <div style={{ position: "relative" }}>
-            <input
-              ref={partnerInputRef}
-              value={partnerInput}
-              onChange={e => onPartnerInputChange(e.target.value)}
-              onFocus={() => partnerInput.length >= 2 && setShowPartnerSug(true)}
-              onBlur={() => setTimeout(() => setShowPartnerSug(false), 150)}
-              placeholder="Search partner commander…"
-              style={{
-                width: "100%", padding: "10px 12px", boxSizing: "border-box",
-                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-                borderRadius: "10px", color: "#fff", fontSize: "0.88rem",
-                outline: "none",
-              }}
-            />
-            {showPartnerSug && partnerSuggestions.length > 0 && (
-              <div style={{
-                position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-                background: "#1e1a2e", border: "1px solid rgba(139,92,246,0.3)",
-                borderRadius: "10px", zIndex: 10, overflow: "hidden",
-              }}>
-                {partnerSuggestions.map(s => (
-                  <button
-                    key={s.name}
-                    onMouseDown={() => confirmPartner(s.name)}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left",
-                      padding: "10px 14px", background: "none", border: "none",
-                      color: "var(--text-primary)", fontSize: "0.85rem", cursor: "pointer",
-                      borderBottom: "1px solid rgba(255,255,255,0.05)",
-                    }}
-                  >
-                    {s.name}
-                  </button>
-                  ))}
-                </div>
-              )}
-            {/* Display overlay — sits on top of the input when a partner is already set */}
-            {p.partnerCommanderName && (
-              <div style={{
-                position: "absolute", inset: 0,
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)",
-                borderRadius: "10px", padding: "0 12px",
-              }}>
-                <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#fff" }}>{p.partnerCommanderName}</span>
-                <button
-                  onClick={() => {
-                    onClearPartnerCommander();
-                  }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "4px", display: "flex" }}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            )}
+          {p.partnerCommanderName ? (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)",
+              borderRadius: "10px", padding: "10px 12px",
+            }}>
+              <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#fff" }}>{p.partnerCommanderName}</span>
+              <button
+                onClick={onClearPartnerCommander}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "4px", display: "flex" }}
+              >
+                <X size={14} />
+              </button>
             </div>
+          ) : (
+            <button
+              onClick={() => { onClose(); setTimeout(onOpenEdit, 60); }}
+              style={{
+                width: "100%", padding: "12px",
+                background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)", border: "1px dashed color-mix(in srgb, var(--accent-purple) 40%, transparent)",
+                borderRadius: "10px", color: "var(--accent-purple)", fontWeight: 600,
+                fontSize: "0.9rem", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+              }}
+            >
+              <Plus size={14} /> Set Partner Commander
+            </button>
+          )}
         </div>
       )}
 
@@ -421,7 +389,7 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
           <span style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-secondary)" }}>Main</span>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <button onClick={() => adjustTax(p.id, false, -2)} style={taxBtnStyle}><span style={{ fontSize: "0.85rem", fontWeight: 700 }}>−</span></button>
-            <span style={{ fontSize: "1.4rem", fontWeight: 900, color: p.tax > 0 ? "#a855f7" : "var(--text-muted)", minWidth: "32px", textAlign: "center" }}>{p.tax}</span>
+            <span style={{ fontSize: "1.4rem", fontWeight: 900, color: p.tax > 0 ? "var(--accent-purple)" : "var(--text-muted)", minWidth: "32px", textAlign: "center" }}>{p.tax}</span>
             <button onClick={() => adjustTax(p.id, false, 2)} style={taxBtnStyle}><span style={{ fontSize: "0.85rem", fontWeight: 700 }}>+</span></button>
           </div>
         </div>
@@ -430,7 +398,7 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
             <span style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-secondary)" }}>Partner</span>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <button onClick={() => adjustTax(p.id, true, -2)} style={taxBtnStyle}><span style={{ fontSize: "0.85rem", fontWeight: 700 }}>−</span></button>
-              <span style={{ fontSize: "1.4rem", fontWeight: 900, color: p.taxPartner > 0 ? "#a855f7" : "var(--text-muted)", minWidth: "32px", textAlign: "center" }}>{p.taxPartner}</span>
+              <span style={{ fontSize: "1.4rem", fontWeight: 900, color: p.taxPartner > 0 ? "var(--accent-purple)" : "var(--text-muted)", minWidth: "32px", textAlign: "center" }}>{p.taxPartner}</span>
               <button onClick={() => adjustTax(p.id, true, 2)} style={taxBtnStyle}><span style={{ fontSize: "0.85rem", fontWeight: 700 }}>+</span></button>
             </div>
           </div>
@@ -442,13 +410,14 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
         onClick={() => togglePartner(p.id)}
         style={{
           width: "100%", padding: "10px",
-          background: p.partnerMode ? "rgba(168,85,247,0.12)" : "rgba(255,255,255,0.04)",
-          border: `1px solid ${p.partnerMode ? "rgba(168,85,247,0.35)" : "rgba(255,255,255,0.08)"}`,
-          borderRadius: "10px", color: p.partnerMode ? "#a855f7" : "var(--text-secondary)",
+          background: p.partnerMode ? "color-mix(in srgb, var(--accent-purple) 12%, transparent)" : "rgba(255,255,255,0.04)",
+          border: `1px solid ${p.partnerMode ? "color-mix(in srgb, var(--accent-purple) 35%, transparent)" : "rgba(255,255,255,0.08)"}`,
+          borderRadius: "10px", color: p.partnerMode ? "var(--accent-purple)" : "var(--text-secondary)",
           fontWeight: 600, fontSize: "0.85rem", cursor: "pointer", marginBottom: "10px",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
         }}
       >
-        {p.partnerMode ? "✓ Partner Mode On  — Disable" : "+ Enable Partner Mode"}
+        {p.partnerMode ? (<><Check size={14} /> Partner Mode On — Disable</>) : (<><Plus size={14} /> Enable Partner Mode</>)}
       </button>
 
       {/* Edit button */}
@@ -460,13 +429,15 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
             background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: "10px", color: "var(--text-secondary)",
             fontWeight: 500, fontSize: "0.85rem", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
           }}
         >
-          ✏ Edit Commander / Player Name
+          <Pencil size={13} /> Edit Commander / Player Name
         </button>
       )}
     </div>
-  );
+    );
+  };
 
   // ── Counters Tab ──────────────────────────────────────────────────────────────
 
@@ -491,7 +462,7 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
 
       {/* Counters */}
       <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginBottom: "14px" }}>
-        {COUNTER_DEFS.map(({ key, label, emoji, color, max }) => {
+        {COUNTER_DEFS.map(({ key, label, Icon, color, max }) => {
           const val = getCounterVal(key);
           const atMax = max !== undefined && val >= max;
           const subLabel = key === "ringLevel" ? RING_STAGES[val] : key === "poison" ? `${val}/10` : undefined;
@@ -503,7 +474,7 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
               borderRadius: "10px", padding: "9px 12px",
               transition: "background 0.15s, border-color 0.15s",
             }}>
-              <span style={{ fontSize: "1.1rem", marginRight: "10px" }}>{emoji}</span>
+              <Icon size={18} color={val > 0 ? color : "var(--text-muted)"} style={{ marginRight: "10px", flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: "0.85rem", fontWeight: 700, color: val > 0 ? color : "var(--text-secondary)" }}>{label}</div>
                 {subLabel && <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", marginTop: "1px" }}>{subLabel}</div>}
@@ -583,26 +554,101 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
 
       {/* Storm */}
       <div style={{
-        background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.3)",
+        background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)",
         borderRadius: "12px", padding: "12px 14px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <div>
-          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#fff" }}>⛈ Storm</div>
+          <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
+            <CloudLightning size={15} color="var(--accent-purple)" /> Storm
+          </div>
           <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "2px" }}>Copies cast this turn</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <button onClick={() => adjustStorm(p.id, -1)} style={{ background: "rgba(0,0,0,0.3)", border: "none", color: "#fff", width: "32px", height: "32px", borderRadius: "8px", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}>−</button>
-          <span style={{ fontSize: "1.4rem", fontWeight: 900, color: "#a855f7", minWidth: "28px", textAlign: "center" }}>{p.storm ?? 0}</span>
+          <span style={{ fontSize: "1.4rem", fontWeight: 900, color: "var(--accent-purple)", minWidth: "28px", textAlign: "center" }}>{p.storm ?? 0}</span>
           <button onClick={() => adjustStorm(p.id, 1)} style={{ background: "rgba(0,0,0,0.3)", border: "none", color: "#fff", width: "32px", height: "32px", borderRadius: "8px", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}>+</button>
         </div>
       </div>
     </div>
   );
 
+  // ── Damage Tab ─────────────────────────────────────────────────────────────────
+
+  const DamageTab = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <p style={{ color: "var(--text-secondary)", fontSize: "0.7rem", margin: 0 }}>
+        21+ from one commander = loss.
+      </p>
+      {allPlayers
+        .filter(sp => sp.id !== p.id)
+        .map(src => {
+          const sTheme = colors[src.colorName] || colors.purple;
+
+          const renderBlock = (suffix: string, label: string) => {
+            const key = `${src.id}${suffix}`;
+            const dmg = p.commanderDamage[key] ?? 0;
+            const pct = Math.min(100, (dmg / 21) * 100);
+            return (
+              <div key={key} style={{
+                background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: "10px", padding: "10px 12px",
+                display: "flex", flexDirection: "column", gap: "7px",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: sTheme.accent, display: "block", flexShrink: 0 }} />
+                    <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{label}</span>
+                  </div>
+                  <span style={{ fontSize: "1rem", fontWeight: 800, color: dmg >= 21 ? "var(--accent-rose)" : "var(--text-primary)" }}>
+                    {dmg} / 21
+                  </span>
+                </div>
+                <div style={{ height: "4px", width: "100%", background: "rgba(255,255,255,0.05)", borderRadius: "2px", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: dmg >= 21 ? "var(--accent-rose)" : sTheme.accent, transition: "width 0.3s ease" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px" }}>
+                  {[-1, 1, 5].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => onAdjustDamage(p.id, src.id, suffix, amt)}
+                      disabled={amt < 0 && dmg === 0}
+                      style={{
+                        width: "36px", height: "30px",
+                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: "6px", cursor: amt < 0 && dmg === 0 ? "not-allowed" : "pointer",
+                        color: "#fff", fontSize: "0.78rem", fontWeight: 700,
+                        opacity: amt < 0 && dmg === 0 ? 0.3 : 1,
+                      }}
+                    >
+                      {amt > 0 ? `+${amt}` : amt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div key={src.id} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {renderBlock("", `${src.name}'s Commander`)}
+              {src.partnerMode && renderBlock("_B", `${src.name}'s Partner`)}
+            </div>
+          );
+        })}
+    </div>
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
+  // Zoom-overlay derived values
+  const zoomedCard = zoomedCardSide === "main" ? mainCard    : partnerCard;
+  const zoomedImg  = zoomedCardSide === "main" ? mainImgSrc  : partnerImgSrc;
+  const zoomedName = zoomedCardSide === "main" ? p.commanderName : p.partnerCommanderName;
+  const canSwitch  = hasPartner && !!p.commanderName && !!p.partnerCommanderName;
+
   return (
+    <>
     <BottomSheet
       onClose={onClose}
       zIndex={1000}
@@ -612,8 +658,20 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
       aria-label={`${p.name} Commander Hub`}
     >
       {/* Player name header */}
-      <div style={{ textAlign: "center", marginBottom: "14px" }}>
-        <div style={{ fontSize: "1rem", fontWeight: 800, color: "#fff" }}>{p.name}</div>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: "14px" }}>
+        <div style={{ width: "32px" }} />
+        <div style={{ flex: 1, textAlign: "center", fontSize: "1rem", fontWeight: 800, color: "#fff" }}>{p.name}</div>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: "50%", width: "32px", height: "32px", color: "#fff",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}
+        >
+          <X size={16} />
+        </button>
       </div>
 
       {/* Tab bar */}
@@ -626,10 +684,146 @@ export const CommanderHubModal: React.FC<CommanderHubModalProps> = ({
         style={{ overflowY: "auto", maxHeight: "65dvh" }}
       >
         {activeTab === "commander" && <CommanderTab />}
+        {activeTab === "damage"    && <DamageTab />}
         {activeTab === "counters"  && <CountersTab />}
         {activeTab === "mana"      && <ManaTab />}
       </div>
     </BottomSheet>
+
+    {/* ── Card zoom overlay ──────────────────────────────────────────── */}
+    {zoomedCardSide && (
+      <BottomSheet onClose={() => setZoomedCardSide(null)} zIndex={1100} maxWidth="440px" padding="16px">
+        <div
+          onTouchStart={e => { zoomTouchX.current = e.touches[0].clientX; zoomTouchTime.current = Date.now(); }}
+          onTouchEnd={e => {
+            const dx = e.changedTouches[0].clientX - zoomTouchX.current;
+            const dt = Date.now() - zoomTouchTime.current;
+            if (canSwitch && Math.abs(dx) > 50 && dt < 400) {
+              setZoomedCardSide(prev => prev === "main" ? "partner" : "main");
+            }
+          }}
+        >
+          {/* Header: prev/next + close */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+            <button
+              onClick={() => canSwitch && setZoomedCardSide(prev => prev === "main" ? "partner" : "main")}
+              disabled={!canSwitch}
+              style={{
+                background: canSwitch ? "rgba(255,255,255,0.08)" : "transparent",
+                border: "none", borderRadius: "8px", padding: "6px",
+                color: canSwitch ? "#fff" : "transparent", cursor: canSwitch ? "pointer" : "default",
+                display: "flex", alignItems: "center",
+              }}
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div style={{ textAlign: "center", flex: 1 }}>
+              <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "2px" }}>
+                {zoomedCardSide === "main" ? "Commander" : "Partner Commander"}
+              </div>
+              <div style={{ fontWeight: 700, fontSize: "1rem", color: "#fff", lineHeight: 1.2 }}>{zoomedName}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <button
+                onClick={() => canSwitch && setZoomedCardSide(prev => prev === "main" ? "partner" : "main")}
+                disabled={!canSwitch}
+                style={{
+                  background: canSwitch ? "rgba(255,255,255,0.08)" : "transparent",
+                  border: "none", borderRadius: "8px", padding: "6px",
+                  color: canSwitch ? "#fff" : "transparent", cursor: canSwitch ? "pointer" : "default",
+                  display: "flex", alignItems: "center",
+                }}
+              >
+                <ChevronRight size={20} />
+              </button>
+              <button
+                onClick={() => setZoomedCardSide(null)}
+                style={{
+                  background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                  borderRadius: "50%", width: "30px", height: "30px", color: "#fff",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Card image */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
+            {zoomedImg ? (
+              <img
+                src={zoomedImg} alt={zoomedName ?? ""}
+                style={{ maxHeight: "290px", borderRadius: "12px", boxShadow: "0 12px 40px rgba(0,0,0,0.7)", display: "block" }}
+              />
+            ) : (
+              <div style={{ width: "200px", height: "280px", borderRadius: "12px", background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>No image</span>
+              </div>
+            )}
+          </div>
+
+          {/* Type line + mana cost */}
+          {zoomedCard && (
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              background: "rgba(255,255,255,0.04)", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px",
+            }}>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>{zoomedCard.type_line ?? "—"}</span>
+              {zoomedCard.mana_cost && (
+                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                  {zoomedCard.mana_cost}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Oracle text */}
+          {zoomedCard?.oracle_text && (
+            <div style={{
+              background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "10px", padding: "12px 14px", marginBottom: "14px",
+            }}>
+              <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                {zoomedCard.oracle_text}
+              </div>
+            </div>
+          )}
+
+          {/* Rulings */}
+          <div>
+            <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontWeight: 600, letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: "8px" }}>
+              Rulings
+            </div>
+            {rulingsLoading ? (
+              <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Loading rulings…</div>
+            ) : rulings && rulings.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {rulings.map((r, i) => (
+                  <div key={i} style={{
+                    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
+                    borderRadius: "8px", padding: "10px 12px",
+                  }}>
+                    <div style={{ fontSize: "0.6rem", color: "var(--text-muted)", marginBottom: "4px" }}>{r.published_at}</div>
+                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>{r.comment}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>No official rulings.</div>
+            )}
+          </div>
+
+          {/* Swipe hint */}
+          {canSwitch && (
+            <div style={{ textAlign: "center", marginTop: "16px", fontSize: "0.62rem", color: "var(--text-muted)" }}>
+              ← Swipe to see {zoomedCardSide === "main" ? "Partner Commander" : "Commander"} →
+            </div>
+          )}
+        </div>
+      </BottomSheet>
+    )}
+    </>
   );
 };
 

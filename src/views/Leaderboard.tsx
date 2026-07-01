@@ -377,8 +377,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ authUser, onLinkGoogle
                   style={{
                     display: "flex", alignItems: "center", gap: "12px",
                     padding: "10px 14px", borderRadius: "10px",
-                    background: isMine ? "rgba(139,92,246,0.08)" : rank === 0 ? "rgba(234,179,8,0.05)" : "rgba(255,255,255,0.02)",
-                    border: `1px solid ${isMine ? "rgba(139,92,246,0.3)" : rank === 0 ? "rgba(234,179,8,0.2)" : "rgba(255,255,255,0.04)"}`,
+                    background: isMine ? "color-mix(in srgb, var(--accent-purple) 8%, transparent)" : rank === 0 ? "rgba(234,179,8,0.05)" : "rgba(255,255,255,0.02)",
+                    border: `1px solid ${isMine ? "color-mix(in srgb, var(--accent-purple) 30%, transparent)" : rank === 0 ? "rgba(234,179,8,0.2)" : "rgba(255,255,255,0.04)"}`,
                   }}
                 >
                   <span style={{ fontSize: rank < 3 ? "1.1rem" : "0.78rem", width: "28px", textAlign: "center", flexShrink: 0, fontWeight: 700, color: "var(--text-muted)" }}>

@@ -96,8 +96,8 @@ export const SaveGameModal: React.FC<SaveGameModalProps> = ({
         <div style={{
           margin: "16px 24px 4px",
           padding: "12px 16px",
-          background: "rgba(139,92,246,0.07)",
-          border: "1px solid rgba(139,92,246,0.18)",
+          background: "color-mix(in srgb, var(--accent-purple) 7%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--accent-purple) 18%, transparent)",
           borderRadius: "10px",
         }}>
           <p style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--accent-purple)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
@@ -112,10 +112,10 @@ export const SaveGameModal: React.FC<SaveGameModalProps> = ({
           padding: "12px 24px 24px", overflowY: "auto", maxHeight: "55vh",
         }}>
           {confirm && (
-            <div style={{ margin: "0 0 8px", padding: "12px 16px", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ margin: "0 0 8px", padding: "12px 16px", background: "color-mix(in srgb, var(--accent-purple) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 25%, transparent)", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
               <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{confirm.message}</p>
               <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={() => resolveConfirm(true)} className="glass-button" style={{ flex: 1, justifyContent: "center", fontSize: "0.82rem", padding: "7px", background: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.4)" }}>Confirm</button>
+                <button onClick={() => resolveConfirm(true)} className="glass-button" style={{ flex: 1, justifyContent: "center", fontSize: "0.82rem", padding: "7px", background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)" }}>Confirm</button>
                 <button onClick={() => resolveConfirm(false)} className="glass-button" style={{ flex: 1, justifyContent: "center", fontSize: "0.82rem", padding: "7px" }}>Cancel</button>
               </div>
             </div>
@@ -188,8 +188,8 @@ const SlotRow: React.FC<SlotRowProps> = ({ index, slot, onSave, onLoad, onDelete
     {/* Slot number badge */}
     <div style={{
       width: "28px", height: "28px", borderRadius: "8px",
-      background: slot ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.04)",
-      border: `1px solid ${slot ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.06)"}`,
+      background: slot ? "color-mix(in srgb, var(--accent-purple) 15%, transparent)" : "rgba(255,255,255,0.04)",
+      border: `1px solid ${slot ? "color-mix(in srgb, var(--accent-purple) 30%, transparent)" : "rgba(255,255,255,0.06)"}`,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontSize: "0.75rem", fontWeight: 700,
       color: slot ? "var(--accent-purple)" : "var(--text-muted)",
@@ -254,9 +254,9 @@ const SlotRow: React.FC<SlotRowProps> = ({ index, slot, onSave, onLoad, onDelete
         onClick={onSave}
         title={slot ? "Overwrite this save" : "Save here"}
         className="glass-button"
-        style={{ padding: "5px 10px", fontSize: "0.75rem", background: "rgba(139,92,246,0.08)", borderColor: "rgba(139,92,246,0.2)", color: "var(--accent-purple)" }}
-        onMouseEnter={e => (e.currentTarget.style.background = "rgba(139,92,246,0.18)")}
-        onMouseLeave={e => (e.currentTarget.style.background = "rgba(139,92,246,0.08)")}
+        style={{ padding: "5px 10px", fontSize: "0.75rem", background: "color-mix(in srgb, var(--accent-purple) 8%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 20%, transparent)", color: "var(--accent-purple)" }}
+        onMouseEnter={e => (e.currentTarget.style.background = "color-mix(in srgb, var(--accent-purple) 18%, transparent)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "color-mix(in srgb, var(--accent-purple) 8%, transparent)")}
       >
         <Save size={13} />
         {slot ? "Overwrite" : "Save"}

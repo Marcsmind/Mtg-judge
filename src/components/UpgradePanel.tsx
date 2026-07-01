@@ -157,8 +157,8 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
             style={{
               justifyContent: "center", padding: "11px",
               fontWeight: 700, fontSize: "0.9rem",
-              background: "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(6,182,212,0.15) 100%)",
-              borderColor: "rgba(139,92,246,0.4)",
+              background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 25%, transparent) 0%, rgba(6,182,212,0.15) 100%)",
+              borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
             }}
           >
             Create Free Account
@@ -225,7 +225,7 @@ export const UpgradePanel: React.FC<UpgradePanelProps> = ({ tier, authUser, tria
           onClick={() => handleUpgrade("pro_annual", offering?.annual ?? undefined)}
           disabled={loading !== null}
           className="glass-button"
-          style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px", padding: "16px", border: "1.5px solid rgba(139,92,246,0.4)", position: "relative", opacity: loading === "pro_annual" ? 0.7 : 1 }}
+          style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px", padding: "16px", border: "1.5px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)", position: "relative", opacity: loading === "pro_annual" ? 0.7 : 1 }}
         >
           <div style={{ position: "absolute", top: "-10px", right: "10px", background: "var(--accent-emerald)", color: "#fff", fontSize: "0.68rem", fontWeight: 700, padding: "2px 7px", borderRadius: "10px" }}>
             SAVE 42%

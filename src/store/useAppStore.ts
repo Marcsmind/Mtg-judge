@@ -17,6 +17,11 @@ interface AppStore {
   // NOT persisted — one-shot signal that clears after AIJudge consumes it
   pendingTagCard: ScryfallCard | null;
   setPendingTagCard: (card: ScryfallCard | null) => void;
+
+  // Ephemeral cross-component signal: CardCodex "Add to Collection" → Collection view
+  // NOT persisted — one-shot signal that clears after Collection consumes it
+  pendingAddToCollectionCard: ScryfallCard | null;
+  setPendingAddToCollectionCard: (card: ScryfallCard | null) => void;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -38,6 +43,10 @@ export const useAppStore = create<AppStore>()(
       // pendingTagCard is intentionally NOT in partialize so it is never persisted
       pendingTagCard: null,
       setPendingTagCard: (card) => set({ pendingTagCard: card }),
+
+      // pendingAddToCollectionCard is intentionally NOT in partialize so it is never persisted
+      pendingAddToCollectionCard: null,
+      setPendingAddToCollectionCard: (card) => set({ pendingAddToCollectionCard: card }),
     }),
     {
       name: STORAGE_KEYS.CARD_HISTORY,

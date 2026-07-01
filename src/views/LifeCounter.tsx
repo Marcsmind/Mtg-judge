@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Scale, WifiOff, Copy, Timer, Square, Play, Pause, SkipForward, Crown, Skull, Swords, Star, Undo2, X, BookOpen, Home, Dices } from "lucide-react";
+import { History, Menu, Settings2, Check, Moon, Save, Trophy, RefreshCw, Wifi, Scale, WifiOff, Copy, Timer, Square, Play, Pause, SkipForward, Crown, Swords, Star, Undo2, X, BookOpen, Home, Dices, Handshake, RotateCcw, XCircle } from "lucide-react";
 import type { TabId } from "../constants/tabIds";
 import { useGameTimer } from "../hooks/useGameTimer";
 import { loadDecks, recordDeckResult } from "../services/decks";
@@ -10,10 +10,8 @@ import { clearPersistedState } from "../services/multiplayerSync";
 import type { Player, ActiveCounters, DayNightState, TokenKey, LobbyPlayer } from "../types/game";
 import { isSupabaseConfigured } from "../services/supabase";
 import { HistoryModal } from "./life-counter/HistoryModal";
-import { CommanderDamageModal } from "./life-counter/CommanderDamageModal";
 import { SaveGameModal, MAX_SLOTS } from "./life-counter/SaveGameModal";
 import type { GameSnapshot } from "./life-counter/SaveGameModal";
-import { GameSummaryModal } from "./life-counter/GameSummaryModal";
 import { TokenModal } from "./life-counter/TokenModal";
 import { PlayerProfileModal } from "./life-counter/PlayerProfileModal";
 import { CommanderHubModal } from "./life-counter/CommanderHubModal";
@@ -21,6 +19,7 @@ import { EndGameModal } from "./life-counter/EndGameModal";
 import { PlayerCard } from "./life-counter/PlayerCard";
 import { TableView } from "./life-counter/TableView";
 import { GameProvider } from "./life-counter/GameContext";
+import type { HubTab } from "./life-counter/GameContext";
 import { DayNightBanner } from "./life-counter/DayNightBanner";
 import { TableCenter } from "./life-counter/TableCenter";
 import { useWakeLock } from "../hooks/useWakeLock";
@@ -32,6 +31,8 @@ import { useToast } from "../components/Toast";
 import { BottomSheet } from "../components/BottomSheet";
 import { track } from "../services/analytics";
 import { DiceAndCoins } from "./DiceAndCoins";
+import { DiceQuickAccess } from "../components/DiceQuickAccess";
+import { useDiceActions } from "../hooks/useDiceActions";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 // Player, PlayerTokens, TokenKey, DayNightState, ActiveCounters are imported
@@ -53,13 +54,12 @@ const colors = {
 };
 const colorKeys = Object.keys(colors) as Array<keyof typeof colors>;
 
-const MECHANICS_CONFIG: { key: keyof ActiveCounters; label: string; Icon: React.ElementType; color: string; desc: string }[] = [
-  { key: "monarch",      label: "Monarch",         Icon: Crown,     color: "#eab308", desc: "One player holds the crown" },
-  { key: "initiative",   label: "The Initiative",  Icon: Swords,    color: "#06b6d4", desc: "Venture into the Undercity" },
-  { key: "poison",       label: "Poison (Infect)",  Icon: Skull,     color: "#10b981", desc: "10 counters = loss" },
-  { key: "cityBlessing", label: "City's Blessing",  Icon: Star,      color: "#eab308", desc: "Ascend: 10+ permanents" },
-  { key: "dayNight",     label: "Day / Night",      Icon: Moon,      color: "#8b5cf6", desc: "Transform day/night cards" },
-  // "tokens" removed — tokens are now per-player toggles, not a global mechanic
+const MECHANICS_CONFIG: { key: keyof ActiveCounters; label: string; Icon: React.ElementType; color: string }[] = [
+  { key: "monarch",      label: "Monarch",         Icon: Crown,  color: "#eab308" },
+  { key: "initiative",   label: "Initiative",      Icon: Swords, color: "#06b6d4" },
+  { key: "cityBlessing", label: "City's Blessing", Icon: Star,   color: "#eab308" },
+  { key: "dayNight",     label: "Day / Night",     Icon: Moon,   color: "#8b5cf6" },
+  // Poison removed — tracked per-player via the token panel
 ];
 
 // parseSavedPlayer is imported from src/utils/playerUtils.ts so it can be
@@ -212,12 +212,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [activeDamageEditor, setActiveDamageEditor] = useState<number | null>(null);
-  const [showCountersMenu, setShowCountersMenu] = useState(false);
   const [tokenPlayer, setTokenPlayer] = useState<number | null>(null);
   const [hubPlayer, setHubPlayer] = useState<number | null>(null);
+  const [hubInitialTab, setHubInitialTab] = useState<HubTab>("commander");
   const [setupPlayer, setSetupPlayer] = useState<number | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
 
   // ── Saved decks (for SetCommanderModal "From My Decks" picker) ──
@@ -229,11 +227,11 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
   // ── Save-game modal + slots ──
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
   const [showEndGame, setShowEndGame] = useState(false);
 
   // Modals
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetWinnerChoice, setResetWinnerChoice] = useState<number | "draw" | null>(null);
   const [showHomeConfirm,  setShowHomeConfirm]  = useState(false);
   const [showDiceModal,    setShowDiceModal]    = useState(false);
   const [savedGames, setSavedGames] = useState<(GameSnapshot | null)[]>(() => {
@@ -303,6 +301,29 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     return s !== null ? parseInt(s, 10) : null;
   });
 
+  // ── Dice & Misc: shared roll/flip/randomize state for the modal + quick-access popup ──
+  const diceActions = useDiceActions(players, myPlayerIndex);
+  const [showDiceQuickAccess, setShowDiceQuickAccess] = useState(false);
+  const diceLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const diceLongPressFiredRef = useRef(false);
+  const handleDicePointerDown = () => {
+    diceLongPressFiredRef.current = false;
+    diceLongPressTimerRef.current = setTimeout(() => {
+      diceLongPressFiredRef.current = true;
+      setShowDiceQuickAccess(true);
+    }, 450);
+  };
+  const handleDicePointerUp = () => {
+    if (diceLongPressTimerRef.current) clearTimeout(diceLongPressTimerRef.current);
+  };
+  const handleDiceClick = () => {
+    if (diceLongPressFiredRef.current) {
+      diceLongPressFiredRef.current = false;
+      return;
+    }
+    setShowDiceModal(true);
+  };
+
 
 
   // ── Multiplayer (extracted into useMultiplayer hook) ──
@@ -342,16 +363,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     if (dayNightState !== "none") localStorage.setItem(STORAGE_KEYS.DAY_NIGHT, dayNightState);
     else localStorage.removeItem(STORAGE_KEYS.DAY_NIGHT);
   }, [dayNightState]);
-
-  // Close Mechanics menu on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowCountersMenu(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
 
   // ── Actions ──
   const addLog = (msg: string) => {
@@ -487,18 +498,22 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
     addLog(`Starting life changed to ${life}. All players updated.`);
   };
 
-  const resetGame = () => setShowResetConfirm(true);
+  const resetGame = () => { setResetWinnerChoice(null); setShowResetConfirm(true); };
 
   /** Shared reset logic used by both "End & Record" confirm and "Skip & Reset". */
   const doReset = (recorded: boolean) => {
     scheduleBroadcast();
+    const winnerName = resetWinnerChoice === "draw" ? null
+      : resetWinnerChoice !== null ? players.find(p => p.id === resetWinnerChoice)?.name ?? null
+      : null;
     setPlayers(prev => prev.map(p => ({
       ...p, life: startingLife, tax: 0, taxPartner: 0,
       commanderDamage: {}, isMonarch: false, hasInitiative: false,
       cityBlessing: false, poison: 0, rad: 0,
       tokens: { treasure: 0, food: 0, clue: 0, blood: 0, rad: 0 },
     })));
-    setHistory([`Game reset! ${recorded ? "(recorded to leaderboard) " : ""}All life set to ${startingLife}.`]);
+    const outcome = resetWinnerChoice === "draw" ? " Result: Draw." : winnerName ? ` ${winnerName} won.` : "";
+    setHistory([`Game reset!${outcome} ${recorded ? "(recorded to leaderboard) " : ""}All life set to ${startingLife}.`]);
   };
 
   /** Record the game to Supabase and then reset the board. */
@@ -601,6 +616,12 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   const updatePlayerArt = (playerId: number, x: number, y: number, zoom: number | undefined) => {
     setPlayers(prev => prev.map(p =>
       p.id === playerId ? { ...p, artOffsetX: x, artOffsetY: y, artZoom: zoom } : p
+    ));
+  };
+
+  const setPlayerArtSource = (playerId: number, usePartner: boolean) => {
+    setPlayers(prev => prev.map(p =>
+      p.id === playerId ? { ...p, artUsePartner: usePartner } : p
     ));
   };
 
@@ -790,7 +811,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
 
   // ── Dynamic layout SVG previews ──
-  const FILL_ACTIVE = "var(--accent-purple)";
+  const FILL_ACTIVE = "#fff";
   const FILL_INACTIVE = "rgba(255,255,255,0.35)";
 
   // Scorekeeper icon: all cells same brightness — everyone faces the phone holder
@@ -846,7 +867,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
   // Table icon: top-row cells dimmer — those players face away (toward them), bottom-row cells bright (facing you)
   const getTableSvg = (n: number, fill: string): React.ReactNode => {
     const f = fill;
-    const fDim = fill === FILL_ACTIVE ? "rgba(139,92,246,0.38)" : "rgba(255,255,255,0.18)";
+    const fDim = fill === FILL_ACTIVE ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.18)";
     if (n === 2) return (
       // 2P side-by-side: two tall portrait cards next to each other
       <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
@@ -894,8 +915,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
 
 
-  const hasAnyActive = Object.values(activeCounters).some(Boolean);
-  const activeCount  = Object.values(activeCounters).filter(Boolean).length;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -969,8 +988,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 className="touch-icon-btn"
                 style={{
                   display: "flex", alignItems: "center", gap: "6px",
-                  background: "rgba(139,92,246,0.12)",
-                  border: "1px solid rgba(139,92,246,0.3)",
+                  background: "color-mix(in srgb, var(--accent-purple) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)",
                   borderRadius: "8px", padding: "7px 10px",
                   color: "var(--accent-purple)",
                   cursor: "pointer", fontSize: "0.72rem", fontWeight: 600,
@@ -1042,18 +1061,57 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               <div style={{ flex: 1 }} />
               <button
                 onClick={() => setShowControlsModal(false)}
+                aria-label="Close"
                 style={{
                   background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: "20px", padding: "6px 16px", color: "#fff",
-                  fontWeight: 700, fontSize: "0.82rem", cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: "6px",
+                  borderRadius: "50%", width: "32px", height: "32px", color: "#fff",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
-                <X size={14} />
-                <span>Done</span>
+                <X size={16} />
               </button>
             </div>
-            
+
+            {/* Quick Tools */}
+            <div style={{ display: "flex", gap: "16px", justifyContent: "center", marginBottom: "20px" }}>
+              <button
+                onClick={() => { setShowControlsModal(false); setShowHomeConfirm(true); }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}
+              >
+                <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Home size={22} color="var(--accent-purple)" />
+                </div>
+                <span style={{ fontSize: "0.72rem", fontWeight: 600 }}>Home</span>
+              </button>
+              <button
+                onClick={() => { setShowControlsModal(false); window.dispatchEvent(new CustomEvent("open-codex")); }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}
+              >
+                <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <BookOpen size={22} color="var(--accent-cyan)" />
+                </div>
+                <span style={{ fontSize: "0.72rem", fontWeight: 600 }}>Card Codex</span>
+              </button>
+              <button
+                onClick={() => { setShowControlsModal(false); setShowHistoryModal(true); }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}
+              >
+                <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <History size={22} color="var(--accent-purple)" />
+                </div>
+                <span style={{ fontSize: "0.72rem", fontWeight: 600 }}>Game History</span>
+              </button>
+              <button
+                onClick={() => { setShowControlsModal(false); resetGame(); }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)" }}
+              >
+                <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <RotateCcw size={22} color="#ef4444" />
+                </div>
+                <span style={{ fontSize: "0.72rem", fontWeight: 600 }}>Restart</span>
+              </button>
+            </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
               {/* Starting Life Selector */}
@@ -1110,8 +1168,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                         title={desc}
                         style={{
                           width: "52px", height: "42px", borderRadius: "8px", cursor: "pointer",
-                          background: isActive ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
-                          border: `1.5px solid ${isActive ? "var(--accent-purple)" : "rgba(255,255,255,0.1)"}`,
+                          background: isActive ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.04)",
+                          border: `1.5px solid ${isActive ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"}`,
                           padding: "5px", display: "flex", alignItems: "center", justifyContent: "center",
                           transition: "all 0.15s ease",
                         }}
@@ -1195,103 +1253,52 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 )}
               </div>
 
-              {/* Mechanics Menu */}
-              <div style={{ position: "relative" }} ref={menuRef}>
+              {/* Mechanics — inline chips, no dropdown */}
+              <div>
+                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: "8px" }}>Mechanics</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {MECHANICS_CONFIG.map(({ key, label, Icon, color }) => {
+                    const isActive = activeCounters[key];
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => toggleMechanic(key)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "6px",
+                          padding: "6px 12px", borderRadius: "20px", cursor: "pointer", border: "1px solid",
+                          background: isActive ? `${color}20` : "rgba(255,255,255,0.04)",
+                          borderColor: isActive ? `${color}60` : "rgba(255,255,255,0.1)",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <Icon size={13} color={isActive ? color : "var(--text-muted)"} />
+                        <span style={{ fontSize: "0.78rem", fontWeight: 600, color: isActive ? "#fff" : "var(--text-secondary)" }}>{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Keep Screen Awake */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-color)", borderRadius: "8px", padding: "8px 12px" }}>
+                <div>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 600 }}>Keep Screen Awake</div>
+                  <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Prevents phone from locking</div>
+                </div>
                 <button
-                  onClick={() => setShowCountersMenu(!showCountersMenu)}
-                  className="glass-button"
+                  onClick={() => { const next = !wakeLockEnabled; setWakeLockEnabled(next); localStorage.setItem(STORAGE_KEYS.WAKE_LOCK, String(next)); }}
                   style={{
-                    padding: "7px 13px", fontSize: "0.82rem",
-                    background: hasAnyActive ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.02)",
-                    borderColor: hasAnyActive ? "var(--accent-purple)" : "rgba(255,255,255,0.1)",
+                    width: "40px", height: "22px", borderRadius: "11px", border: "none", cursor: "pointer",
+                    background: wakeLockEnabled ? "var(--accent-emerald)" : "rgba(255,255,255,0.15)",
+                    position: "relative", transition: "background 0.2s ease", flexShrink: 0,
                   }}
                 >
-                  <Settings2 size={14} color={hasAnyActive ? "var(--accent-purple)" : "var(--text-secondary)"} />
-                  <span>Mechanics</span>
-                  {hasAnyActive && (
-                    <span style={{ background: "var(--accent-purple)", borderRadius: "50%", width: "17px", height: "17px", fontSize: "0.65rem", fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                      {activeCount}
-                    </span>
-                  )}
-                </button>
-
-                {showCountersMenu && (
                   <div style={{
-                    position: "absolute", top: "calc(100% + 8px)", left: 0, width: "250px",
-                    background: "rgba(12,9,20,0.99)", border: "1px solid var(--border-color)",
-                    borderRadius: "14px", boxShadow: "0 16px 48px rgba(0,0,0,0.7)", padding: "14px",
-                    zIndex: 100, display: "flex", flexDirection: "column", gap: "4px",
-                  }}>
-                    <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: "8px", letterSpacing: "0.8px", textTransform: "uppercase" }}>
-                      Enable Game Mechanics
-                    </div>
-                    {MECHANICS_CONFIG.map(({ key, label, Icon, color, desc }) => {
-                      const isActive = activeCounters[key];
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => toggleMechanic(key)}
-                          style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            background: isActive ? `${color}18` : "transparent",
-                            border: `1px solid ${isActive ? `${color}40` : "transparent"}`,
-                            color: "#fff", cursor: "pointer",
-                            padding: "8px 10px", borderRadius: "9px", textAlign: "left",
-                            transition: "all 0.15s ease", width: "100%",
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <div style={{
-                              width: "30px", height: "30px", borderRadius: "8px",
-                              background: isActive ? `${color}28` : "rgba(255,255,255,0.05)",
-                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                            }}>
-                              <Icon size={15} color={isActive ? color : "var(--text-muted)"} />
-                            </div>
-                            <div>
-                              <div style={{ fontSize: "0.87rem", fontWeight: 600, color: isActive ? "#fff" : "var(--text-secondary)" }}>{label}</div>
-                              <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{desc}</div>
-                            </div>
-                          </div>
-                          {isActive && <Check size={14} color={color} style={{ flexShrink: 0 }} />}
-                        </button>
-                      );
-                    })}
-
-                    <div style={{ width: "100%", height: "1px", background: "var(--border-color)", margin: "4px 0" }} />
-
-                    <button
-                      onClick={() => {
-                        const next = !wakeLockEnabled;
-                        setWakeLockEnabled(next);
-                        localStorage.setItem(STORAGE_KEYS.WAKE_LOCK, String(next));
-                      }}
-                      style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        background: wakeLockEnabled ? "rgba(16,185,129,0.1)" : "transparent",
-                        border: `1px solid ${wakeLockEnabled ? "rgba(16,185,129,0.25)" : "transparent"}`,
-                        color: "#fff", cursor: "pointer",
-                        padding: "8px 10px", borderRadius: "9px", textAlign: "left",
-                        transition: "all 0.15s ease", width: "100%",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <div style={{
-                          width: "30px", height: "30px", borderRadius: "8px",
-                          background: wakeLockEnabled ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)",
-                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                        }}>
-                          <Moon size={15} color={wakeLockEnabled ? "#10b981" : "var(--text-muted)"} />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: "0.87rem", fontWeight: 600, color: wakeLockEnabled ? "#fff" : "var(--text-secondary)" }}>Keep Screen Awake</div>
-                          <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Prevents phone from locking</div>
-                        </div>
-                      </div>
-                      {wakeLockEnabled && <Check size={14} color="#10b981" style={{ flexShrink: 0 }} />}
-                    </button>
-                  </div>
-                )}
+                    position: "absolute", top: "3px", left: wakeLockEnabled ? "21px" : "3px",
+                    width: "16px", height: "16px", borderRadius: "50%", background: "#fff",
+                    transition: "left 0.2s ease",
+                  }} />
+                </button>
               </div>
 
 
@@ -1306,25 +1313,14 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                 <span>Games</span>
               </button>
 
-              {/* Game Summary */}
+              {/* End Game — shows summary then offers record to leaderboard */}
               <button
-                onClick={() => setShowSummary(true)}
+                onClick={() => { setShowControlsModal(false); setShowEndGame(true); }}
                 className="glass-button"
-                style={{ padding: "7px 13px", fontSize: "0.82rem", background: "rgba(234,179,8,0.06)", borderColor: "rgba(234,179,8,0.2)" }}
-              >
-                <Trophy size={14} color="#eab308" />
-                <span>Summary</span>
-              </button>
-
-              {/* End & Record — opens EndGameModal */}
-              <button
-                onClick={() => setShowEndGame(true)}
-                className="glass-button"
-                title="Record this game to the leaderboard, then reset"
-                style={{ padding: "7px 13px", fontSize: "0.82rem", background: "rgba(139,92,246,0.08)", borderColor: "rgba(139,92,246,0.25)" }}
+                style={{ padding: "7px 13px", fontSize: "0.82rem", background: "color-mix(in srgb, var(--accent-purple) 8%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 25%, transparent)" }}
               >
                 <Trophy size={14} color="var(--accent-purple)" />
-                <span>End &amp; Record</span>
+                <span>End Game</span>
               </button>
 
               {/* Reset */}
@@ -1387,7 +1383,7 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
                       onClick={handleCreateRoom}
                       disabled={roomLoading}
                       className="glass-button"
-                      style={{ flexShrink: 0, padding: "6px 12px", fontSize: "0.8rem", background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)" }}
+                      style={{ flexShrink: 0, padding: "6px 12px", fontSize: "0.8rem", background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 25%, transparent)" }}
                     >
                       <Wifi size={13} color="var(--accent-purple)" />
                       <span>{roomLoading ? "Connecting…" : "Create Room"}</span>
@@ -1485,31 +1481,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
               )}
             </div>
 
-            {/* ── Navigate ── */}
-            {onNavigate && (
-              <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "16px", marginTop: "4px" }}>
-                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: "10px" }}>Navigate</div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {([
-                    { tab: "home",       label: "Home",       icon: "🏠" },
-                    { tab: "dice",       label: "Dice",       icon: "🎲" },
-                    { tab: "turns",      label: "Turn Order", icon: "🔄" },
-                    { tab: "collection", label: "Collection", icon: "📦" },
-                    { tab: "leaderboard",label: "Leaderboard",icon: "🏆" },
-                  ] as { tab: TabId; label: string; icon: string }[]).map(({ tab, label, icon }) => (
-                    <button
-                      key={tab}
-                      onClick={() => { setShowControlsModal(false); onNavigate(tab); }}
-                      className="glass-button"
-                      style={{ fontSize: "0.75rem", padding: "6px 12px" }}
-                    >
-                      <span>{icon}</span>
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </BottomSheet>
         )}
 
@@ -1526,8 +1497,8 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           <div className="first-player-flash" style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
             padding: "10px 28px", borderRadius: "10px", flexShrink: 0,
-            background: "linear-gradient(135deg, rgba(139,92,246,0.18) 0%, rgba(6,182,212,0.10) 100%)",
-            border: "1px solid rgba(139,92,246,0.35)",
+            background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 18%, transparent) 0%, rgba(6,182,212,0.10) 100%)",
+            border: "1px solid color-mix(in srgb, var(--accent-purple) 35%, transparent)",
           }}>
             <span style={{ fontSize: "1.1rem" }}>⭐</span>
             <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
@@ -1545,9 +1516,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             actions={{
               adjustLife, adjustPoison, renamePlayer, toggleCityBlessing,
               togglePlayerTokensPanel: (id) => setTokenPlayer(id),
-              openCommanderHub:        (id) => setHubPlayer(id),
+              openCommanderHub:        (id, tab) => { setHubPlayer(id); setHubInitialTab(tab ?? "commander"); },
               openPlayerSetup:         (id) => setSetupPlayer(id),
-              setActiveDamageEditor, revivePlayer,
+              revivePlayer,
               onSetCommander: setPlayerCommander, onClearCommander: clearPlayerCommander,
             }}
           >
@@ -1555,62 +1526,73 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             {(() => {
               const hubBar = (
                 <div style={{
-                  flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center",
+                  flexShrink: 0, display: "flex", alignItems: "center",
                   gap: "4px", padding: "6px 12px",
                   background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)",
                 }}>
-                  {/* Room badge */}
-                  {roomConnected && roomCode && (
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: "4px",
-                      background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)",
-                      borderRadius: "20px", padding: "3px 8px", marginRight: "4px",
-                    }}>
-                      <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
-                      <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--accent-emerald)" }}>{roomCode}</span>
+                  {/* Room badge + turn timer — left-aligned, only shown when active */}
+                  {(roomConnected && roomCode) || turnTimerEnabled ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                      {roomConnected && roomCode && (
+                        <div style={{
+                          display: "flex", alignItems: "center", gap: "4px",
+                          background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)",
+                          borderRadius: "20px", padding: "3px 8px", marginRight: "4px",
+                        }}>
+                          <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
+                          <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--accent-emerald)" }}>{roomCode}</span>
+                        </div>
+                      )}
+                      {turnTimerEnabled && (
+                        <>
+                          <span style={{
+                            fontSize: "1rem", fontWeight: 900, fontFamily: "'Outfit', monospace",
+                            color: turnTimerRemaining === 0 ? "#ef4444" : turnTimerRemaining < 30 ? "#f59e0b" : "#fff",
+                            minWidth: "42px", textAlign: "center",
+                          }}>{formatTurnTimer(turnTimerRemaining)}</span>
+                          <button onClick={() => setTurnTimerRunning(r => !r)} style={{ background: "none", border: "none", cursor: "pointer", color: turnTimerRunning ? "#ef4444" : "var(--text-secondary)", padding: "6px", display: "flex" }}>
+                            {turnTimerRunning ? <Pause size={16} /> : <Play size={16} />}
+                          </button>
+                          <button onClick={resetTurnTimer} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "6px", display: "flex" }}>
+                            <SkipForward size={16} />
+                          </button>
+                          <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.12)", margin: "0 4px" }} />
+                        </>
+                      )}
                     </div>
-                  )}
-                  {/* Turn timer inline (2P) */}
-                  {turnTimerEnabled && (
-                    <>
-                      <span style={{
-                        fontSize: "1rem", fontWeight: 900, fontFamily: "'Outfit', monospace",
-                        color: turnTimerRemaining === 0 ? "#ef4444" : turnTimerRemaining < 30 ? "#f59e0b" : "#fff",
-                        minWidth: "42px", textAlign: "center",
-                      }}>{formatTurnTimer(turnTimerRemaining)}</span>
-                      <button onClick={() => setTurnTimerRunning(r => !r)} style={{ background: "none", border: "none", cursor: "pointer", color: turnTimerRunning ? "#ef4444" : "var(--text-secondary)", padding: "6px", display: "flex" }}>
-                        {turnTimerRunning ? <Pause size={16} /> : <Play size={16} />}
-                      </button>
-                      <button onClick={resetTurnTimer} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "6px", display: "flex" }}>
-                        <SkipForward size={16} />
-                      </button>
-                      <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.12)", margin: "0 4px" }} />
-                    </>
-                  )}
-                  {/* Home */}
-                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
-                    <Home size={20} />
-                  </button>
-                  {/* AI Judge */}
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
-                    <Scale size={20} />
-                  </button>
-                  {/* Card Codex */}
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex / Search" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
-                    <BookOpen size={20} />
-                  </button>
-                  {/* Dice */}
-                  <button onClick={() => setShowDiceModal(true)} aria-label="Dice & Coins" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
-                    <Dices size={20} />
-                  </button>
-                  {/* History */}
-                  <button onClick={() => setShowHistoryModal(true)} aria-label="History" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
-                    <History size={20} />
-                  </button>
-                  {/* Settings hub */}
-                  <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
-                    <Menu size={20} />
-                  </button>
+                  ) : null}
+
+                  {/* Nav icons */}
+                  <div style={{ display: "flex", alignItems: "center", flex: 1, justifyContent: "space-around" }}>
+                    {/* Home */}
+                    <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
+                      <Home size={20} />
+                    </button>
+                    {/* AI Judge */}
+                    <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
+                      <Scale size={20} />
+                    </button>
+                    {/* Settings hub */}
+                    <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
+                      <Menu size={20} />
+                    </button>
+                    {/* Dice — tap opens the full modal, hold opens quick access */}
+                    <button
+                      onClick={handleDiceClick}
+                      onPointerDown={handleDicePointerDown}
+                      onPointerUp={handleDicePointerUp}
+                      onPointerLeave={handleDicePointerUp}
+                      onPointerCancel={handleDicePointerUp}
+                      aria-label="Dice & Misc (hold for quick access)"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}
+                    >
+                      <Dices size={20} />
+                    </button>
+                    {/* Restart */}
+                    <button onClick={resetGame} aria-label="Restart Game" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}>
+                      <RotateCcw size={20} />
+                    </button>
+                  </div>
                 </div>
               );
 
@@ -1643,9 +1625,9 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             actions={{
               adjustLife, adjustPoison, renamePlayer, toggleCityBlessing,
               togglePlayerTokensPanel: (id) => setTokenPlayer(id),
-              openCommanderHub:        (id) => setHubPlayer(id),
+              openCommanderHub:        (id, tab) => { setHubPlayer(id); setHubInitialTab(tab ?? "commander"); },
               openPlayerSetup:         (id) => setSetupPlayer(id),
-              setActiveDamageEditor, revivePlayer,
+              revivePlayer,
               onSetCommander: setPlayerCommander, onClearCommander: clearPlayerCommander,
             }}
           >
@@ -1675,27 +1657,42 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
               /* Compact icon-only hub bar (shared across all player counts) */
               const hubBar = (
-                <div style={{ flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center", gap: "4px", padding: "6px 12px", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)" }}>
-                  {roomConnected && roomCode && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "20px", padding: "3px 8px", marginRight: "4px" }}>
-                      <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
-                      <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--accent-emerald)" }}>{roomCode}</span>
+                <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "4px", padding: "6px 12px", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)" }}>
+                  {(roomConnected && roomCode) || turnTimerEnabled ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                      {roomConnected && roomCode && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: "20px", padding: "3px 8px", marginRight: "4px" }}>
+                          <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--accent-emerald)", animation: "pulse-glow 1.5s infinite" }} />
+                          <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--accent-emerald)" }}>{roomCode}</span>
+                        </div>
+                      )}
+                      {turnTimerEnabled && (
+                        <>
+                          <span style={{ fontSize: "1rem", fontWeight: 900, fontFamily: "'Outfit', monospace", color: turnTimerRemaining === 0 ? "#ef4444" : turnTimerRemaining < 30 ? "#f59e0b" : "#fff", minWidth: "42px", textAlign: "center" }}>{formatTurnTimer(turnTimerRemaining)}</span>
+                          <button onClick={() => setTurnTimerRunning(r => !r)} style={{ background: "none", border: "none", cursor: "pointer", color: turnTimerRunning ? "#ef4444" : "var(--text-secondary)", padding: "6px", display: "flex" }}>{turnTimerRunning ? <Pause size={16} /> : <Play size={16} />}</button>
+                          <button onClick={resetTurnTimer} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "6px", display: "flex" }}><SkipForward size={16} /></button>
+                          <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.12)", margin: "0 4px" }} />
+                        </>
+                      )}
                     </div>
-                  )}
-                  {turnTimerEnabled && (
-                    <>
-                      <span style={{ fontSize: "1rem", fontWeight: 900, fontFamily: "'Outfit', monospace", color: turnTimerRemaining === 0 ? "#ef4444" : turnTimerRemaining < 30 ? "#f59e0b" : "#fff", minWidth: "42px", textAlign: "center" }}>{formatTurnTimer(turnTimerRemaining)}</span>
-                      <button onClick={() => setTurnTimerRunning(r => !r)} style={{ background: "none", border: "none", cursor: "pointer", color: turnTimerRunning ? "#ef4444" : "var(--text-secondary)", padding: "6px", display: "flex" }}>{turnTimerRunning ? <Pause size={16} /> : <Play size={16} />}</button>
-                      <button onClick={resetTurnTimer} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", padding: "6px", display: "flex" }}><SkipForward size={16} /></button>
-                      <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.12)", margin: "0 4px" }} />
-                    </>
-                  )}
-                  <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Home size={20} /></button>
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Scale size={20} /></button>
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("open-codex"))} aria-label="Card Codex / Search" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><BookOpen size={20} /></button>
-                  <button onClick={() => setShowDiceModal(true)} aria-label="Dice & Coins" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Dices size={20} /></button>
-                  <button onClick={() => setShowHistoryModal(true)} aria-label="History" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><History size={20} /></button>
-                  <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Menu size={20} /></button>
+                  ) : null}
+
+                  {/* Nav icons */}
+                  <div style={{ display: "flex", alignItems: "center", flex: 1, justifyContent: "space-around" }}>
+                    <button onClick={() => setShowHomeConfirm(true)} aria-label="Home" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Home size={20} /></button>
+                    <button onClick={() => window.dispatchEvent(new CustomEvent("open-ai-judge"))} aria-label="AI Judge" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Scale size={20} /></button>
+                    <button onClick={() => setShowControlsModal(true)} aria-label="Settings" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><Menu size={20} /></button>
+                    <button
+                      onClick={handleDiceClick}
+                      onPointerDown={handleDicePointerDown}
+                      onPointerUp={handleDicePointerUp}
+                      onPointerLeave={handleDicePointerUp}
+                      onPointerCancel={handleDicePointerUp}
+                      aria-label="Dice & Misc (hold for quick access)"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}
+                    ><Dices size={20} /></button>
+                    <button onClick={resetGame} aria-label="Restart Game" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", padding: "8px", display: "flex" }}><RotateCcw size={20} /></button>
+                  </div>
                 </div>
               );
 
@@ -1824,20 +1821,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
       </div>
 
-      {/* ── Commander Damage Modal ── */}
-      {activeDamageEditor !== null && (() => {
-        const target = players.find(p => p.id === activeDamageEditor);
-        if (!target) return null;
-        return (
-          <CommanderDamageModal
-            targetPlayer={target}
-            allPlayers={players}
-            colors={colors}
-            onAdjust={adjustCommanderDamage}
-            onClose={() => setActiveDamageEditor(null)}
-          />
-        );
-      })()}
 
       {/* ── Save / Load Game Modal ── */}
       {showSaveModal && (
@@ -1849,11 +1832,6 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
           onDelete={handleDeleteGame}
           onClose={() => setShowSaveModal(false)}
         />
-      )}
-
-      {/* ── Game Summary Modal ── */}
-      {showSummary && (
-        <GameSummaryModal players={players} onClose={() => setShowSummary(false)} />
       )}
 
       {/* ── End Game & Record Modal ── */}
@@ -1869,11 +1847,25 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         />
       )}
 
-      {/* ── Dice & Coins modal ── */}
+      {/* ── Dice & Misc modal ── */}
       {showDiceModal && (
-        <BottomSheet onClose={() => setShowDiceModal(false)} zIndex={300} maxWidth="520px" padding="0px">
-          <DiceAndCoins />
+        <BottomSheet onClose={() => setShowDiceModal(false)} zIndex={300} maxWidth="420px" padding="0px">
+          <DiceAndCoins
+            onClose={() => setShowDiceModal(false)}
+            players={players}
+            myPlayerIndex={myPlayerIndex}
+            diceActions={diceActions}
+          />
         </BottomSheet>
+      )}
+
+      {/* ── Dice quick-access popup (long-press the dice button) ── */}
+      {showDiceQuickAccess && (
+        <DiceQuickAccess
+          onClose={() => setShowDiceQuickAccess(false)}
+          diceActions={diceActions}
+          hasPlayers={players.length > 0}
+        />
       )}
 
       {/* ── Home Confirm ── */}
@@ -1904,25 +1896,69 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
 
       {/* ── Reset Confirm ── replaces window.confirm() for iOS PWA compatibility */}
       {showResetConfirm && (
-        <BottomSheet onClose={() => setShowResetConfirm(false)} zIndex={300} maxWidth="380px" padding="24px">
-          <h3 style={{ margin: "0 0 8px", fontSize: "1.1rem", fontWeight: 600 }}>Reset Game?</h3>
-          <p style={{ margin: "0 0 20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            All players will be set back to {startingLife} life and counters cleared. This cannot be undone.
+        <BottomSheet onClose={() => setShowResetConfirm(false)} zIndex={300} maxWidth="420px" padding="24px">
+          <h3 style={{ margin: "0 0 4px", fontSize: "1.2rem", fontWeight: 800 }}>Reset game</h3>
+          <p style={{ margin: "0 0 16px", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+            Select the winner (optional)
           </p>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button
-              onClick={() => setShowResetConfirm(false)}
-              className="glass-button"
-              style={{ flex: 1 }}
-            >
-              Cancel
-            </button>
+
+          {/* Player grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+            {players.map(p => {
+              const selected = resetWinnerChoice === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setResetWinnerChoice(selected ? null : p.id)}
+                  className="glass-button"
+                  style={{
+                    justifyContent: "space-between",
+                    background: selected ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.04)",
+                    borderColor: selected ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.08)",
+                    color: selected ? "#fff" : "var(--text-secondary)",
+                    fontWeight: selected ? 700 : 500,
+                  }}
+                >
+                  <span>{p.name}</span>
+                  <span style={{ fontWeight: 700 }}>{p.life}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Draw */}
+          <button
+            onClick={() => setResetWinnerChoice(resetWinnerChoice === "draw" ? null : "draw")}
+            className="glass-button"
+            style={{
+              width: "100%", justifyContent: "center", marginBottom: "16px",
+              background: resetWinnerChoice === "draw" ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.04)",
+              borderColor: resetWinnerChoice === "draw" ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.08)",
+              color: resetWinnerChoice === "draw" ? "#fff" : "var(--text-secondary)",
+              fontWeight: resetWinnerChoice === "draw" ? 700 : 500,
+            }}
+          >
+            <Handshake size={15} /> Draw
+          </button>
+
+          <p style={{ margin: "0 0 16px", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+            This will reset life back to {startingLife}. Proceed?
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <button
               onClick={() => { setShowResetConfirm(false); doReset(false); }}
               className="glass-button"
-              style={{ flex: 1, background: "rgba(244,63,94,0.1)", borderColor: "rgba(244,63,94,0.25)", color: "#f43f5e" }}
+              style={{ width: "100%", justifyContent: "center", background: "rgba(244,63,94,0.12)", borderColor: "rgba(244,63,94,0.3)", color: "#f43f5e", fontWeight: 700 }}
             >
-              Reset
+              <RotateCcw size={15} /> Reset
+            </button>
+            <button
+              onClick={() => setShowResetConfirm(false)}
+              className="glass-button"
+              style={{ width: "100%", justifyContent: "center" }}
+            >
+              <XCircle size={15} /> Cancel
             </button>
           </div>
         </BottomSheet>
@@ -1964,9 +2000,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
         return (
           <CommanderHubModal
             player={hp}
-            onUpdateArt={(x, y, zoom) => updatePlayerArt(hubPlayer, x, y, zoom)}
+            allPlayers={players}
+            colors={colors}
+            onSetArtSource={(usePartner) => setPlayerArtSource(hubPlayer, usePartner)}
             onClearCommander={() => clearPlayerCommander(hubPlayer)}
-            onSetPartnerCommander={(name) => setPartnerCommander(hubPlayer, name)}
             onClearPartnerCommander={() => clearPartnerCommander(hubPlayer)}
             adjustTax={adjustTax}
             togglePartner={togglePartner}
@@ -1980,8 +2017,10 @@ export const LifeCounter: React.FC<LifeCounterProps> = ({
             adjustMana={adjustMana}
             adjustStorm={adjustStorm}
             clearMana={clearMana}
+            onAdjustDamage={adjustCommanderDamage}
             onOpenEdit={() => { setHubPlayer(null); setTimeout(() => setSetupPlayer(hubPlayer), 60); }}
             onClose={() => setHubPlayer(null)}
+            initialTab={hubInitialTab}
           />
         );
       })()}

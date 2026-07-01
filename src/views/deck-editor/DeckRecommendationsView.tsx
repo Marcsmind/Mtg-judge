@@ -233,8 +233,8 @@ export const DeckRecommendationsView: React.FC<Props> = ({
             disabled={!hasCardList}
             title={hasCardList ? "Add to deck" : "Open deck editor to add cards first"}
             style={{
-              background: item.added ? "rgba(16,185,129,0.15)" : "rgba(139,92,246,0.12)",
-              border: `1px solid ${item.added ? "rgba(16,185,129,0.3)" : "rgba(139,92,246,0.3)"}`,
+              background: item.added ? "rgba(16,185,129,0.15)" : "color-mix(in srgb, var(--accent-purple) 12%, transparent)",
+              border: `1px solid ${item.added ? "rgba(16,185,129,0.3)" : "color-mix(in srgb, var(--accent-purple) 30%, transparent)"}`,
               borderRadius: "8px", padding: "6px 10px", cursor: hasCardList ? "pointer" : "not-allowed",
               color: item.added ? "var(--accent-emerald)" : "var(--accent-purple)",
               fontSize: "0.72rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px",
@@ -325,8 +325,8 @@ export const DeckRecommendationsView: React.FC<Props> = ({
             className="glass-button"
             style={{
               justifyContent: "center", padding: "10px 20px", fontWeight: 700,
-              background: "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(6,182,212,0.15) 100%)",
-              borderColor: "rgba(139,92,246,0.4)",
+              background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 25%, transparent) 0%, rgba(6,182,212,0.15) 100%)",
+              borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
               opacity: loading ? 0.6 : 1,
             }}
           >

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Scale, Send, Trash2, AlertCircle, BookmarkCheck, X } from "lucide-react";
 import { useMobile } from "../hooks/useMobile";
 import { UpgradePrompt } from "../components/UpgradePrompt";
@@ -374,6 +374,15 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
     },
   ];
 
+  // Most recent question asked, so it stays visible/re-usable near the input
+  // even once the keyboard pushes the chat scrollback off-screen.
+  const lastUserQuestion = useMemo(() => {
+    for (let i = chatHistory.length - 1; i >= 0; i--) {
+      if (chatHistory[i].role === "user") return chatHistory[i].content;
+    }
+    return null;
+  }, [chatHistory]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -660,7 +669,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
                     transition: "all 0.15s ease",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(139, 92, 246, 0.08)";
+                    e.currentTarget.style.background = "color-mix(in srgb, var(--accent-purple) 8%, transparent)";
                     e.currentTarget.style.borderColor = "var(--accent-purple-glow)";
                     e.currentTarget.style.color = "#ffffff";
                   }}
@@ -697,12 +706,44 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
         onSubmit={handleSubmit}
         style={{
           display: "flex",
-          gap: "10px",
+          flexDirection: "column",
+          gap: "8px",
           width: "100%",
           marginBottom: "12px",
           position: "relative",
         }}
       >
+        {/* Previous question — stays visible near the input even once the
+            keyboard pushes the chat scrollback off-screen; tap to re-edit it. */}
+        {lastUserQuestion && !query && (
+          <button
+            type="button"
+            onClick={() => { setQuery(lastUserQuestion); inputRef.current?.focus(); }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "10px",
+              padding: "7px 12px",
+              color: "var(--text-muted)",
+              fontSize: "0.75rem",
+              textAlign: "left",
+              cursor: "pointer",
+              maxWidth: "100%",
+            }}
+          >
+            <span style={{ flexShrink: 0, color: "var(--text-secondary)", fontWeight: 600 }}>Previous:</span>
+            <span style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+              {lastUserQuestion}
+            </span>
+          </button>
+        )}
         <textarea
           ref={inputRef}
           rows={1}
@@ -732,9 +773,9 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
           }}
           disabled={queryLoading}
           style={{
-            flex: 1,
+            width: "100%",
             resize: "none",
-            overflow: "hidden",
+            overflow: "auto",
             minHeight: "44px",
             maxHeight: "140px",
             padding: "11px 16px",
@@ -778,7 +819,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
               boxShadow: "0 -4px 24px rgba(0,0,0,0.4)",
               maxHeight: "200px",
               overflowY: "auto",
-              width: "calc(100% - 100px)",
+              width: "100%",
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)",
             }}
@@ -887,7 +928,7 @@ export const AIJudge: React.FC<AIJudgeProps> = ({
                     {/* Question */}
                     {fav.question && (
                       <div style={{
-                        background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)",
+                        background: "color-mix(in srgb, var(--accent-purple) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 20%, transparent)",
                         borderRadius: "8px", padding: "10px 14px",
                         fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5,
                       }}>

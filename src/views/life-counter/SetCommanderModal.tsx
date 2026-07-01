@@ -211,7 +211,7 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
             <div style={{
               display: "flex", alignItems: "center", gap: "10px",
               padding: "8px 10px", borderRadius: "10px",
-              background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.25)",
+              background: "color-mix(in srgb, var(--accent-purple) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 25%, transparent)",
             }}>
               <img
                 src={getCardImage(confirmedCard)}
@@ -291,7 +291,7 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
                         key={i}
                         onMouseDown={() => handleSelectSuggestion(name)}
                         onMouseEnter={e => {
-                          e.currentTarget.style.background = "rgba(139,92,246,0.12)";
+                          e.currentTarget.style.background = "rgba(255,255,255,0.14)";
                           handleSuggestionHover(name);
                         }}
                         onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
@@ -322,8 +322,8 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
                     <div style={{
                       display: "flex", gap: "10px", alignItems: "flex-start",
                       padding: "10px 12px",
-                      background: "rgba(139,92,246,0.06)",
-                      borderTop: "1px solid rgba(139,92,246,0.2)",
+                      background: "color-mix(in srgb, var(--accent-purple) 6%, transparent)",
+                      borderTop: "1px solid color-mix(in srgb, var(--accent-purple) 20%, transparent)",
                     }}>
                       <img
                         src={getCardImage(previewCard)}
@@ -371,17 +371,17 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
                   onClick={() => handleSelectDeck(deck)}
                   style={{
                     padding: "5px 11px", borderRadius: "8px",
-                    background: "rgba(139,92,246,0.08)",
-                    border: "1px solid rgba(139,92,246,0.25)",
+                    background: "rgba(255,255,255,0.08)",
+                    border: "1px solid rgba(255,255,255,0.14)",
                     color: "var(--text-secondary)", fontSize: "0.78rem", fontWeight: 600,
                     cursor: "pointer", transition: "all 0.15s ease",
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = "rgba(139,92,246,0.18)";
+                    e.currentTarget.style.background = "rgba(255,255,255,0.16)";
                     e.currentTarget.style.color = "var(--text-primary)";
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = "rgba(139,92,246,0.08)";
+                    e.currentTarget.style.background = "rgba(255,255,255,0.08)";
                     e.currentTarget.style.color = "var(--text-secondary)";
                   }}
                 >
@@ -425,9 +425,9 @@ export const SetCommanderModal: React.FC<SetCommanderModalProps> = ({
             style={{
               padding: "8px 16px", borderRadius: "9px",
               background: cmdInput.trim() || confirmedCard
-                ? "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(6,182,212,0.2))"
+                ? "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 30%, transparent), rgba(6,182,212,0.2))"
                 : "rgba(255,255,255,0.04)",
-              border: `1px solid ${cmdInput.trim() || confirmedCard ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
+              border: `1px solid ${cmdInput.trim() || confirmedCard ? "color-mix(in srgb, var(--accent-purple) 50%, transparent)" : "rgba(255,255,255,0.08)"}`,
               color: cmdInput.trim() || confirmedCard ? "#fff" : "var(--text-muted)",
               fontSize: "0.82rem", fontWeight: 700, cursor: cmdInput.trim() || confirmedCard ? "pointer" : "not-allowed",
               display: "flex", alignItems: "center", gap: "5px",

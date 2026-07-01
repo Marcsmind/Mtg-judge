@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  ArrowLeft, ArrowRight, ChevronLeft, ChevronRight,
-  Play, SkipForward, Trophy, RotateCcw, Package,
+  ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, ChevronsRight,
+  Play, SkipForward, FastForward, Trophy, RotateCcw, Package, XCircle,
 } from "lucide-react";
+import { BottomSheet } from "../components/BottomSheet";
 
 type Phase         = "setup" | "drafting" | "pairings";
 type PairingFormat = "1v1" | "3-way" | "4-way";
@@ -171,8 +172,8 @@ const PILL: React.CSSProperties = {
 };
 const PILL_ACTIVE: React.CSSProperties = {
   ...PILL,
-  background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.4)",
-  color: "var(--accent-purple)",
+  background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.3)",
+  color: "#fff",
 };
 const LABEL: React.CSSProperties = {
   fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)",
@@ -327,7 +328,7 @@ function SetupScreen({ onStart }: SetupProps) {
         className="glass-button"
         style={{
           width: "100%", padding: "14px", fontSize: "1rem", fontWeight: 700,
-          background: "rgba(139,92,246,0.2)", borderColor: "rgba(139,92,246,0.4)",
+          background: "color-mix(in srgb, var(--accent-purple) 20%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
           color: "var(--accent-purple)",
           display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
         }}
@@ -370,6 +371,22 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
     if (config.timerSeconds > 0) setTimerActive(true);
   }, [done, config.timerSeconds]);
 
+  // Jump straight to the first pick of the next pack (or finish the draft if
+  // this was the last pack) — lets a player bail out of a slow/boring pack
+  // without clicking "Next Pick" through every remaining card.
+  const skipPack = useCallback(() => {
+    if (done) return;
+    const nextPackStart = currentPack * config.picksPerPack;
+    setGlobalPick(Math.min(nextPackStart, totalPicks));
+    setTimerLeft(config.timerSeconds);
+    if (config.timerSeconds > 0) setTimerActive(true);
+  }, [done, currentPack, config.picksPerPack, config.timerSeconds, totalPicks]);
+
+  // Skip picking entirely — jumps straight to the "Draft Complete" screen.
+  const skipAllPicks = useCallback(() => {
+    setGlobalPick(totalPicks);
+  }, [totalPicks]);
+
   useEffect(() => {
     if (!timerActive || done || config.timerSeconds === 0) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -378,8 +395,20 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
     return () => clearInterval(id);
   }, [timerActive, timerLeft, done, advancePick]);
 
+  // Flash/glow the pack card whenever a new pack first arrives, so the
+  // left/right pass direction change doesn't go unnoticed mid-draft.
+  // Skips the very first render (mount) so reloading mid-draft doesn't flash.
+  const isFirstRender = React.useRef(true);
+  const [packArrived, setPackArrived] = useState(false);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setPackArrived(true);
+    const id = setTimeout(() => setPackArrived(false), 1200);
+    return () => clearTimeout(id);
+  }, [currentPack]);
+
   const timerPct   = config.timerSeconds > 0 ? (timerLeft / config.timerSeconds) * 100 : 100;
-  const timerColor = timerLeft <= 5 ? "#f43f5e" : timerLeft <= 15 ? "#f59e0b" : "#8b5cf6";
+  const timerColor = timerLeft <= 5 ? "#f43f5e" : timerLeft <= 15 ? "#f59e0b" : "var(--accent-purple)";
   const overallPct = (globalPick / totalPicks) * 100;
 
   if (done) {
@@ -394,7 +423,7 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
           className="glass-button"
           style={{
             padding: "14px 28px", fontSize: "1rem", fontWeight: 700,
-            background: "rgba(139,92,246,0.2)", borderColor: "rgba(139,92,246,0.4)",
+            background: "color-mix(in srgb, var(--accent-purple) 20%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
             color: "var(--accent-purple)", display: "flex", alignItems: "center", gap: "8px",
           }}
           onClick={onDraftComplete}
@@ -420,8 +449,8 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
           return (
             <div key={i} style={{
               padding: "5px 14px", borderRadius: "20px", fontSize: "0.78rem", fontWeight: 700,
-              background: cur ? "rgba(139,92,246,0.2)" : done ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${cur ? "rgba(139,92,246,0.5)" : done ? "rgba(16,185,129,0.3)" : "rgba(255,255,255,0.08)"}`,
+              background: cur ? "color-mix(in srgb, var(--accent-purple) 20%, transparent)" : done ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${cur ? "color-mix(in srgb, var(--accent-purple) 50%, transparent)" : done ? "rgba(16,185,129,0.3)" : "rgba(255,255,255,0.08)"}`,
               color: cur ? "var(--accent-purple)" : done ? "var(--accent-emerald)" : "var(--text-muted)",
             }}>
               Pack {n}
@@ -431,7 +460,7 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
       </div>
 
       {/* Main card */}
-      <div className="glass-panel" style={{ padding: "28px 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+      <div className={`glass-panel${packArrived ? " pack-arrive-glow" : ""}`} style={{ padding: "28px 24px", display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
         {config.setName && (
           <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>
             {config.setName}
@@ -489,7 +518,7 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
           className="glass-button"
           style={{
             flex: 1, padding: "14px", fontSize: "1rem", fontWeight: 700,
-            background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)",
+            background: "color-mix(in srgb, var(--accent-purple) 18%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
             color: "var(--accent-purple)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
           }}
           onClick={advancePick}
@@ -498,6 +527,32 @@ function DraftingScreen({ config, onDraftComplete, onReset }: DraftingProps) {
         </button>
         <button className="glass-button" style={{ padding: "14px 16px" }} onClick={onReset} title="Reset draft">
           <RotateCcw size={18} color="var(--text-muted)" />
+        </button>
+      </div>
+
+      {/* Skip controls — bail out of a slow pack or skip picking altogether */}
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button
+          className="glass-button"
+          style={{
+            flex: 1, padding: "10px", fontSize: "0.82rem", fontWeight: 600,
+            color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+          }}
+          onClick={skipPack}
+          title="Skip to the next pack"
+        >
+          <FastForward size={15} /> Skip Pack
+        </button>
+        <button
+          className="glass-button"
+          style={{
+            flex: 1, padding: "10px", fontSize: "0.82rem", fontWeight: 600,
+            color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+          }}
+          onClick={skipAllPicks}
+          title="Skip picking entirely"
+        >
+          <ChevronsRight size={15} /> Skip All Picks
         </button>
       </div>
 
@@ -560,8 +615,9 @@ function PairingsScreen({ config, onReset }: PairingsProps) {
   const wins  = (pi: number) => allMatches.filter(m => m.winner === pi).length;
   const losses= (pi: number) => allMatches.filter(m => m.players.includes(pi) && m.winner !== null && m.winner !== pi && m.players.length > 1).length;
 
-  const allDone = currentRound === totalRounds && roundComplete(totalRounds);
-  const isLastGenerated = currentRound === Math.max(...allMatches.map(m => m.round));
+  const allDone = allMatches.some(m => m.round === totalRounds) && roundComplete(totalRounds);
+  const maxGeneratedRound = Math.max(...allMatches.map(m => m.round));
+  const isLastGenerated = currentRound === maxGeneratedRound;
 
   const isBye   = (m: MatchResult) => m.players.length === 1;
   const isPod   = (m: MatchResult) => m.players.length > 2;
@@ -571,16 +627,19 @@ function PairingsScreen({ config, onReset }: PairingsProps) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "520px", margin: "0 auto" }}>
 
-      {/* Round tabs */}
-      <div style={{ display: "flex", gap: "8px" }}>
+      {/* Round tabs — horizontally scrollable so later rounds don't clip off-screen */}
+      <div style={{ display: "flex", gap: "8px", overflowX: "auto", WebkitOverflowScrolling: "touch", paddingBottom: "2px" }}>
         {Array.from({ length: totalRounds }, (_, i) => {
           const r = i + 1;
-          const accessible = r <= currentRound;
+          // Accessible if pairings for that round have already been generated —
+          // NOT just "<= currentRound", since navigating back to an earlier round
+          // would otherwise overwrite currentRound and lock out later rounds again.
+          const accessible = r <= maxGeneratedRound;
           return (
             <button
               key={r}
               disabled={!accessible}
-              style={r === currentRound ? PILL_ACTIVE : { ...PILL, opacity: accessible ? 1 : 0.35 }}
+              style={{ ...(r === currentRound ? PILL_ACTIVE : { ...PILL, opacity: accessible ? 1 : 0.35 }), flexShrink: 0 }}
               onClick={() => accessible && setCurrentRound(r)}
             >
               Round {r}
@@ -642,8 +701,8 @@ function PairingsScreen({ config, onReset }: PairingsProps) {
                       flex: 1, padding: isPod(match) ? "10px 14px" : "8px 10px",
                       borderRadius: "8px", border: "1px solid",
                       cursor: "pointer", textAlign: "left",
-                      background: match.winner === p ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.03)",
-                      borderColor: match.winner === p ? "rgba(139,92,246,0.45)" : "rgba(255,255,255,0.08)",
+                      background: match.winner === p ? "color-mix(in srgb, var(--accent-purple) 18%, transparent)" : "rgba(255,255,255,0.03)",
+                      borderColor: match.winner === p ? "color-mix(in srgb, var(--accent-purple) 45%, transparent)" : "rgba(255,255,255,0.08)",
                       color: match.winner === p ? "var(--accent-purple)" : "var(--text-primary)",
                       fontWeight: match.winner === p ? 700 : 500, fontSize: "0.9rem",
                       transition: "all 0.15s",
@@ -671,7 +730,7 @@ function PairingsScreen({ config, onReset }: PairingsProps) {
           className="glass-button"
           style={{
             width: "100%", padding: "13px", fontSize: "0.95rem", fontWeight: 700,
-            background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)",
+            background: "color-mix(in srgb, var(--accent-purple) 18%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
             color: "var(--accent-purple)",
             display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
           }}
@@ -742,6 +801,15 @@ export const DraftMode: React.FC = () => {
     localStorage.removeItem(DRAFT_KEY);
   };
 
+  // Resetting/starting a new draft discards the in-progress session, so it
+  // always goes through a confirmation prompt rather than firing immediately.
+  const [confirmReset, setConfirmReset] = useState(false);
+  const requestReset = () => setConfirmReset(true);
+  const confirmAndReset = () => {
+    setConfirmReset(false);
+    handleReset();
+  };
+
   return (
     <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "20px 16px 32px", display: "flex", flexDirection: "column" }}>
       <div style={{ marginBottom: "24px" }}>
@@ -757,8 +825,45 @@ export const DraftMode: React.FC = () => {
       </div>
 
       {phase === "setup"    && <SetupScreen onStart={handleStart} />}
-      {phase === "drafting" && config && <DraftingScreen config={config} onDraftComplete={handleDraftComplete} onReset={handleReset} />}
-      {phase === "pairings" && config && <PairingsScreen config={config} onReset={handleReset} />}
+      {phase === "drafting" && config && <DraftingScreen config={config} onDraftComplete={handleDraftComplete} onReset={requestReset} />}
+      {phase === "pairings" && config && <PairingsScreen config={config} onReset={requestReset} />}
+
+      {confirmReset && (
+        <BottomSheet onClose={() => setConfirmReset(false)} maxWidth="360px" role="dialog" aria-modal aria-label="Confirm restart">
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", alignItems: "center", textAlign: "center" }}>
+            <RotateCcw size={28} color="var(--accent-purple)" />
+            <h3 style={{ fontSize: "1.05rem", fontWeight: 800 }}>Do you want to restart?</h3>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              This will discard your current draft progress and return you to setup.
+            </p>
+            <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+              <button
+                className="glass-button"
+                style={{
+                  flex: 1, padding: "12px", fontSize: "0.9rem", fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                  color: "var(--text-secondary)",
+                }}
+                onClick={() => setConfirmReset(false)}
+              >
+                <XCircle size={16} /> Cancel
+              </button>
+              <button
+                className="glass-button"
+                style={{
+                  flex: 1, padding: "12px", fontSize: "0.9rem", fontWeight: 700,
+                  background: "rgba(244,63,94,0.15)", borderColor: "rgba(244,63,94,0.4)",
+                  color: "#f87171",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                }}
+                onClick={confirmAndReset}
+              >
+                <RotateCcw size={16} /> Restart
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
     </div>
   );
 };

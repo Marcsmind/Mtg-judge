@@ -73,6 +73,8 @@ export const GameSummaryModal: React.FC<GameSummaryModalProps> = ({ players, onC
         if (!ctx) { resolve(null); return; }
         ctx.scale(SCALE, SCALE);
 
+        const accentPurple = getComputedStyle(document.documentElement).getPropertyValue("--accent-purple").trim() || "#8b5cf6";
+
         // ── rounded-rect helper ──
         const rr = (x: number, y: number, w: number, h: number, r: number) => {
           ctx.beginPath();
@@ -104,7 +106,7 @@ export const GameSummaryModal: React.FC<GameSummaryModalProps> = ({ players, onC
 
         // Subtle gradient
         const grad = ctx.createLinearGradient(0, 0, W, H);
-        grad.addColorStop(0, "rgba(139,92,246,0.07)");
+        grad.addColorStop(0, accentPurple + "12");
         grad.addColorStop(1, "rgba(6,182,212,0.05)");
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
@@ -120,7 +122,7 @@ export const GameSummaryModal: React.FC<GameSummaryModalProps> = ({ players, onC
         ctx.fillText("COMMANDER GAME SUMMARY", PAD + 34, y + 26);
 
         ctx.textAlign = "right";
-        ctx.fillStyle = "#8b5cf6";
+        ctx.fillStyle = accentPurple;
         ctx.font      = `bold 13px ${FONT}`;
         ctx.fillText("ARBITER", W - PAD, y + 18);
         ctx.fillStyle = "#6e6b75";
@@ -254,7 +256,7 @@ export const GameSummaryModal: React.FC<GameSummaryModalProps> = ({ players, onC
         divider(y);
         y += 18;
 
-        ctx.fillStyle = "#8b5cf6";
+        ctx.fillStyle = accentPurple;
         ctx.font      = `bold 13px ${FONT}`;
         ctx.fillText("Arbiter", PAD, y + 14);
 
@@ -319,8 +321,8 @@ export const GameSummaryModal: React.FC<GameSummaryModalProps> = ({ players, onC
                 padding: "6px 12px", borderRadius: "8px", cursor: generating ? "default" : "pointer",
                 background: shared
                   ? "rgba(16,185,129,0.12)"
-                  : "rgba(139,92,246,0.1)",
-                border: `1px solid ${shared ? "rgba(16,185,129,0.3)" : "rgba(139,92,246,0.25)"}`,
+                  : "color-mix(in srgb, var(--accent-purple) 10%, transparent)",
+                border: `1px solid ${shared ? "rgba(16,185,129,0.3)" : "color-mix(in srgb, var(--accent-purple) 25%, transparent)"}`,
                 color: shared ? "var(--accent-emerald)" : "var(--accent-purple)",
                 fontSize: "0.78rem", fontWeight: 700, transition: "all 0.2s ease",
                 opacity: generating ? 0.6 : 1,

@@ -485,7 +485,7 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
                       style={{
                         display: "flex", alignItems: "center", gap: "8px",
                         padding: "8px 10px", borderRadius: "8px",
-                        background: currentIndex === idx ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.02)",
+                        background: currentIndex === idx ? "color-mix(in srgb, var(--accent-purple) 12%, transparent)" : "rgba(255,255,255,0.02)",
                         border: currentIndex === idx ? "1.5px solid var(--accent-purple)" : "1px solid rgba(255,255,255,0.04)",
                         transition: "all 0.15s ease",
                       }}
@@ -598,7 +598,7 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
             {isMultiplayer && mpRole !== "host" ? (
               <div style={{
                 padding: "10px 16px", borderRadius: "8px", textAlign: "center",
-                background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)",
+                background: "color-mix(in srgb, var(--accent-purple) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 20%, transparent)",
                 color: "var(--text-muted)", fontSize: "0.85rem",
               }}>
                 {spinning ? "⏳ Spinning…" : "Waiting for host to spin…"}
@@ -644,10 +644,10 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                   width: "100%", padding: "12px 20px", borderRadius: "12px", cursor: "pointer",
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.25), rgba(6,182,212,0.15))",
-                  border: "1.5px solid rgba(139,92,246,0.5)",
+                  background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 25%, transparent), rgba(6,182,212,0.15))",
+                  border: "1.5px solid color-mix(in srgb, var(--accent-purple) 50%, transparent)",
                   color: "#fff", fontSize: "0.95rem", fontWeight: 700,
-                  boxShadow: "0 0 20px rgba(139,92,246,0.25)",
+                  boxShadow: "0 0 20px color-mix(in srgb, var(--accent-purple) 25%, transparent)",
                   animation: "pulse-glow 2s infinite",
                   transition: "all 0.2s ease",
                 }}
@@ -684,8 +684,8 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
                     style={{
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       padding: "8px 12px", borderRadius: "8px",
-                      background: "rgba(139,92,246,0.05)",
-                      border: "1px solid rgba(139,92,246,0.18)",
+                      background: "color-mix(in srgb, var(--accent-purple) 5%, transparent)",
+                      border: "1px solid color-mix(in srgb, var(--accent-purple) 18%, transparent)",
                     }}
                   >
                     <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-secondary)" }}>{name}</span>
@@ -695,7 +695,7 @@ export const TurnOrder: React.FC<TurnOrderProps> = ({
                       style={{
                         fontSize: "0.9rem", fontWeight: 800,
                         color: "var(--accent-purple)",
-                        background: "rgba(139,92,246,0.18)",
+                        background: "color-mix(in srgb, var(--accent-purple) 18%, transparent)",
                         padding: "2px 10px", borderRadius: "5px",
                         minWidth: "58px", textAlign: "center",
                         display: "inline-block",

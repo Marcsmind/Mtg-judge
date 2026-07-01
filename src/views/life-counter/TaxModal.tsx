@@ -35,7 +35,7 @@ export const TaxModal: React.FC<TaxModalProps> = ({
         {/* Main Commander Tax */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "rgba(0,0,0,0.4)", border: "1px solid rgba(168,85,247,0.5)",
+          background: "rgba(0,0,0,0.4)", border: "1px solid color-mix(in srgb, var(--accent-purple) 50%, transparent)",
           borderRadius: "12px", padding: "12px 16px",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -52,7 +52,7 @@ export const TaxModal: React.FC<TaxModalProps> = ({
             >
               <Minus size={18} />
             </button>
-            <span style={{ fontSize: "1.4rem", fontWeight: 900, color: "#a855f7", minWidth: "28px", textAlign: "center" }}>
+            <span style={{ fontSize: "1.4rem", fontWeight: 900, color: "var(--accent-purple)", minWidth: "28px", textAlign: "center" }}>
               {targetPlayer.tax}
             </span>
             <button 
@@ -87,7 +87,7 @@ export const TaxModal: React.FC<TaxModalProps> = ({
         {targetPlayer.partnerMode && (
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            background: "rgba(0,0,0,0.4)", border: "1px solid rgba(168,85,247,0.5)",
+            background: "rgba(0,0,0,0.4)", border: "1px solid color-mix(in srgb, var(--accent-purple) 50%, transparent)",
             borderRadius: "12px", padding: "12px 16px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -104,7 +104,7 @@ export const TaxModal: React.FC<TaxModalProps> = ({
               >
                 <Minus size={18} />
               </button>
-              <span style={{ fontSize: "1.4rem", fontWeight: 900, color: "#a855f7", minWidth: "28px", textAlign: "center" }}>
+              <span style={{ fontSize: "1.4rem", fontWeight: 900, color: "var(--accent-purple)", minWidth: "28px", textAlign: "center" }}>
                 {targetPlayer.taxPartner}
               </span>
               <button 

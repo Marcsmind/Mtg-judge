@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
@@ -89,6 +89,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     y: number;
   } | null>(null);
 
+  // Tap/click anywhere outside the tooltip's own trigger word to dismiss it —
+  // needed because touch devices never fire mouseleave, so without this the
+  // tooltip would stay stuck open until the same keyword was tapped again.
+  useEffect(() => {
+    if (!tooltip) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-tooltip-trigger]")) return;
+      setTooltip(null);
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, [tooltip]);
+
   // ── Card preview state ──
   const [cardPreview, setCardPreview] = useState<{
     name: string;
@@ -172,6 +186,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         };
         return (
           <strong
+            data-tooltip-trigger="true"
             style={{
               color: "#a78bfa",
               cursor: "help",
@@ -362,10 +377,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             borderTopRightRadius: isUser ? "2px" : "14px",
             borderTopLeftRadius: isUser ? "14px" : "2px",
             background: isUser
-              ? "rgba(139, 92, 246, 0.12)"
+              ? "color-mix(in srgb, var(--accent-purple) 12%, transparent)"
               : "rgba(255, 255, 255, 0.02)",
             border: isUser
-              ? "1px solid rgba(139, 92, 246, 0.2)"
+              ? "1px solid color-mix(in srgb, var(--accent-purple) 20%, transparent)"
               : "1px solid rgba(255, 255, 255, 0.05)",
             color: "var(--text-primary)",
             boxShadow: "0 4px 15px rgba(0, 0, 0, 0.15)",

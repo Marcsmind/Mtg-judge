@@ -1,9 +1,8 @@
 /**
  * CommanderPreviewModal — Read-only commander card preview.
  *
- * When `canEdit` is true (i.e. the viewing player owns this seat) an
- * "Edit Commander" button is shown so they can open the full editor.
- * When `canEdit` is false, only the Close button is rendered.
+ * Always rendered at LifeCounter root level so it appears unrotated (portrait)
+ * regardless of the PlayerCard's CSS rotation.
  */
 import { useEffect, useState } from "react";
 import { BottomSheet } from "../../components/BottomSheet";
@@ -15,6 +14,7 @@ interface CommanderPreviewModalProps {
   playerName:    string;
   canEdit:       boolean;
   onEdit:        () => void;
+  onEditName:    () => void;
   onClose:       () => void;
 }
 
@@ -23,6 +23,7 @@ export function CommanderPreviewModal({
   playerName,
   canEdit,
   onEdit,
+  onEditName,
   onClose,
 }: CommanderPreviewModalProps) {
   const [card, setCard]       = useState<ScryfallCard | null>(null);
@@ -31,7 +32,6 @@ export function CommanderPreviewModal({
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(false);
     searchCardFuzzy(commanderName).then((result) => {
@@ -48,7 +48,7 @@ export function CommanderPreviewModal({
   return (
     <BottomSheet
       onClose={onClose}
-      zIndex={150}
+      zIndex={1000}
       maxWidth="380px"
       aria-label={`${playerName}'s commander: ${commanderName}`}
     >
@@ -63,31 +63,14 @@ export function CommanderPreviewModal({
       </div>
 
       {/* Card art */}
-      <div style={{
-        display: "flex",
-        justifyContent: "center",
-        marginBottom: "16px",
-        minHeight: "200px",
-        alignItems: "center",
-      }}>
-        {loading && (
-          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Loading card…</div>
-        )}
-        {!loading && error && (
-          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center" }}>
-            Card art not found.
-          </div>
-        )}
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px", minHeight: "200px", alignItems: "center" }}>
+        {loading && <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Loading card…</div>}
+        {!loading && error && <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center" }}>Card art not found.</div>}
         {!loading && imgSrc && (
           <img
             src={imgSrc}
             alt={commanderName}
-            style={{
-              borderRadius: "10px",
-              maxWidth: "240px",
-              width: "100%",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            }}
+            style={{ borderRadius: "10px", maxWidth: "240px", width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}
           />
         )}
       </div>
@@ -95,25 +78,13 @@ export function CommanderPreviewModal({
       {/* Type line + mana cost */}
       {card && (
         <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "16px",
-          padding: "8px 12px",
-          background: "rgba(255,255,255,0.04)",
-          borderRadius: "8px",
-          gap: "8px",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          marginBottom: "16px", padding: "8px 12px",
+          background: "rgba(255,255,255,0.04)", borderRadius: "8px", gap: "8px",
         }}>
-          <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-            {card.type_line || "—"}
-          </span>
+          <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{card.type_line || "—"}</span>
           {card.mana_cost && (
-            <span style={{
-              fontSize: "0.8rem",
-              color: "var(--text-muted)",
-              fontFamily: "monospace",
-              whiteSpace: "nowrap",
-            }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontFamily: "monospace", whiteSpace: "nowrap" }}>
               {card.mana_cost}
             </span>
           )}
@@ -121,37 +92,41 @@ export function CommanderPreviewModal({
       )}
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: "10px", flexDirection: canEdit ? "column" : "row" }}>
+      <div style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
         {canEdit && (
-          <button
-            onClick={() => { onClose(); setTimeout(onEdit, 50); }}
-            style={{
-              width: "100%",
-              padding: "12px",
-              background: "var(--accent-purple)",
-              border: "none",
-              borderRadius: "10px",
-              color: "#fff",
-              fontWeight: 600,
-              fontSize: "0.95rem",
-              cursor: "pointer",
-            }}
-          >
-            ✏️ Edit Commander
-          </button>
+          <>
+            <button
+              onClick={() => { onClose(); setTimeout(onEdit, 50); }}
+              style={{
+                width: "100%", padding: "12px",
+                background: "var(--accent-purple)", border: "none",
+                borderRadius: "10px", color: "#fff", fontWeight: 600,
+                fontSize: "0.95rem", cursor: "pointer",
+              }}
+            >
+              ✏️ Edit Commander
+            </button>
+            <button
+              onClick={() => { onClose(); setTimeout(onEditName, 50); }}
+              style={{
+                width: "100%", padding: "12px",
+                background: "color-mix(in srgb, var(--accent-purple) 12%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)",
+                borderRadius: "10px", color: "var(--text-primary)", fontWeight: 600,
+                fontSize: "0.95rem", cursor: "pointer",
+              }}
+            >
+              ✍️ Edit Player Name
+            </button>
+          </>
         )}
         <button
           onClick={onClose}
           style={{
-            width: "100%",
-            padding: "12px",
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid var(--border-color)",
-            borderRadius: "10px",
-            color: "var(--text-secondary)",
-            fontWeight: 500,
-            fontSize: "0.9rem",
-            cursor: "pointer",
+            width: "100%", padding: "12px",
+            background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-color)",
+            borderRadius: "10px", color: "var(--text-secondary)", fontWeight: 500,
+            fontSize: "0.9rem", cursor: "pointer",
           }}
         >
           Close

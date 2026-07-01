@@ -1,6 +1,6 @@
 import React from "react";
 import { BottomSheet } from "../../components/BottomSheet";
-import { Scroll, Undo2 } from "lucide-react";
+import { Scroll, Undo2, X } from "lucide-react";
 
 interface HistoryModalProps {
   history: string[];
@@ -22,6 +22,18 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
           <Scroll size={24} color="var(--accent-cyan)" />
         </div>
         <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800 }}>Game History</h2>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: "50%", width: "32px", height: "32px", color: "#fff",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}
+        >
+          <X size={16} />
+        </button>
       </div>
 
       <button
@@ -76,7 +88,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                 fontWeight: idx === 0 ? 600 : 400,
                 padding: "8px 12px",
                 borderRadius: "8px",
-                background: idx === 0 ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
+                background: idx === 0 ? "color-mix(in srgb, var(--accent-purple) 10%, transparent)" : "rgba(255,255,255,0.03)",
                 borderLeft: idx === 0 ? "3px solid var(--accent-purple)" : "3px solid transparent",
                 wordBreak: "break-word",
                 lineHeight: 1.4,

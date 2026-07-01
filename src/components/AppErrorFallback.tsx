@@ -30,8 +30,8 @@ export const AppErrorFallback: React.FC<{ error?: Error }> = ({ error }) => (
       style={{
         padding: "12px 28px",
         borderRadius: "10px",
-        background: "rgba(139,92,246,0.15)",
-        border: "1px solid rgba(139,92,246,0.4)",
+        background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)",
         color: "#c4b5fd",
         fontWeight: 600,
         fontSize: "0.9rem",

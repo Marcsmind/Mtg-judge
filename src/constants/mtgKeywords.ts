@@ -20,6 +20,7 @@ export const MTG_KEYWORDS: Record<string, string> = {
   "commander damage": "If a commander has dealt 21 or more combat damage to a player over the course of the game, that player loses.",
   "commander tax":    "Each time a commander is cast from the command zone, it costs {2} more for each previous time it was cast from there.",
   "phasing":          "A phased-out permanent is treated as if it doesn't exist until it phases back in at the start of its controller's untap step.",
+  "phased out":       "A permanent that is phased out is treated as if it doesn't exist — it can't be targeted, attacked, enchanted, or otherwise affected. It phases back in at the start of its controller's untap step.",
   "flashback":        "You may cast this card from your graveyard by paying its flashback cost. Then exile it.",
   "kicker":           "An optional additional cost you may pay when casting a spell that gives it additional benefits.",
   "morph":            "You may cast this card face-down as a 2/2 creature for {3}. Turn it face-up at any time for its morph cost.",

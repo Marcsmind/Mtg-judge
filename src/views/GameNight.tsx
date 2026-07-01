@@ -352,7 +352,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
               onClick={copyCode}
               title={codeCopied ? "Copied!" : "Copy room code"}
               style={{
-                background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)",
+                background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 25%, transparent)",
                 borderRadius: "8px", padding: "4px 10px", cursor: "pointer",
                 display: "flex", alignItems: "center", gap: "5px",
                 fontFamily: "monospace", fontWeight: 800, letterSpacing: "3px",
@@ -461,7 +461,7 @@ export const GameNight: React.FC<GameNightProps> = ({ onMpPhaseChange }) => {
                 className="glass-button"
                 style={{
                   padding: "10px 16px", fontWeight: 700,
-                  background: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.4)",
+                  background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)", borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
                   color: "var(--accent-purple)",
                 }}
               >

@@ -60,8 +60,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       icon:   <AlertCircle size={15} color="var(--accent-rose)" />,
     },
     info: {
-      bg:     "rgba(139,92,246,0.12)",
-      border: "rgba(139,92,246,0.35)",
+      bg:     "color-mix(in srgb, var(--accent-purple) 12%, transparent)",
+      border: "color-mix(in srgb, var(--accent-purple) 35%, transparent)",
       icon:   <Info size={15} color="var(--accent-purple)" />,
     },
   };

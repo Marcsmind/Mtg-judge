@@ -202,8 +202,8 @@ export const EndGameModal: React.FC<EndGameModalProps> = ({
               className="glass-button"
               style={{
                 flex: 1, justifyContent: "center",
-                background: "rgba(139,92,246,0.15)",
-                borderColor: "rgba(139,92,246,0.4)",
+                background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)",
+                borderColor: "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
                 color: "#fff", fontWeight: 700,
               }}
             >

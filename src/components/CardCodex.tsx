@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { X, Search, BookOpen, Layers, Clock, Tag } from "lucide-react";
+import { X, Search, BookOpen, Layers, Clock, Tag, Library } from "lucide-react";
 import {
   autocompleteCard,
   searchCardFuzzy,
@@ -9,6 +9,7 @@ import {
 } from "../services/scryfall";
 import type { ScryfallCard, ScryfallRuling } from "../services/scryfall";
 import { useAppStore } from "../store/useAppStore";
+import { useToast } from "./Toast";
 
 interface CardCodexProps {
   isOpen: boolean;
@@ -40,10 +41,13 @@ export const CardCodex: React.FC<CardCodexProps> = ({
   const cardHistory = useAppStore((s) => s.cardHistory);
   const addToCardHistory = useAppStore((s) => s.addToCardHistory);
   const setPendingTagCard = useAppStore((s) => s.setPendingTagCard);
+  const setPendingAddToCollectionCard = useAppStore((s) => s.setPendingAddToCollectionCard);
+  const { showToast } = useToast();
 
   // Track cards that were recently tagged — shows a brief "✓ Tagged" confirmation
   // without closing the panel so users can tag multiple cards in one session.
   const [recentlyTagged, setRecentlyTagged] = useState<Set<string>>(new Set());
+  const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
 
   // ── Handle card selection (search or history click) ──
   const handleSelectCard = useCallback(
@@ -154,6 +158,22 @@ export const CardCodex: React.FC<CardCodexProps> = ({
     setRecentlyTagged(prev => new Set(prev).add(card.id));
     setTimeout(() => {
       setRecentlyTagged(prev => {
+        const next = new Set(prev);
+        next.delete(card.id);
+        return next;
+      });
+    }, 2000);
+  };
+
+  // "Add to Collection" — push card to Collection via pendingAddToCollectionCard
+  // signal (mirrors handleTagInJudge). Adds 1x non-foil to the default group;
+  // quantity/foil/group can be adjusted afterward from the Collection view.
+  const handleAddToCollection = (card: ScryfallCard) => {
+    setPendingAddToCollectionCard(card);
+    showToast(`${card.name} added to collection`, "success");
+    setRecentlyAdded(prev => new Set(prev).add(card.id));
+    setTimeout(() => {
+      setRecentlyAdded(prev => {
         const next = new Set(prev);
         next.delete(card.id);
         return next;
@@ -375,7 +395,7 @@ export const CardCodex: React.FC<CardCodexProps> = ({
                   transition: "background 0.15s ease",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)";
+                  e.currentTarget.style.background = "rgba(255,255,255,0.15)";
                   e.currentTarget.style.color = "var(--text-primary)";
                 }}
                 onMouseLeave={(e) => {
@@ -789,32 +809,58 @@ export const CardCodex: React.FC<CardCodexProps> = ({
                       )}
                     </div>
 
-                    {/* Tag in AI Judge button — stays open after tagging */}
-                    <button
-                      onClick={() => handleTagInJudge(selectedCard)}
-                      title={recentlyTagged.has(selectedCard.id) ? "Tagged! You can tag more cards or close when done." : "Tag this card in AI Judge"}
-                      style={{
-                        background: recentlyTagged.has(selectedCard.id) ? "rgba(16,185,129,0.15)" : "rgba(6,182,212,0.08)",
-                        border: `1px solid ${recentlyTagged.has(selectedCard.id) ? "rgba(16,185,129,0.35)" : "rgba(6,182,212,0.2)"}`,
-                        borderRadius: "8px",
-                        padding: "6px 12px",
-                        color: recentlyTagged.has(selectedCard.id) ? "var(--accent-emerald)" : "var(--accent-cyan)",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        fontSize: "0.78rem",
-                        fontWeight: 600,
-                        marginTop: "4px",
-                        transition: "all 0.2s ease",
-                      }}
-                    >
-                      {recentlyTagged.has(selectedCard.id) ? (
-                        <><Tag size={12} />✓ Tagged in Judge</>
-                      ) : (
-                        <><Tag size={12} />Tag in AI Judge</>
-                      )}
-                    </button>
+                    {/* Tag in AI Judge / Add to Collection — stay open after tapping */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "4px" }}>
+                      <button
+                        onClick={() => handleTagInJudge(selectedCard)}
+                        title={recentlyTagged.has(selectedCard.id) ? "Tagged! You can tag more cards or close when done." : "Tag this card in AI Judge"}
+                        style={{
+                          background: recentlyTagged.has(selectedCard.id) ? "rgba(16,185,129,0.15)" : "rgba(6,182,212,0.08)",
+                          border: `1px solid ${recentlyTagged.has(selectedCard.id) ? "rgba(16,185,129,0.35)" : "rgba(6,182,212,0.2)"}`,
+                          borderRadius: "8px",
+                          padding: "6px 12px",
+                          color: recentlyTagged.has(selectedCard.id) ? "var(--accent-emerald)" : "var(--accent-cyan)",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        {recentlyTagged.has(selectedCard.id) ? (
+                          <><Tag size={12} />✓ Tagged in Judge</>
+                        ) : (
+                          <><Tag size={12} />Tag in AI Judge</>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => handleAddToCollection(selectedCard)}
+                        title={recentlyAdded.has(selectedCard.id) ? "Added! You can add more cards or close when done." : "Add this card to your Collection"}
+                        style={{
+                          background: recentlyAdded.has(selectedCard.id) ? "rgba(16,185,129,0.15)" : "color-mix(in srgb, var(--accent-purple) 8%, transparent)",
+                          border: `1px solid ${recentlyAdded.has(selectedCard.id) ? "rgba(16,185,129,0.35)" : "color-mix(in srgb, var(--accent-purple) 25%, transparent)"}`,
+                          borderRadius: "8px",
+                          padding: "6px 12px",
+                          color: recentlyAdded.has(selectedCard.id) ? "var(--accent-emerald)" : "var(--accent-purple)",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        {recentlyAdded.has(selectedCard.id) ? (
+                          <><Library size={12} />✓ Added</>
+                        ) : (
+                          <><Library size={12} />Add to Collection</>
+                        )}
+                      </button>
+                    </div>
 
                     <a
                       href={selectedCard.scryfall_uri}

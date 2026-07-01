@@ -6,6 +6,7 @@
 
 import type { Player } from "../types/game";
 
+
 /**
  * Safely reconstructs a Player from raw localStorage JSON.
  * All new fields are defaulted so old saved games always deserialise cleanly.
@@ -36,7 +37,21 @@ export function parseSavedPlayer(raw: any, fallbackLife: number): Player {
     },
     enabledTokens:  Array.isArray(raw.enabledTokens) ? raw.enabledTokens : [],
     tokensOpen:     raw.tokensOpen ?? false,
-    commanderName:  raw.commanderName ?? undefined,
-    deckId:         raw.deckId        ?? undefined,
+    mana: {
+      W: raw.mana?.W ?? 0, U: raw.mana?.U ?? 0, B: raw.mana?.B ?? 0,
+      R: raw.mana?.R ?? 0, G: raw.mana?.G ?? 0, C: raw.mana?.C ?? 0,
+    },
+    storm:      typeof raw.storm      === "number" ? raw.storm      : 0,
+    energy:     typeof raw.energy     === "number" ? raw.energy     : 0,
+    experience: typeof raw.experience === "number" ? raw.experience : 0,
+    generic:    typeof raw.generic    === "number" ? raw.generic    : 0,
+    ringLevel:  typeof raw.ringLevel  === "number" ? raw.ringLevel  : 0,
+    commanderName:        raw.commanderName        ?? undefined,
+    partnerCommanderName: raw.partnerCommanderName ?? undefined,
+    deckId:               raw.deckId               ?? undefined,
+    artOffsetX:   typeof raw.artOffsetX === "number" ? raw.artOffsetX : undefined,
+    artOffsetY:   typeof raw.artOffsetY === "number" ? raw.artOffsetY : undefined,
+    artZoom:      typeof raw.artZoom    === "number" ? raw.artZoom    : undefined,
+    artUsePartner: raw.artUsePartner === true ? true : undefined,
   };
 }

@@ -45,7 +45,7 @@ registerSW({
       position: 'fixed', bottom: '80px', left: '50%',
       transform: 'translateX(-50%)',
       background: 'rgba(10,8,16,0.96)',
-      border: '1px solid rgba(139,92,246,0.35)',
+      border: '1px solid color-mix(in srgb, var(--accent-purple) 35%, transparent)',
       borderRadius: '12px', padding: '10px 16px',
       display: 'flex', alignItems: 'center',
       color: '#fff', fontSize: '0.88rem', fontWeight: 500,

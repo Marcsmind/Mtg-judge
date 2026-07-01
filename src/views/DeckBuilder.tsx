@@ -470,7 +470,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                           color: "var(--text-secondary)",
                           borderBottom: i < cmdSuggestions.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none",
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(139,92,246,0.15)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.14)"; e.currentTarget.style.color = "var(--text-primary)"; }}
                         onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
                       >
                         {name}
@@ -508,10 +508,10 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                       onClick={() => setBudget(tier)}
                       style={{
                         padding: "6px 12px", borderRadius: "8px", cursor: "pointer",
-                        background: budget === tier ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
+                        background: budget === tier ? "color-mix(in srgb, var(--accent-purple) 20%, transparent)" : "rgba(255,255,255,0.04)",
                         color: budget === tier ? "var(--accent-purple)" : "var(--text-secondary)",
                         fontWeight: budget === tier ? 700 : 500,
-                        border: `1px solid ${budget === tier ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.08)"}`,
+                        border: `1px solid ${budget === tier ? "color-mix(in srgb, var(--accent-purple) 40%, transparent)" : "rgba(255,255,255,0.08)"}`,
                         fontSize: "0.78rem", transition: "all 0.15s ease",
                       }}
                     >
@@ -527,8 +527,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                 disabled={!commander.trim() || generating || !canGenerate}
                 className="glass-button"
                 style={{
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(6,182,212,0.15) 100%)",
-                  border: "1px solid rgba(139,92,246,0.4)",
+                  background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 25%, transparent) 0%, rgba(6,182,212,0.15) 100%)",
+                  border: "1px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)",
                   padding: "10px 20px", fontSize: "0.9rem", fontWeight: 700,
                   color: !commander.trim() ? "var(--text-muted)" : "var(--text-primary)",
                   cursor: !commander.trim() || generating || !canGenerate ? "not-allowed" : "pointer",
@@ -651,7 +651,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   <button
                     type="button"
                     onClick={() => navigator.clipboard.readText().then(t => { if (t.trim()) setRawDecklist(t.trim()); }).catch(() => undefined)}
-                    style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "5px", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "8px", color: "var(--accent-purple)", fontSize: "0.75rem", fontWeight: 600, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                    style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "5px", background: "color-mix(in srgb, var(--accent-purple) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)", borderRadius: "8px", color: "var(--accent-purple)", fontSize: "0.75rem", fontWeight: 600, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
                   >
                     <ClipboardPaste size={12} /> Paste from Clipboard
                   </button>
@@ -723,8 +723,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                           className="glass-button"
                           style={{
                             padding: "7px 14px", fontSize: "0.82rem", fontWeight: 700,
-                            background: "linear-gradient(135deg, rgba(139,92,246,0.2) 0%, rgba(6,182,212,0.1) 100%)",
-                            borderColor: "rgba(139,92,246,0.35)",
+                            background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 20%, transparent) 0%, rgba(6,182,212,0.1) 100%)",
+                            borderColor: "color-mix(in srgb, var(--accent-purple) 35%, transparent)",
                           }}
                         >
                           {analyzing ? (
@@ -757,7 +757,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                           borderRadius: "8px", padding: "6px",
                           cursor: "pointer", transition: "background 0.15s ease",
                         }}
-                        onMouseEnter={e => e.currentTarget.style.background = "rgba(139,92,246,0.1)"}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.14)"}
                         onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
                       >
                         <img
@@ -903,8 +903,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                 style={{
                   display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px",
                   borderRadius: "9px", cursor: (!canCloudDecks && savedDecks.length >= 3 && !showAddForm) ? "not-allowed" : "pointer",
-                  background: showAddForm ? "rgba(139,92,246,0.15)" : "rgba(139,92,246,0.1)",
-                  border: "1px solid rgba(139,92,246,0.35)",
+                  background: showAddForm ? "color-mix(in srgb, var(--accent-purple) 15%, transparent)" : "color-mix(in srgb, var(--accent-purple) 10%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--accent-purple) 35%, transparent)",
                   color: "var(--accent-purple)", fontSize: "0.82rem", fontWeight: 700,
                   transition: "all 0.15s ease",
                   opacity: (!canCloudDecks && savedDecks.length >= 3 && !showAddForm) ? 0.4 : 1,
@@ -952,7 +952,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                       {deckCmdSugs.map((s, i) => (
                         <button key={i} onMouseDown={() => { setNewDeckCmd(s); setDeckCmdSugs([]); }}
                           style={{ display: "block", width: "100%", padding: "7px 12px", background: "transparent", border: "none", color: "var(--text-primary)", fontSize: "0.85rem", textAlign: "left", cursor: "pointer" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(139,92,246,0.12)"}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.14)"}
                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                         >{s}</button>
                       ))}
@@ -976,7 +976,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                       {deckPartnerSugs.map((s, i) => (
                         <button key={i} onMouseDown={() => { setNewDeckPartner(s); setDeckPartnerSugs([]); }}
                           style={{ display: "block", width: "100%", padding: "7px 12px", background: "transparent", border: "none", color: "var(--text-primary)", fontSize: "0.85rem", textAlign: "left", cursor: "pointer" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(139,92,246,0.12)"}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.14)"}
                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                         >{s}</button>
                       ))}
@@ -1003,8 +1003,8 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                     onClick={handleSaveDeck}
                     style={{
                       padding: "8px 16px", borderRadius: "8px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer",
-                      background: newDeckName.trim() && newDeckCmd.trim() ? "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(6,182,212,0.2))" : "rgba(255,255,255,0.04)",
-                      border: `1px solid ${newDeckName.trim() && newDeckCmd.trim() ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
+                      background: newDeckName.trim() && newDeckCmd.trim() ? "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 30%, transparent), rgba(6,182,212,0.2))" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${newDeckName.trim() && newDeckCmd.trim() ? "color-mix(in srgb, var(--accent-purple) 50%, transparent)" : "rgba(255,255,255,0.08)"}`,
                       color: newDeckName.trim() && newDeckCmd.trim() ? "#fff" : "var(--text-muted)",
                     }}
                   >
@@ -1024,7 +1024,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                   {thumbUrl ? (
                     <img src={thumbUrl} alt={deck.commanderName} style={{ width: "52px", height: "37px", borderRadius: "6px", objectFit: "cover", objectPosition: "center 15%", flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.5)" }} />
                   ) : (
-                    <div style={{ width: "52px", height: "37px", borderRadius: "6px", background: "rgba(139,92,246,0.1)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: "52px", height: "37px", borderRadius: "6px", background: "color-mix(in srgb, var(--accent-purple) 10%, transparent)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <BookMarked size={16} color="var(--accent-purple)" />
                     </div>
                   )}

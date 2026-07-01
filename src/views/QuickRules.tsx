@@ -171,7 +171,7 @@ export const QuickRules: React.FC = () => {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--border-color)", paddingBottom: "14px", marginBottom: "16px", flexShrink: 0, flexWrap: "wrap", gap: "12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "linear-gradient(135deg, #8b5cf6, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 16px rgba(139,92,246,0.35)" }}>
+          <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "linear-gradient(135deg, var(--accent-purple), #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 16px color-mix(in srgb, var(--accent-purple) 35%, transparent)" }}>
             <BookOpen size={20} color="#fff" />
           </div>
           <div>

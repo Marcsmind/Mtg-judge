@@ -463,7 +463,7 @@ export const DeckEditorView: React.FC<DeckEditorViewProps> = ({
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.readText().then(t => { if (t.trim()) setBulkText(t.trim()); }).catch(() => undefined)}
-                  style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "5px", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: "8px", color: "var(--accent-purple)", fontSize: "0.75rem", fontWeight: 600, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+                  style={{ position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: "5px", background: "color-mix(in srgb, var(--accent-purple) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent-purple) 30%, transparent)", borderRadius: "8px", color: "var(--accent-purple)", fontSize: "0.75rem", fontWeight: 600, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
                 >
                   <ClipboardPaste size={12} /> Paste from Clipboard
                 </button>
@@ -628,8 +628,8 @@ export const DeckEditorView: React.FC<DeckEditorViewProps> = ({
             fontWeight: 700, fontSize: "0.9rem",
             background: saved
               ? "rgba(16,185,129,0.2)"
-              : "linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(6,182,212,0.15) 100%)",
-            borderColor: saved ? "rgba(16,185,129,0.35)" : "rgba(139,92,246,0.4)",
+              : "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 25%, transparent) 0%, rgba(6,182,212,0.15) 100%)",
+            borderColor: saved ? "rgba(16,185,129,0.35)" : "color-mix(in srgb, var(--accent-purple) 40%, transparent)",
             color: saved ? "var(--accent-emerald)" : "var(--text-primary)",
             transition: "all 0.2s ease",
           }}
