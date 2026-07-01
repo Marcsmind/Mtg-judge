@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { X, ChevronLeft, Camera, Loader2, ChevronDown } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { searchCardFuzzy, fetchCardPrints } from '../services/scryfall';
 import type { ScryfallCard } from '../services/scryfall';
 import type { CollectionCard } from '../types/collection';
@@ -27,7 +28,9 @@ const TUTORIAL_KEY = 'arbiter_scanner_tutorial_done_v2';
 
 const PROXY_URL = import.meta.env.DEV
   ? 'http://localhost:8888/.netlify/functions/vision-proxy'
-  : '/.netlify/functions/vision-proxy';
+  : Capacitor.isNativePlatform()
+    ? 'https://mtg-judge.netlify.app/.netlify/functions/vision-proxy'
+    : '/.netlify/functions/vision-proxy';
 
 function cardImage(card: ScryfallCard, size: 'small' | 'normal' = 'small'): string {
   return (
