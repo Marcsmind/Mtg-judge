@@ -10,6 +10,8 @@ import { COLOR_SYMBOLS, CARD_TYPES, GROUP_TYPE_META } from "../types/collection"
 import { CardScanner } from "./CardScanner";
 import { useAppStore } from "../store/useAppStore";
 import { CardDetailView } from "./collection/CardDetailView";
+import { ScannerPaywall } from "../components/ScannerPaywall";
+import { useFeature } from "../hooks/useFeature";
 
 const RARITY_COLORS: Record<string, string> = {
   common:    "#d1d5db",
@@ -223,7 +225,11 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ groupId: initialGroupId, gr
 };
 
 // ── Main Collection view ───────────────────────────────────────────────────────
-export const Collection: React.FC = () => {
+interface CollectionProps {
+  onTierChange?: (tier: import("../types/subscription").SubscriptionTier) => void;
+}
+
+export const Collection: React.FC<CollectionProps> = ({ onTierChange }) => {
   const { user, loading: authLoading } = useAuth();
   const { groups, cards, addGroup, renameGroup, deleteGroup, addCard, updateCard, removeCard } = useCollection(user?.id);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null); // null = All
@@ -238,7 +244,9 @@ export const Collection: React.FC = () => {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingGroupName, setEditingGroupName] = useState("");
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | null>(null);
+  const [showScannerPaywall, setShowScannerPaywall] = useState(false);
   const newGroupRef = useRef<HTMLInputElement>(null);
+  const canScan = useFeature('card_scanner');
 
   const pendingAddToCollectionCard = useAppStore((s) => s.pendingAddToCollectionCard);
   const setPendingAddToCollectionCard = useAppStore((s) => s.setPendingAddToCollectionCard);
@@ -575,13 +583,18 @@ export const Collection: React.FC = () => {
 
       {/* FABs */}
       <div style={{ position: "absolute", bottom: "80px", right: "16px", display: "flex", flexDirection: "column", gap: "10px", zIndex: 10 }}>
-        {/* Scan */}
+        {/* Scan — Pro gated */}
         <button
-          onClick={() => setShowScanner(true)}
-          style={{ width: "52px", height: "52px", borderRadius: "50%", background: "rgba(20,16,30,0.85)", border: "1px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}
+          onClick={() => canScan ? setShowScanner(true) : setShowScannerPaywall(true)}
+          style={{ width: "52px", height: "52px", borderRadius: "50%", background: "rgba(20,16,30,0.85)", border: "1px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.4)", position: "relative" }}
           title="Scan cards"
         >
           <Camera size={20} color="var(--accent-purple, #8b5cf6)" />
+          {!canScan && (
+            <div style={{ position: "absolute", top: "-3px", right: "-3px", width: "14px", height: "14px", borderRadius: "50%", background: "#f59e0b", border: "2px solid rgba(10,8,20,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: "8px", fontWeight: 900, color: "#000", lineHeight: 1 }}>★</span>
+            </div>
+          )}
         </button>
         {/* Manual add */}
         <button
@@ -617,6 +630,16 @@ export const Collection: React.FC = () => {
           defaultGroupId={activeGroupId ?? groups[0]?.id ?? ""}
           onAddCards={scannedCards => scannedCards.forEach(c => addCard(c))}
           onClose={() => setShowScanner(false)}
+        />
+      )}
+      {showScannerPaywall && (
+        <ScannerPaywall
+          onClose={() => setShowScannerPaywall(false)}
+          onTierChange={t => { onTierChange?.(t); }}
+          onUnlocked={() => {
+            setShowScannerPaywall(false);
+            setShowScanner(true);
+          }}
         />
       )}
     </div>

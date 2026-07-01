@@ -523,7 +523,7 @@ function App() {
       case "draft":
         return <DraftMode />;
       case "collection":
-        return <Collection />;
+        return <Collection onTierChange={t => setOptimisticTier(t)} />;
       case "guide":
         return <AppGuide onNavigate={(tab) => setActiveTab(tab)} />;
       default:

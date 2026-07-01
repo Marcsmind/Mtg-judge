@@ -45,6 +45,10 @@ export type AnalyticsEvent =
   | 'subscription_started'
   | 'trial_activated'
   | 'paywall_reached'            // which gate was hit; include { feature }
+  | 'scanner_paywall_shown'
+  | 'scanner_paywall_purchase_started'
+  | 'scanner_paywall_purchase_success'
+  | 'scanner_paywall_restore_success'
   // Auth
   | 'account_created'
   | 'account_signed_in'

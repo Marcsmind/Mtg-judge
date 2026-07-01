@@ -20,6 +20,7 @@ const PRO_FEATURES: ReadonlySet<FeatureName> = new Set<FeatureName>([
   'cloud_decks',
   'full_game_history',
   'ai_deck_generation',
+  'card_scanner',
 ]);
 
 function tierHasFeature(tier: SubscriptionTier, feature: FeatureName): boolean {
