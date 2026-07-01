@@ -18,5 +18,15 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // react-hooks v7 added React Compiler rules that require code rewrites
+      // to support automatic memoization. Disable until we opt into the compiler.
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }],
+      'react-hooks/react-compiler': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/static-components': 'off',
+      'react-refresh/only-export-components': 'warn',
+    },
   },
 ])

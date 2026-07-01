@@ -424,16 +424,13 @@ function App() {
     setGeminiModel(savedModel);
   };
 
-  useEffect(() => {
-    if (activeTab !== "life") setLifecounterFullscreen(false);
-  }, [activeTab]);
-
   const handleNavigate = (tab: TabId) => {
     if (tab === "judge") {
       setJudgeOpen(true);
     } else {
       setActiveTab(tab);
-      setJudgeOpen(false); // Close modal if switching tabs
+      setJudgeOpen(false);
+      if (tab !== "life") setLifecounterFullscreen(false);
     }
   };
 

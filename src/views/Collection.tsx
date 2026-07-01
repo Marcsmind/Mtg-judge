@@ -1,11 +1,24 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Plus, Search, X, Trash2, ChevronDown, Check, Pencil, Camera, ArrowUpDown } from "lucide-react";
+import { Plus, Search, X, Trash2, ChevronDown, Pencil, Camera, ArrowUpDown } from "lucide-react";
 import { useCollection } from "../hooks/useCollection";
+import { useAuth } from "../hooks/useAuth";
+import { AuthModal } from "../components/AuthModal";
 import { searchCardsWithImages } from "../services/scryfall";
 import type { ScryfallCard } from "../services/scryfall";
 import type { CollectionCard, ColorSymbol, CardType, SortKey } from "../types/collection";
 import { COLOR_SYMBOLS, CARD_TYPES, GROUP_TYPE_META } from "../types/collection";
 import { CardScanner } from "./CardScanner";
+import { useAppStore } from "../store/useAppStore";
+import { CardDetailView } from "./collection/CardDetailView";
+
+const RARITY_COLORS: Record<string, string> = {
+  common:    "#d1d5db",
+  uncommon:  "#9fd1c7",
+  rare:      "#fbbf24",
+  mythic:    "#f97316",
+  special:   "#c4b5fd",
+  bonus:     "#c4b5fd",
+};
 
 // ── Color swatch config ───────────────────────────────────────────────────────
 const COLOR_META: Record<ColorSymbol | "C", { label: string; bg: string; border: string; text: string }> = {
@@ -92,9 +105,9 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ groupId: initialGroupId, gr
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: "var(--app-height, 100dvh)", background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "calc(16px + env(safe-area-inset-top, 0px))" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width: "100%", maxWidth: "540px", background: "var(--bg, #08070b)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px 20px 0 0", padding: "24px", display: "flex", flexDirection: "column", gap: "16px", maxHeight: "90vh", overflow: "hidden" }}>
+      <div style={{ width: "calc(100% - 32px)", maxWidth: "540px", background: "var(--bg, #08070b)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "24px 24px calc(24px + env(safe-area-inset-bottom, 0px)) 24px", display: "flex", flexDirection: "column", gap: "16px", maxHeight: "calc(100% - 16px)", overflow: "hidden" }}>
 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -122,7 +135,7 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ groupId: initialGroupId, gr
                 {results.map(card => (
                   <button key={card.id} onClick={() => setSelected(card)}
                     style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "10px", cursor: "pointer", textAlign: "left" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(139,92,246,0.4)"}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"}
                     onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"}
                   >
                     {getCardImage(card) && (
@@ -187,7 +200,7 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ groupId: initialGroupId, gr
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                   {groups.map(g => (
                     <button key={g.id} onClick={() => setTargetGroupId(g.id)}
-                      style={{ padding: "6px 14px", borderRadius: "20px", background: targetGroupId === g.id ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${targetGroupId === g.id ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`, color: targetGroupId === g.id ? "#c4b5fd" : "var(--text-muted, #635e78)", fontSize: "0.82rem", cursor: "pointer" }}
+                      style={{ padding: "6px 14px", borderRadius: "20px", background: targetGroupId === g.id ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.04)", border: `1px solid ${targetGroupId === g.id ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.08)"}`, color: targetGroupId === g.id ? "#fff" : "var(--text-muted, #635e78)", fontSize: "0.82rem", cursor: "pointer" }}
                     >
                       {g.name}
                     </button>
@@ -198,7 +211,7 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ groupId: initialGroupId, gr
 
             {/* Add button */}
             <button onClick={handleAdd}
-              style={{ padding: "12px", background: "linear-gradient(135deg, rgba(139,92,246,0.8) 0%, rgba(6,182,212,0.6) 100%)", border: "none", borderRadius: "12px", color: "#fff", fontSize: "0.95rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+              style={{ padding: "12px", background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 80%, transparent) 0%, rgba(6,182,212,0.6) 100%)", border: "none", borderRadius: "12px", color: "#fff", fontSize: "0.95rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
               <Plus size={16} /> Add to Collection
             </button>
@@ -209,73 +222,55 @@ const AddCardModal: React.FC<AddCardModalProps> = ({ groupId: initialGroupId, gr
   );
 };
 
-// ── Card detail modal ──────────────────────────────────────────────────────────
-interface CardDetailProps {
-  card: CollectionCard;
-  onUpdate: (patch: Partial<CollectionCard>) => void;
-  onRemove: () => void;
-  onClose: () => void;
-}
-
-const CardDetail: React.FC<CardDetailProps> = ({ card, onUpdate, onRemove, onClose }) => (
-  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-    onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <div style={{ width: "100%", maxWidth: "540px", background: "var(--bg, #08070b)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px 20px 0 0", padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h3 style={{ fontSize: "1rem", fontWeight: 700 }}>{card.name}</h3>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted, #635e78)" }}><X size={20} /></button>
-      </div>
-      <div style={{ display: "flex", gap: "16px" }}>
-        {card.imageUri && <img src={card.imageUri} alt={card.name} style={{ width: "80px", height: "112px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }} />}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted, #635e78)" }}>{card.typeLine}</div>
-          {card.priceUsd != null && <div style={{ fontSize: "0.88rem", color: "#86efac" }}>${card.priceUsd.toFixed(2)} {card.foil ? "(foil)" : ""}</div>}
-          {/* Quantity */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "0.8rem", color: "var(--text-muted, #635e78)" }}>Qty</span>
-            <button onClick={() => onUpdate({ quantity: Math.max(1, card.quantity - 1) })} style={{ width: "28px", height: "28px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-            <span style={{ fontSize: "1rem", fontWeight: 700, minWidth: "20px", textAlign: "center" }}>{card.quantity}</span>
-            <button onClick={() => onUpdate({ quantity: card.quantity + 1 })} style={{ width: "28px", height: "28px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
-          </div>
-          {/* Foil */}
-          <button onClick={() => onUpdate({ foil: !card.foil })}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 10px", borderRadius: "8px", background: card.foil ? "rgba(234,179,8,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${card.foil ? "rgba(234,179,8,0.4)" : "rgba(255,255,255,0.08)"}`, color: card.foil ? "#fbbf24" : "var(--text-muted, #635e78)", fontSize: "0.8rem", cursor: "pointer", alignSelf: "flex-start" }}
-          >
-            ✨ Foil {card.foil && <Check size={12} />}
-          </button>
-        </div>
-      </div>
-      <button onClick={onRemove} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "10px", background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.2)", borderRadius: "10px", color: "#f87171", fontSize: "0.85rem", cursor: "pointer", fontWeight: 600 }}>
-        <Trash2 size={14} /> Remove from Collection
-      </button>
-    </div>
-  </div>
-);
-
 // ── Main Collection view ───────────────────────────────────────────────────────
 export const Collection: React.FC = () => {
-  const { groups, cards, wantedIds, addGroup, renameGroup, deleteGroup, addCard, updateCard, removeCard } = useCollection();
+  const { user, loading: authLoading } = useAuth();
+  const { groups, cards, addGroup, renameGroup, deleteGroup, addCard, updateCard, removeCard } = useCollection(user?.id);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null); // null = All
   const [colorFilters, setColorFilters] = useState<Set<ColorSymbol | "C">>(new Set());
   const [typeFilters, setTypeFilters] = useState<Set<CardType>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>('newest');
   const [showAddCard, setShowAddCard] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<CollectionCard | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [newGroupName, setNewGroupName] = useState("");
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingGroupName, setEditingGroupName] = useState("");
+  const [authMode, setAuthMode] = useState<'signin' | 'signup' | null>(null);
   const newGroupRef = useRef<HTMLInputElement>(null);
+
+  const pendingAddToCollectionCard = useAppStore((s) => s.pendingAddToCollectionCard);
+  const setPendingAddToCollectionCard = useAppStore((s) => s.setPendingAddToCollectionCard);
+
+  // ── pendingAddToCollectionCard watcher — consumed when CardCodex "Add to
+  // Collection" fires. Adds 1x non-foil to the default ("collection"-type, or
+  // first available) group; quantity/foil/group can be adjusted afterward. ──
+  useEffect(() => {
+    if (!pendingAddToCollectionCard) return;
+    const card = pendingAddToCollectionCard;
+    setPendingAddToCollectionCard(null);
+    const targetGroup = groups.find(g => g.type === 'collection') ?? groups[0];
+    if (!targetGroup) return;
+    addCard({
+      groupId: targetGroup.id,
+      scryfallId: card.id,
+      name: card.name,
+      quantity: 1,
+      foil: false,
+      colors: card.colors ?? [],
+      typeLine: card.type_line ?? "",
+      cmc: card.cmc ?? 0,
+      imageUri: getCardImage(card),
+      priceUsd: parseFloat(card.prices?.usd ?? "0") || null,
+      rarity: (card as unknown as { rarity?: string }).rarity ?? "common",
+      setCode: (card as unknown as { set?: string }).set ?? "",
+    });
+  }, [pendingAddToCollectionCard, groups, addCard, setPendingAddToCollectionCard]);
 
   useEffect(() => { if (showNewGroup) newGroupRef.current?.focus(); }, [showNewGroup]);
 
-  const toggleColor = (c: ColorSymbol | "C") =>
-    setColorFilters(prev => { const s = new Set(prev); if (s.has(c)) s.delete(c); else s.add(c); return s; });
-
-  const toggleType = (t: CardType) =>
-    setTypeFilters(prev => { const s = new Set(prev); if (s.has(t)) s.delete(t); else s.add(t); return s; });
-
+  // These useMemo hooks must be declared before any early return to satisfy React's rules of hooks.
   const visibleCards = useMemo(() => {
     let result = activeGroupId ? cards.filter(c => c.groupId === activeGroupId) : cards;
     if (colorFilters.size > 0)
@@ -298,6 +293,71 @@ export const Collection: React.FC = () => {
     visibleCards.reduce((sum, c) => sum + (c.priceUsd ?? 0) * c.quantity, 0),
     [visibleCards]
   );
+
+  // ── Sign-in gate ──────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div style={{
+        display: "flex", flex: 1, flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        padding: "32px 24px", textAlign: "center", gap: "0",
+      }}>
+        <div style={{ fontSize: "3.5rem", marginBottom: "20px", lineHeight: 1 }}>📦</div>
+        <h2 style={{ margin: "0 0 10px", fontSize: "1.4rem", fontWeight: 800, color: "var(--text-primary)" }}>
+          Your Collection
+        </h2>
+        <p style={{ margin: "0 0 8px", fontSize: "0.95rem", color: "var(--text-secondary)", maxWidth: "300px", lineHeight: 1.5 }}>
+          Sign in to track your cards, build want lists, and keep everything synced across your devices.
+        </p>
+        <p style={{ margin: "0 0 32px", fontSize: "0.8rem", color: "var(--text-muted)", maxWidth: "280px", lineHeight: 1.5 }}>
+          Your collection is tied to your account — create one for free to get started.
+        </p>
+        <button
+          onClick={() => setAuthMode('signup')}
+          style={{
+            width: "100%", maxWidth: "280px", padding: "14px",
+            background: "var(--accent-purple)", border: "none", borderRadius: "12px",
+            color: "#fff", fontSize: "1rem", fontWeight: 700, cursor: "pointer",
+            marginBottom: "12px",
+          }}
+        >
+          Create Free Account
+        </button>
+        <button
+          onClick={() => setAuthMode('signin')}
+          style={{
+            width: "100%", maxWidth: "280px", padding: "14px",
+            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: "12px", color: "var(--text-primary)", fontSize: "1rem",
+            fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Sign In
+        </button>
+
+        <AuthModal
+          isOpen={authMode !== null}
+          defaultMode={authMode ?? 'signin'}
+          onClose={() => setAuthMode(null)}
+          onSuccess={() => setAuthMode(null)}
+        />
+      </div>
+    );
+  }
+
+  const toggleColor = (c: ColorSymbol | "C") =>
+    setColorFilters(prev => { const s = new Set(prev); if (s.has(c)) s.delete(c); else s.add(c); return s; });
+
+  const toggleType = (t: CardType) =>
+    setTypeFilters(prev => { const s = new Set(prev); if (s.has(t)) s.delete(t); else s.add(t); return s; });
 
   const totalCount = visibleCards.reduce((sum, c) => sum + c.quantity, 0);
 
@@ -343,7 +403,7 @@ export const Collection: React.FC = () => {
         <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "10px", scrollbarWidth: "none" }}>
           {/* All tab */}
           <button onClick={() => setActiveGroupId(null)}
-            style={{ flexShrink: 0, padding: "6px 14px", borderRadius: "20px", background: activeGroupId === null ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${activeGroupId === null ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`, color: activeGroupId === null ? "#c4b5fd" : "var(--text-muted, #635e78)", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flexShrink: 0, padding: "6px 14px", borderRadius: "20px", background: activeGroupId === null ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.04)", border: `1px solid ${activeGroupId === null ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.08)"}`, color: activeGroupId === null ? "#fff" : "var(--text-muted, #635e78)", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
           >
             All Cards {cards.length > 0 && `(${cards.reduce((s, c) => s + c.quantity, 0)})`}
           </button>
@@ -357,11 +417,11 @@ export const Collection: React.FC = () => {
                   onBlur={handleRenameGroup}
                   onKeyDown={e => { if (e.key === "Enter") handleRenameGroup(); if (e.key === "Escape") setEditingGroupId(null); }}
                   autoFocus
-                  style={{ padding: "5px 10px", borderRadius: "20px", background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.5)", color: "#c4b5fd", fontSize: "0.82rem", outline: "none", width: "120px" }}
+                  style={{ padding: "5px 10px", borderRadius: "20px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", fontSize: "0.82rem", outline: "none", width: "120px" }}
                 />
               ) : (
                 <button onClick={() => setActiveGroupId(g.id)}
-                  style={{ padding: "6px 14px", borderRadius: "20px", background: activeGroupId === g.id ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${activeGroupId === g.id ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`, color: activeGroupId === g.id ? "#c4b5fd" : "var(--text-muted, #635e78)", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                  style={{ padding: "6px 14px", borderRadius: "20px", background: activeGroupId === g.id ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.04)", border: `1px solid ${activeGroupId === g.id ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.08)"}`, color: activeGroupId === g.id ? "#fff" : "var(--text-muted, #635e78)", fontSize: "0.82rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
                 >
                   {GROUP_TYPE_META[g.type]?.icon && <span style={{ marginRight: "4px" }}>{GROUP_TYPE_META[g.type].icon}</span>}{g.name} ({cards.filter(c => c.groupId === g.id).reduce((s, c) => s + c.quantity, 0)})
                 </button>
@@ -386,7 +446,7 @@ export const Collection: React.FC = () => {
                 placeholder="Group name…"
                 style={{ padding: "5px 10px", borderRadius: "20px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", color: "#f1f0f4", fontSize: "0.82rem", outline: "none", width: "120px" }}
               />
-              <button onClick={handleCreateGroup} style={{ padding: "5px 10px", borderRadius: "20px", background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#c4b5fd", fontSize: "0.82rem", cursor: "pointer" }}>Add</button>
+              <button onClick={handleCreateGroup} style={{ padding: "5px 10px", borderRadius: "20px", background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.28)", color: "#fff", fontSize: "0.82rem", cursor: "pointer" }}>Add</button>
               <button onClick={() => setShowNewGroup(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted, #635e78)" }}><X size={14} /></button>
             </div>
           ) : (
@@ -422,7 +482,7 @@ export const Collection: React.FC = () => {
             const active = typeFilters.has(t);
             return (
               <button key={t} onClick={() => toggleType(t)}
-                style={{ padding: "4px 10px", borderRadius: "16px", background: active ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${active ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.08)"}`, color: active ? "#c4b5fd" : "var(--text-muted, #635e78)", fontSize: "0.78rem", cursor: "pointer" }}
+                style={{ padding: "4px 10px", borderRadius: "16px", background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.03)", border: `1px solid ${active ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`, color: active ? "#fff" : "var(--text-muted, #635e78)", fontSize: "0.78rem", cursor: "pointer" }}
               >
                 {t}
               </button>
@@ -445,7 +505,7 @@ export const Collection: React.FC = () => {
           <ArrowUpDown size={13} color="var(--text-muted, #635e78)" />
           {([ ['newest','Newest'], ['name','A–Z'], ['price-high','$ High'], ['price-low','$ Low'], ['quantity','Qty'] ] as [SortKey, string][]).map(([key, label]) => (
             <button key={key} onClick={() => setSortKey(key)}
-              style={{ padding: "3px 10px", borderRadius: "14px", background: sortKey === key ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${sortKey === key ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.07)"}`, color: sortKey === key ? "#c4b5fd" : "var(--text-muted, #635e78)", fontSize: "0.75rem", cursor: "pointer" }}
+              style={{ padding: "3px 10px", borderRadius: "14px", background: sortKey === key ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.03)", border: `1px solid ${sortKey === key ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.07)"}`, color: sortKey === key ? "#fff" : "var(--text-muted, #635e78)", fontSize: "0.75rem", cursor: "pointer" }}
             >{label}</button>
           ))}
         </div>
@@ -461,29 +521,52 @@ export const Collection: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
-            {visibleCards.map(card => (
-              <button key={card.id} onClick={() => setSelectedCard(card)}
-                style={{ position: "relative", background: "none", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", cursor: "pointer", padding: 0, overflow: "hidden", aspectRatio: "488/680" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px 8px" }}>
+            {visibleCards.map((card, i) => (
+              <button key={card.id} onClick={() => setSelectedIndex(i)}
+                style={{ display: "flex", flexDirection: "column", gap: "5px", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
               >
-                {card.imageUri
-                  ? <img src={card.imageUri} alt={card.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                  : <div style={{ width: "100%", height: "100%", background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px" }}>
-                      <span style={{ fontSize: "0.65rem", color: "var(--text-muted, #635e78)", textAlign: "center", lineHeight: 1.3 }}>{card.name}</span>
+                <div
+                  style={{ position: "relative", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px", overflow: "hidden", aspectRatio: "488/680" }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)")}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)")}
+                >
+                  {card.imageUri
+                    ? <img src={card.imageUri} alt={card.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    : <div style={{ width: "100%", height: "100%", background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px" }}>
+                        <span style={{ fontSize: "0.65rem", color: "var(--text-muted, #635e78)", textAlign: "center", lineHeight: 1.3 }}>{card.name}</span>
+                      </div>
+                  }
+                  {/* Quantity badge */}
+                  {card.quantity > 1 && (
+                    <div style={{ position: "absolute", bottom: "4px", right: "4px", background: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "10px", padding: "1px 6px", fontSize: "0.7rem", fontWeight: 700, color: "#fff" }}>
+                      ×{card.quantity}
                     </div>
-                }
-                {/* Quantity badge */}
-                {card.quantity > 1 && (
-                  <div style={{ position: "absolute", bottom: "4px", right: "4px", background: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "10px", padding: "1px 6px", fontSize: "0.7rem", fontWeight: 700, color: "#fff" }}>
-                    ×{card.quantity}
-                  </div>
-                )}
-                {/* Foil badge */}
-                {card.foil && (
-                  <div style={{ position: "absolute", top: "4px", left: "4px", background: "rgba(234,179,8,0.8)", borderRadius: "4px", padding: "1px 4px", fontSize: "0.6rem", fontWeight: 700, color: "#000" }}>✨</div>
-                )}
+                  )}
+                  {/* Foil badge */}
+                  {card.foil && (
+                    <div style={{ position: "absolute", top: "4px", left: "4px", background: "rgba(234,179,8,0.8)", borderRadius: "4px", padding: "1px 4px", fontSize: "0.6rem", fontWeight: 700, color: "#000" }}>✨</div>
+                  )}
+                </div>
+
+                {/* Name */}
+                <div style={{
+                  fontSize: "0.7rem", fontWeight: 700, lineHeight: 1.25,
+                  display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                  minHeight: "1.8em",
+                } as React.CSSProperties}>
+                  {card.name}
+                </div>
+
+                {/* Price + set badge */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, color: card.priceUsd != null ? "#86efac" : "var(--text-muted)" }}>
+                    {card.priceUsd != null ? `$${card.priceUsd.toFixed(2)}` : "—"}
+                  </span>
+                  <span style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.03em", color: RARITY_COLORS[card.rarity] ?? "var(--text-muted)" }}>
+                    {card.setCode.toUpperCase()}
+                  </span>
+                </div>
               </button>
             ))}
           </div>
@@ -495,7 +578,7 @@ export const Collection: React.FC = () => {
         {/* Scan */}
         <button
           onClick={() => setShowScanner(true)}
-          style={{ width: "52px", height: "52px", borderRadius: "50%", background: "rgba(20,16,30,0.85)", border: "1px solid rgba(139,92,246,0.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}
+          style={{ width: "52px", height: "52px", borderRadius: "50%", background: "rgba(20,16,30,0.85)", border: "1px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}
           title="Scan cards"
         >
           <Camera size={20} color="var(--accent-purple, #8b5cf6)" />
@@ -503,7 +586,7 @@ export const Collection: React.FC = () => {
         {/* Manual add */}
         <button
           onClick={() => setShowAddCard(true)}
-          style={{ width: "52px", height: "52px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-purple, #8b5cf6) 0%, var(--accent-cyan, #06b6d4) 100%)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(139,92,246,0.5)" }}
+          style={{ width: "52px", height: "52px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent-purple, #8b5cf6) 0%, var(--accent-cyan, #06b6d4) 100%)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px color-mix(in srgb, var(--accent-purple) 50%, transparent)" }}
           title="Add card manually"
         >
           <Plus size={22} color="#fff" />
@@ -519,18 +602,19 @@ export const Collection: React.FC = () => {
           onClose={() => setShowAddCard(false)}
         />
       )}
-      {selectedCard && (
-        <CardDetail
-          card={selectedCard}
-          onUpdate={patch => updateCard(selectedCard.id, patch)}
-          onRemove={() => { removeCard(selectedCard.id); setSelectedCard(null); }}
-          onClose={() => setSelectedCard(null)}
+      {selectedIndex !== null && visibleCards[selectedIndex] && (
+        <CardDetailView
+          cards={visibleCards}
+          index={selectedIndex}
+          onNavigate={setSelectedIndex}
+          onUpdate={(id, patch) => updateCard(id, patch)}
+          onRemove={id => { removeCard(id); setSelectedIndex(null); }}
+          onClose={() => setSelectedIndex(null)}
         />
       )}
       {showScanner && (
         <CardScanner
           defaultGroupId={activeGroupId ?? groups[0]?.id ?? ""}
-          wantedIds={wantedIds}
           onAddCards={scannedCards => scannedCards.forEach(c => addCard(c))}
           onClose={() => setShowScanner(false)}
         />

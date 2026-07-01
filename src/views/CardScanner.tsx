@@ -17,7 +17,6 @@ interface ScanResult {
 
 interface CardScannerProps {
   defaultGroupId: string;
-  wantedIds: Set<string>;
   onAddCards: (cards: Omit<CollectionCard, 'id' | 'addedAt'>[]) => void;
   onClose: () => void;
 }
@@ -195,7 +194,7 @@ type ScanPhase =
   | 'pick-printing'// card found, showing printing picker
   | 'error';       // something went wrong
 
-export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wantedIds: _wantedIds, onAddCards, onClose }) => {
+export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddCards, onClose }) => {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const streamRef  = useRef<MediaStream | null>(null);
@@ -233,6 +232,24 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
       alive = false;
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
+  }, []);
+
+  // ── Add a confirmed scan result to the tray ──────────────────────────────────
+
+  const addScanResult = useCallback((card: ScryfallCard, printing: ScryfallCard, foil: boolean) => {
+    setResults(prev => {
+      const existing = prev.find(r => r.printing.id === printing.id && r.foil === foil);
+      if (existing) {
+        return prev.map(r => r.scanId === existing.scanId ? { ...r, quantity: r.quantity + 1 } : r);
+      }
+      return [{
+        scanId:   crypto.randomUUID(),
+        card,
+        printing,
+        quantity: 1,
+        foil,
+      }, ...prev];
+    });
   }, []);
 
   // ── Capture frame → Vision → Scryfall ───────────────────────────────────────
@@ -306,24 +323,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, wanted
       setTimeout(() => setPhase('viewfinder'), 3500);
     }
   }, [phase, globalFoil]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Add a confirmed scan result to the tray ──────────────────────────────────
-
-  const addScanResult = useCallback((card: ScryfallCard, printing: ScryfallCard, foil: boolean) => {
-    setResults(prev => {
-      const existing = prev.find(r => r.printing.id === printing.id && r.foil === foil);
-      if (existing) {
-        return prev.map(r => r.scanId === existing.scanId ? { ...r, quantity: r.quantity + 1 } : r);
-      }
-      return [{
-        scanId:   crypto.randomUUID(),
-        card,
-        printing,
-        quantity: 1,
-        foil,
-      }, ...prev];
-    });
-  }, []);
 
   const handlePickerSelect = useCallback((printing: ScryfallCard, foil: boolean) => {
     if (!pickerCard) return;

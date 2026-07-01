@@ -36,10 +36,17 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
   const {
     adjustLife,
     openCommanderHub, openPlayerSetup,
-    setActiveDamageEditor, revivePlayer,
+    revivePlayer,
   } = useGameActions();
 
   const playerTheme = colors[p.colorName] || colors.purple;
+
+  // Crown hit-target shrinks visually as the grid gets denser, but its tap
+  // area is kept well above the icon size so mis-taps don't fall through to
+  // the life-adjust zones underneath (the smaller the card, the easier it is
+  // to miss a tightly-cropped button).
+  const crownIconSize = playerCount <= 2 ? 20 : playerCount <= 4 ? 17 : 15;
+  const crownPad       = playerCount <= 2 ? "11px 17px" : playerCount <= 4 ? "9px 14px" : "8px 12px";
 
   const [commanderArtUrl, setCommanderArtUrl] = useState<string | null>(null);
 
@@ -197,7 +204,7 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
           : isDefeated
             ? "0 0 20px rgba(239,68,68,0.2) inset, 0 4px 20px rgba(0,0,0,0.3)"
             : isActiveTurn
-              ? "0 0 0 2px var(--accent-purple-glow), 0 0 18px rgba(139,92,246,0.25), 0 4px 20px rgba(0,0,0,0.3)"
+              ? "0 0 0 2px var(--accent-purple-glow), 0 0 18px color-mix(in srgb, var(--accent-purple) 25%, transparent), 0 4px 20px rgba(0,0,0,0.3)"
               : "0 4px 20px rgba(0,0,0,0.3)",
         position: "relative", overflow: "hidden",
         transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)",
@@ -252,14 +259,14 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
         aria-label="Commander Hub"
         style={{
           position: "absolute", bottom: "8px", right: "10px",
-          background: (p.tax > 0 || p.taxPartner > 0) ? "rgba(168,85,247,0.14)" : "rgba(255,255,255,0.04)",
-          border: `1px solid ${(p.tax > 0 || p.taxPartner > 0) ? "rgba(168,85,247,0.35)" : "rgba(255,255,255,0.08)"}`,
-          borderRadius: "7px", padding: "5px 9px", cursor: "pointer",
+          background: (p.tax > 0 || p.taxPartner > 0) ? "color-mix(in srgb, var(--accent-purple) 14%, transparent)" : "rgba(255,255,255,0.04)",
+          border: `1px solid ${(p.tax > 0 || p.taxPartner > 0) ? "color-mix(in srgb, var(--accent-purple) 35%, transparent)" : "rgba(255,255,255,0.08)"}`,
+          borderRadius: "9px", padding: crownPad, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center",
           zIndex: 5,
         }}
       >
-        <Crown size={14} color={(p.tax > 0 || p.taxPartner > 0) ? "var(--accent-purple)" : "var(--text-muted)"} />
+        <Crown size={crownIconSize} color={(p.tax > 0 || p.taxPartner > 0) ? "var(--accent-purple)" : "var(--text-muted)"} />
       </button>
 
       {/* "Goes First" Star Badge */}
@@ -452,9 +459,9 @@ const PlayerCardBase: React.FC<PlayerCardProps> = ({
 
         return (
           <div className="lc-bottom-row" style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "5px", position: "relative", zIndex: 3 }}>
-            {/* Commander Damage Grid — tap anywhere to open damage modal */}
+            {/* Commander Damage Grid — tap anywhere to open the Hub, landing on the Damage tab */}
             <div
-              onClick={() => setActiveDamageEditor(p.id)}
+              onClick={() => openCommanderHub(p.id, "damage")}
               title="Commander Damage"
               style={{
                 cursor: "pointer",
