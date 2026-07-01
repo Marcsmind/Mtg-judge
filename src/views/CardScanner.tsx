@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, ChevronLeft, Camera, Loader2, ChevronDown } from 'lucide-react';
+import { X, ChevronLeft, Loader2, ChevronDown } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { searchCardFuzzy, fetchCardPrints } from '../services/scryfall';
 import type { ScryfallCard } from '../services/scryfall';
@@ -10,7 +10,7 @@ import type { CollectionCard } from '../types/collection';
 interface ScanResult {
   scanId: string;
   card: ScryfallCard;
-  printing: ScryfallCard;   // the specific printing the user chose
+  printing: ScryfallCard;
   quantity: number;
   foil: boolean;
 }
@@ -23,13 +23,19 @@ interface CardScannerProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const TUTORIAL_KEY = 'arbiter_scanner_tutorial_done_v2';
+const TUTORIAL_KEY = 'arbiter_scanner_tutorial_done_v3';
 
 const PROXY_URL = import.meta.env.DEV
   ? 'http://localhost:8888/.netlify/functions/vision-proxy'
   : Capacitor.isNativePlatform()
     ? 'https://mtg-judge.netlify.app/.netlify/functions/vision-proxy'
     : '/.netlify/functions/vision-proxy';
+
+// Motion detection constants
+const MOTION_SIZE       = 80;   // px — tiny canvas for fast pixel diff
+const STILL_THRESHOLD   = 14;   // avg diff per RGB channel (0–255)
+const STILL_FRAMES      = 4;    // consecutive still frames needed (~800ms at 200ms interval)
+const SCAN_COOLDOWN_MS  = 2200; // ms to wait before allowing next auto-scan after error
 
 function cardImage(card: ScryfallCard, size: 'small' | 'normal' = 'small'): string {
   return (
@@ -48,24 +54,19 @@ function rarityColor(rarity?: string): string {
   }
 }
 
-/** Extract the most likely card name from raw Vision OCR text. */
 function parseCardName(ocrText: string): string {
   const lines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
-
-  // Skip lines that look like mana costs, set codes, or oracle keywords
   const skipPatterns = [
-    /^\{[WUBRGCXYZ0-9/]+\}/, // mana cost
-    /^[0-9]+\/[0-9]+$/,       // P/T
+    /^\{[WUBRGCXYZ0-9/]+\}/,
+    /^[0-9]+\/[0-9]+$/,
     /^(Legendary|Creature|Artifact|Enchantment|Instant|Sorcery|Land|Planeswalker|Battle)/i,
-    /^\d+$/,                   // just a number
+    /^\d+$/,
   ];
-
   for (const line of lines) {
     if (line.length < 2) continue;
     if (skipPatterns.some(p => p.test(line))) continue;
     return line;
   }
-
   return lines[0] ?? '';
 }
 
@@ -82,6 +83,9 @@ interface PrintingPickerProps {
 const PrintingPicker: React.FC<PrintingPickerProps> = ({ card, printings, foil: initialFoil, onSelect, onDismiss }) => {
   const [foil, setFoil] = useState(initialFoil);
 
+  // Auto-select the most recent printing immediately
+  const mostRecent = printings[0];
+
   return (
     <div
       onClick={onDismiss}
@@ -96,17 +100,17 @@ const PrintingPicker: React.FC<PrintingPickerProps> = ({ card, printings, foil: 
         style={{
           background: '#12121e',
           borderRadius: '20px 20px 0 0',
-          maxHeight: '72vh',
+          maxHeight: '65vh',
           display: 'flex', flexDirection: 'column',
           paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)',
         }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 8px' }}>
           <div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: '1rem' }}>{card.name}</div>
             <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.75rem', marginTop: '2px' }}>
-              {printings.length} printing{printings.length !== 1 ? 's' : ''} — choose yours
+              {printings.length} printings — tap one or use the latest
             </div>
           </div>
           <button onClick={onDismiss} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '8px', padding: '7px', cursor: 'pointer', color: 'rgba(255,255,255,0.6)', display: 'flex' }}>
@@ -114,12 +118,35 @@ const PrintingPicker: React.FC<PrintingPickerProps> = ({ card, printings, foil: 
           </button>
         </div>
 
+        {/* Quick-add most recent */}
+        {mostRecent && (
+          <div style={{ padding: '0 18px 10px' }}>
+            <button
+              onClick={() => onSelect(mostRecent, foil)}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: '12px',
+                background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.5)',
+                color: '#fff', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}
+            >
+              <span>✓ Use latest — {mostRecent.set_name}</span>
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 400, fontSize: '0.75rem' }}>
+                {mostRecent.released_at ? new Date(mostRecent.released_at).getFullYear() : ''}
+                {(foil ? parseFloat(mostRecent.prices?.usd_foil ?? '0') : parseFloat(mostRecent.prices?.usd ?? '0')) > 0
+                  ? ` · $${(foil ? parseFloat(mostRecent.prices?.usd_foil ?? '0') : parseFloat(mostRecent.prices?.usd ?? '0')).toFixed(2)}`
+                  : ''}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Foil toggle */}
-        <div style={{ padding: '0 18px 12px' }}>
+        <div style={{ padding: '0 18px 10px' }}>
           <button
             onClick={() => setFoil(f => !f)}
             style={{
-              padding: '7px 14px', borderRadius: '20px',
+              padding: '6px 14px', borderRadius: '20px',
               border: `1px solid ${foil ? 'rgba(234,179,8,0.6)' : 'rgba(255,255,255,0.18)'}`,
               background: foil ? 'rgba(234,179,8,0.15)' : 'rgba(255,255,255,0.05)',
               color: foil ? '#fbbf24' : 'rgba(255,255,255,0.7)',
@@ -129,6 +156,10 @@ const PrintingPicker: React.FC<PrintingPickerProps> = ({ card, printings, foil: 
             ✨ Foil {foil ? 'ON' : 'OFF'}
           </button>
         </div>
+
+        {/* Divider */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', margin: '0 18px 4px' }} />
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.7rem', padding: '4px 18px 4px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>All printings</div>
 
         {/* Printings list */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '0 18px' }}>
@@ -144,38 +175,27 @@ const PrintingPicker: React.FC<PrintingPickerProps> = ({ card, printings, foil: 
                 onClick={() => onSelect(p, foil)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '12px',
-                  width: '100%', padding: '10px 0',
+                  width: '100%', padding: '9px 0',
                   borderBottom: '1px solid rgba(255,255,255,0.05)',
                   background: 'transparent', border: 'none',
                   cursor: 'pointer', textAlign: 'left',
                 }}
               >
-                {/* Thumbnail */}
-                <div style={{ width: '42px', height: '58px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, background: 'rgba(255,255,255,0.05)' }}>
+                <div style={{ width: '40px', height: '55px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, background: 'rgba(255,255,255,0.05)' }}>
                   {img && <img src={img} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                 </div>
-
-                {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>
-                      {p.set_name}
-                    </span>
-                    <span style={{ fontSize: '0.68rem', color: rarityColor(p.rarity), fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      {p.rarity?.charAt(0).toUpperCase()}
-                    </span>
+                    <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>{p.set_name}</span>
+                    <span style={{ fontSize: '0.68rem', color: rarityColor(p.rarity), fontWeight: 700, textTransform: 'uppercase' }}>{p.rarity?.charAt(0).toUpperCase()}</span>
                   </div>
                   <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.72rem', marginTop: '2px' }}>
                     {(p.set ?? '').toUpperCase()} · #{p.collector_number}
                     {p.released_at ? ` · ${new Date(p.released_at).getFullYear()}` : ''}
                   </div>
                 </div>
-
-                {/* Price */}
                 {price != null && (
-                  <div style={{ color: '#86efac', fontSize: '0.82rem', fontWeight: 700, flexShrink: 0 }}>
-                    ${price.toFixed(2)}
-                  </div>
+                  <div style={{ color: '#86efac', fontSize: '0.82rem', fontWeight: 700, flexShrink: 0 }}>${price.toFixed(2)}</div>
                 )}
               </button>
             );
@@ -189,31 +209,39 @@ const PrintingPicker: React.FC<PrintingPickerProps> = ({ card, printings, foil: 
 // ── Main Scanner ───────────────────────────────────────────────────────────────
 
 type ScanPhase =
-  | 'viewfinder'   // live camera, waiting for user to tap capture
-  | 'processing'   // sent to Vision, awaiting result
-  | 'pick-printing'// card found, showing printing picker
-  | 'error';       // something went wrong
+  | 'viewfinder'
+  | 'processing'
+  | 'pick-printing'
+  | 'error';
 
 export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddCards, onClose }) => {
-  const videoRef   = useRef<HTMLVideoElement>(null);
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const streamRef  = useRef<MediaStream | null>(null);
+  const videoRef      = useRef<HTMLVideoElement>(null);
+  const canvasRef     = useRef<HTMLCanvasElement>(null);
+  const motionCanvas  = useRef<HTMLCanvasElement>(null);
+  const streamRef     = useRef<MediaStream | null>(null);
+  const prevFrameRef  = useRef<Uint8ClampedArray | null>(null);
+  const stillCountRef = useRef(0);
+  const cooldownRef   = useRef(false);
+  const phaseRef      = useRef<ScanPhase>('viewfinder');
 
-  const [phase,      setPhase]      = useState<ScanPhase>('viewfinder');
-  const [errorMsg,   setErrorMsg]   = useState<string | null>(null);
-  const [cameraErr,  setCameraErr]  = useState<string | null>(null);
-  const [globalFoil, setGlobalFoil] = useState(false);
-  const [adding,     setAdding]     = useState(false);
-  const [results,    setResults]    = useState<ScanResult[]>([]);
+  const [phase,        setPhase]        = useState<ScanPhase>('viewfinder');
+  const [lockProgress, setLockProgress] = useState(0);  // 0–1 fill for viewfinder border
+  const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
+  const [cameraErr,    setCameraErr]    = useState<string | null>(null);
+  const [globalFoil,   setGlobalFoil]   = useState(false);
+  const [adding,       setAdding]       = useState(false);
+  const [results,      setResults]      = useState<ScanResult[]>([]);
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem(TUTORIAL_KEY));
 
-  // Printing picker state
   const [pickerCard,      setPickerCard]      = useState<ScryfallCard | null>(null);
   const [pickerPrintings, setPickerPrintings] = useState<ScryfallCard[]>([]);
 
+  // Keep phaseRef in sync so the motion interval can read it without stale closure
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
   const totalCount = results.reduce((s, r) => s + r.quantity, 0);
 
-  // ── Start camera ────────────────────────────────────────────────────────────
+  // ── Camera ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     let alive = true;
@@ -223,18 +251,14 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
     }).then(stream => {
       if (!alive) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
-      const vid = videoRef.current;
-      if (vid) { vid.srcObject = stream; }
+      if (videoRef.current) videoRef.current.srcObject = stream;
     }).catch(e => {
       if (alive) setCameraErr(e.message || 'Camera access denied');
     });
-    return () => {
-      alive = false;
-      streamRef.current?.getTracks().forEach(t => t.stop());
-    };
+    return () => { alive = false; streamRef.current?.getTracks().forEach(t => t.stop()); };
   }, []);
 
-  // ── Add a confirmed scan result to the tray ──────────────────────────────────
+  // ── Add scan result ──────────────────────────────────────────────────────────
 
   const addScanResult = useCallback((card: ScryfallCard, printing: ScryfallCard, foil: boolean) => {
     setResults(prev => {
@@ -242,74 +266,55 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
       if (existing) {
         return prev.map(r => r.scanId === existing.scanId ? { ...r, quantity: r.quantity + 1 } : r);
       }
-      return [{
-        scanId:   crypto.randomUUID(),
-        card,
-        printing,
-        quantity: 1,
-        foil,
-      }, ...prev];
+      return [{ scanId: crypto.randomUUID(), card, printing, quantity: 1, foil }, ...prev];
     });
   }, []);
 
-  // ── Capture frame → Vision → Scryfall ───────────────────────────────────────
+  // ── Capture & identify ───────────────────────────────────────────────────────
 
   const handleCapture = useCallback(async () => {
-    if (phase !== 'viewfinder') return;
+    if (phaseRef.current !== 'viewfinder') return;
     const video  = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Draw current video frame to canvas at full resolution
     canvas.width  = video.videoWidth  || 1280;
     canvas.height = video.videoHeight || 720;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Encode as JPEG — strip the "data:image/jpeg;base64," prefix
     const dataUrl     = canvas.toDataURL('image/jpeg', 0.85);
     const imageBase64 = dataUrl.split(',')[1];
 
     setPhase('processing');
+    setLockProgress(0);
     setErrorMsg(null);
+    prevFrameRef.current = null; // reset motion baseline after capture
+    stillCountRef.current = 0;
 
     try {
-      // 1. Send to Vision proxy
       const visionRes = await fetch(PROXY_URL, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ imageBase64 }),
+        body: JSON.stringify({ imageBase64 }),
       });
-
-      if (!visionRes.ok) {
-        throw new Error(`Vision proxy error ${visionRes.status}`);
-      }
+      if (!visionRes.ok) throw new Error(`Vision proxy error ${visionRes.status}`);
 
       const { text, error: visionErr } = await visionRes.json();
-      if (visionErr || !text) {
-        throw new Error(visionErr ?? 'No text detected in image');
-      }
+      if (visionErr || !text) throw new Error(visionErr ?? 'No text detected — try better lighting');
 
-      // 2. Parse card name from OCR output
       const cardName = parseCardName(text);
-      if (!cardName) {
-        throw new Error('Could not find a card name in the image — try better lighting or a flatter angle');
-      }
+      if (!cardName) throw new Error('Could not read the card name — keep the card flat and well-lit');
 
-      // 3. Scryfall fuzzy lookup
       const card = await searchCardFuzzy(cardName);
-      if (!card) {
-        throw new Error(`"${cardName}" not found on Scryfall — make sure the card name is fully visible`);
-      }
+      if (!card) throw new Error(`"${cardName}" not found — make sure the full name is visible`);
 
-      // 4. Fetch all printings
       const prints = card.prints_search_uri
         ? await fetchCardPrints(card.prints_search_uri)
         : [card];
 
       if (prints.length <= 1) {
-        // Only one printing — skip the picker and add directly
         addScanResult(card, prints[0] ?? card, globalFoil);
         setPhase('viewfinder');
       } else {
@@ -318,11 +323,79 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         setPhase('pick-printing');
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Scan failed — please try again');
+      setErrorMsg(err instanceof Error ? err.message : 'Scan failed — try again');
       setPhase('error');
-      setTimeout(() => setPhase('viewfinder'), 3500);
+      cooldownRef.current = true;
+      setTimeout(() => {
+        cooldownRef.current = false;
+        setPhase('viewfinder');
+      }, SCAN_COOLDOWN_MS);
     }
-  }, [phase, globalFoil]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [globalFoil, addScanResult]);
+
+  // ── Motion detection → auto-capture ─────────────────────────────────────────
+
+  const handleCaptureRef = useRef(handleCapture);
+  useEffect(() => { handleCaptureRef.current = handleCapture; }, [handleCapture]);
+
+  useEffect(() => {
+    if (phase !== 'viewfinder') {
+      // Reset motion state when not in viewfinder
+      prevFrameRef.current = null;
+      stillCountRef.current = 0;
+      setLockProgress(0);
+      return;
+    }
+
+    const mc = motionCanvas.current;
+    if (!mc) return;
+    const ctx = mc.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    mc.width  = MOTION_SIZE;
+    mc.height = MOTION_SIZE;
+
+    const intervalId = setInterval(() => {
+      if (phaseRef.current !== 'viewfinder' || cooldownRef.current) return;
+      const video = videoRef.current;
+      if (!video || video.readyState < 2) return;
+
+      ctx.drawImage(video, 0, 0, MOTION_SIZE, MOTION_SIZE);
+      const curr = ctx.getImageData(0, 0, MOTION_SIZE, MOTION_SIZE).data;
+
+      if (prevFrameRef.current) {
+        let diff = 0;
+        for (let i = 0; i < curr.length; i += 4) {
+          diff += Math.abs(curr[i]   - prevFrameRef.current[i]);
+          diff += Math.abs(curr[i+1] - prevFrameRef.current[i+1]);
+          diff += Math.abs(curr[i+2] - prevFrameRef.current[i+2]);
+        }
+        const avg = diff / (MOTION_SIZE * MOTION_SIZE * 3);
+
+        if (avg < STILL_THRESHOLD) {
+          stillCountRef.current = Math.min(stillCountRef.current + 1, STILL_FRAMES);
+        } else {
+          stillCountRef.current = Math.max(stillCountRef.current - 1, 0);
+        }
+
+        const progress = stillCountRef.current / STILL_FRAMES;
+        setLockProgress(progress);
+
+        if (stillCountRef.current >= STILL_FRAMES) {
+          stillCountRef.current = 0;
+          prevFrameRef.current = null;
+          handleCaptureRef.current();
+          return;
+        }
+      }
+
+      prevFrameRef.current = new Uint8ClampedArray(curr);
+    }, 200);
+
+    return () => clearInterval(intervalId);
+  }, [phase]);
+
+  // ── Picker select ────────────────────────────────────────────────────────────
 
   const handlePickerSelect = useCallback((printing: ScryfallCard, foil: boolean) => {
     if (!pickerCard) return;
@@ -332,12 +405,11 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
     setPhase('viewfinder');
   }, [pickerCard, addScanResult]);
 
-  // ── Add all to collection ────────────────────────────────────────────────────
+  // ── Add to collection ────────────────────────────────────────────────────────
 
   const handleAdd = useCallback(async () => {
     if (!results.length || adding) return;
     setAdding(true);
-
     const cards: Omit<CollectionCard, 'id' | 'addedAt'>[] = results.map(r => ({
       groupId:    defaultGroupId,
       scryfallId: r.printing.id,
@@ -354,58 +426,64 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
       rarity:     (r.printing as unknown as { rarity?: string }).rarity ?? 'common',
       setCode:    r.printing.set ?? '',
     }));
-
     onAddCards(cards);
     onClose();
   }, [results, adding, defaultGroupId, onAddCards, onClose]);
 
-  // ── Layout ───────────────────────────────────────────────────────────────────
+  // ── Viewfinder border color based on lock progress ───────────────────────────
 
   const NAV_CLEARANCE = 'max(env(safe-area-inset-bottom, 0px) + 80px, 96px)';
+
+  const borderColor = phase === 'processing'
+    ? 'rgba(139,92,246,0.9)'
+    : phase === 'error'
+      ? 'rgba(248,113,113,0.9)'
+      : lockProgress > 0
+        ? `rgba(${Math.round(255 - lockProgress * 116)}, ${Math.round(255 - lockProgress * 61)}, ${Math.round(255 - lockProgress * 10)}, ${0.5 + lockProgress * 0.5})`
+        : 'rgba(255,255,255,0.5)';
+
+  const borderGlow = phase === 'processing'
+    ? '0 0 24px rgba(139,92,246,0.6), inset 0 0 24px rgba(139,92,246,0.1)'
+    : lockProgress > 0.5
+      ? `0 0 ${Math.round(lockProgress * 28)}px rgba(139,92,246,${lockProgress * 0.7})`
+      : 'none';
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 1000, display: 'flex', flexDirection: 'column', userSelect: 'none' }}>
 
-      {/* Live camera feed */}
       <video
         ref={videoRef}
         autoPlay playsInline muted
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
       />
-
-      {/* Hidden canvas for frame capture */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <canvas ref={motionCanvas} style={{ display: 'none' }} />
 
-      {/* Darkened overlay around viewfinder guide */}
+      {/* Vignette */}
       <div style={{
         position: 'absolute', inset: 0,
         background: 'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.7) 100%)',
         pointerEvents: 'none',
       }} />
 
-      {/* Viewfinder guide */}
+      {/* Viewfinder */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -56%)',
         width: '72%', aspectRatio: '63 / 88',
-        border: phase === 'processing'
-          ? '2px solid rgba(139,92,246,0.8)'
-          : '2px solid rgba(255,255,255,0.5)',
+        border: `2px solid ${borderColor}`,
         borderRadius: '8px',
-        boxShadow: phase === 'processing'
-          ? '0 0 22px rgba(139,92,246,0.5), inset 0 0 22px rgba(139,92,246,0.08)'
-          : 'none',
+        boxShadow: borderGlow,
         transition: 'border-color 0.15s, box-shadow 0.15s',
         pointerEvents: 'none',
       }}>
-        {/* Corner accents */}
         {[
-          { top: -2, left: -2, borderTop: '3px solid #fff', borderLeft: '3px solid #fff' },
-          { top: -2, right: -2, borderTop: '3px solid #fff', borderRight: '3px solid #fff' },
-          { bottom: -2, left: -2, borderBottom: '3px solid #fff', borderLeft: '3px solid #fff' },
-          { bottom: -2, right: -2, borderBottom: '3px solid #fff', borderRight: '3px solid #fff' },
+          { top: -2, left: -2, borderTop: `3px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}` },
+          { top: -2, right: -2, borderTop: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}` },
+          { bottom: -2, left: -2, borderBottom: `3px solid ${borderColor}`, borderLeft: `3px solid ${borderColor}` },
+          { bottom: -2, right: -2, borderBottom: `3px solid ${borderColor}`, borderRight: `3px solid ${borderColor}` },
         ].map((s, i) => (
-          <div key={i} style={{ position: 'absolute', width: '20px', height: '20px', borderRadius: '2px', ...s }} />
+          <div key={i} style={{ position: 'absolute', width: '20px', height: '20px', borderRadius: '2px', transition: 'border-color 0.15s', ...s }} />
         ))}
       </div>
 
@@ -427,13 +505,10 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         <div style={{ textAlign: 'center' }}>
           <div style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>Card Scanner</div>
           {totalCount > 0 && (
-            <div style={{ color: '#86efac', fontSize: '0.75rem', marginTop: '1px' }}>
-              {totalCount} card{totalCount !== 1 ? 's' : ''} scanned
-            </div>
+            <div style={{ color: '#86efac', fontSize: '0.75rem', marginTop: '1px' }}>{totalCount} card{totalCount !== 1 ? 's' : ''} scanned</div>
           )}
         </div>
 
-        {/* Foil toggle */}
         <button
           onClick={() => setGlobalFoil(f => !f)}
           style={{
@@ -448,7 +523,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         </button>
       </div>
 
-      {/* Status label above viewfinder */}
+      {/* Status label */}
       <div style={{
         position: 'absolute',
         top: 'calc(50% - 36vw * 88 / 63 - 38px)',
@@ -457,26 +532,30 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         zIndex: 2, pointerEvents: 'none',
       }}>
         <span style={{
-          color: phase === 'error' ? '#f87171' : 'rgba(255,255,255,0.9)',
+          color: phase === 'error' ? '#f87171' : lockProgress > 0.6 ? '#a78bfa' : 'rgba(255,255,255,0.9)',
           fontSize: '0.8rem', fontWeight: 600,
           textShadow: '0 1px 6px rgba(0,0,0,0.9)',
           background: 'rgba(0,0,0,0.45)', padding: '5px 14px', borderRadius: '20px',
           maxWidth: '86%', textAlign: 'center',
+          transition: 'color 0.2s',
         }}>
-          {phase === 'processing' && 'Identifying card…'}
-          {phase === 'viewfinder' && 'Frame the card, then tap the button'}
-          {phase === 'error' && (errorMsg ?? 'Try again')}
-          {phase === 'pick-printing' && 'Choose your printing below'}
+          {phase === 'processing'   && 'Identifying card…'}
+          {phase === 'error'        && (errorMsg ?? 'Try again')}
+          {phase === 'pick-printing'&& 'Choose your printing below'}
+          {phase === 'viewfinder'   && (
+            lockProgress > 0.6
+              ? 'Hold still…'
+              : 'Point at a card'
+          )}
         </span>
       </div>
 
-      {/* Processing spinner overlay */}
+      {/* Processing overlay */}
       {phase === 'processing' && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 15,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.35)',
-          pointerEvents: 'none',
+          background: 'rgba(0,0,0,0.35)', pointerEvents: 'none',
         }}>
           <div style={{
             background: 'rgba(10,8,20,0.9)', borderRadius: '16px', padding: '22px 28px',
@@ -490,12 +569,10 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         </div>
       )}
 
-      {/* Scanned cards tray */}
+      {/* Scanned tray */}
       {results.length > 0 && (
         <div style={{
-          position: 'absolute',
-          bottom: NAV_CLEARANCE,
-          left: 0, right: 0, zIndex: 2,
+          position: 'absolute', bottom: NAV_CLEARANCE, left: 0, right: 0, zIndex: 2,
           height: '190px',
           background: 'linear-gradient(to top, rgba(0,0,0,0.92) 70%, transparent)',
         }}>
@@ -515,15 +592,11 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
                   onError={e => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <button
-                    onClick={() => setResults(prev => prev.map(x => x.scanId === r.scanId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x))}
-                    style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}
-                  >−</button>
+                  <button onClick={() => setResults(prev => prev.map(x => x.scanId === r.scanId ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x))}
+                    style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>−</button>
                   <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.78rem', minWidth: '14px', textAlign: 'center' }}>{r.quantity}</span>
-                  <button
-                    onClick={() => setResults(prev => prev.map(x => x.scanId === r.scanId ? { ...x, quantity: x.quantity + 1 } : x))}
-                    style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}
-                  >+</button>
+                  <button onClick={() => setResults(prev => prev.map(x => x.scanId === r.scanId ? { ...x, quantity: x.quantity + 1 } : x))}
+                    style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem' }}>+</button>
                 </div>
               </div>
             ))}
@@ -539,7 +612,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '28px',
         transition: 'bottom 0.2s',
       }}>
-        {/* Add to collection button */}
         {results.length > 0 && (
           <button
             onClick={handleAdd}
@@ -555,33 +627,51 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
           </button>
         )}
 
-        {/* Shutter button */}
-        <button
-          onClick={handleCapture}
-          disabled={phase === 'processing' || phase === 'pick-printing'}
-          style={{
-            width: '68px', height: '68px', borderRadius: '50%',
-            background: phase === 'processing' ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.95)',
-            border: '3px solid rgba(255,255,255,0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: phase === 'processing' ? 'default' : 'pointer',
-            boxShadow: '0 0 20px rgba(0,0,0,0.5)',
-            transition: 'transform 0.1s, background 0.15s',
-          }}
-          onPointerDown={e => { if (phase === 'viewfinder') (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.92)'; }}
-          onPointerUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
-        >
-          {phase === 'processing'
-            ? <Loader2 size={26} color="rgba(139,92,246,0.9)" style={{ animation: 'spin 1s linear infinite' }} />
-            : <Camera size={26} color="#1a1a2e" />
-          }
-        </button>
+        {/* Lock-progress ring around shutter */}
+        <div style={{ position: 'relative', width: '68px', height: '68px' }}>
+          {lockProgress > 0 && (
+            <svg
+              width="68" height="68"
+              style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)', pointerEvents: 'none' }}
+            >
+              <circle cx="34" cy="34" r="31" fill="none" stroke="rgba(139,92,246,0.25)" strokeWidth="3" />
+              <circle
+                cx="34" cy="34" r="31" fill="none"
+                stroke="rgba(139,92,246,0.9)" strokeWidth="3"
+                strokeDasharray={`${2 * Math.PI * 31}`}
+                strokeDashoffset={`${2 * Math.PI * 31 * (1 - lockProgress)}`}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dashoffset 0.18s ease' }}
+              />
+            </svg>
+          )}
+          <button
+            onClick={handleCapture}
+            disabled={phase === 'processing' || phase === 'pick-printing'}
+            style={{
+              position: 'absolute', inset: '4px',
+              borderRadius: '50%',
+              background: phase === 'processing' ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.95)',
+              border: '3px solid rgba(255,255,255,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: phase === 'processing' ? 'default' : 'pointer',
+              boxShadow: '0 0 20px rgba(0,0,0,0.5)',
+              transition: 'transform 0.1s, background 0.15s',
+            }}
+            onPointerDown={e => { if (phase === 'viewfinder') (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.92)'; }}
+            onPointerUp={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
+          >
+            {phase === 'processing'
+              ? <Loader2 size={22} color="rgba(139,92,246,0.9)" style={{ animation: 'spin 1s linear infinite' }} />
+              : <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: lockProgress > 0.7 ? 'rgba(139,92,246,0.8)' : '#1a1a2e', transition: 'background 0.2s' }} />
+            }
+          </button>
+        </div>
 
-        {/* Expand/collapse placeholder for symmetry when no "add" button */}
         {results.length === 0 && <div style={{ width: '80px' }} />}
       </div>
 
-      {/* Printing picker sheet */}
+      {/* Printing picker */}
       {phase === 'pick-printing' && pickerCard && (
         <PrintingPicker
           card={pickerCard}
@@ -592,7 +682,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         />
       )}
 
-      {/* Camera permission error */}
+      {/* Camera error */}
       {cameraErr && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '24px', zIndex: 10 }}>
           <div style={{ color: '#f87171', fontWeight: 700, fontSize: '1rem' }}>Camera unavailable</div>
@@ -602,35 +692,28 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         </div>
       )}
 
-      {/* First-time tutorial */}
+      {/* Tutorial */}
       {showTutorial && (() => {
         const dismiss = () => { localStorage.setItem(TUTORIAL_KEY, '1'); setShowTutorial(false); };
         return (
           <div onClick={dismiss} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
             <div onClick={e => e.stopPropagation()} style={{ background: '#12121e', borderRadius: '24px 24px 0 0', padding: '20px 24px', paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 28px)', width: '100%', position: 'relative' }}>
-              <button
-                onClick={dismiss}
-                style={{ position: 'absolute', top: '16px', right: '16px', width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
+              <button onClick={dismiss} style={{ position: 'absolute', top: '16px', right: '16px', width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={14} />
               </button>
-
               <div style={{ textAlign: 'center', marginBottom: '22px', paddingRight: '32px' }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginBottom: '5px' }}>How to Scan Cards</div>
-                <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem' }}>Powered by Google Vision — works on any card, any set</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginBottom: '5px' }}>Automatic Card Scanner</div>
+                <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.82rem' }}>Just hold the card steady — it scans itself</div>
               </div>
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
                 {[
-                  { icon: '📷', title: 'Point camera at the card', sub: 'Keep it flat and well-lit — the whole name needs to be visible' },
-                  { icon: '⚪', title: 'Tap the shutter button', sub: 'One tap captures and identifies the card in ~1 second' },
-                  { icon: '🃏', title: 'Pick your printing', sub: 'If the card has multiple versions, choose the one you own' },
-                  { icon: '✅', title: 'Tap "Add to Collection"', sub: 'Scans queue up — add as many as you want before confirming' },
+                  { icon: '📷', title: 'Point camera at the card', sub: 'Fill the frame with the card — name must be visible' },
+                  { icon: '⬜', title: 'Hold it still', sub: 'The border glows purple as it locks on — takes about 0.8s' },
+                  { icon: '🃏', title: 'Confirm the printing', sub: 'Tap "Use latest" or pick a specific set if needed' },
+                  { icon: '✅', title: 'Tap "Add to Collection"', sub: 'Scan as many cards as you want before confirming' },
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>
-                      {item.icon}
-                    </div>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>{item.icon}</div>
                     <div>
                       <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.88rem' }}>{item.title}</div>
                       <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', marginTop: '2px' }}>{item.sub}</div>
@@ -638,11 +721,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
                   </div>
                 ))}
               </div>
-
-              <button
-                onClick={dismiss}
-                style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#7c3aed', border: 'none', color: '#fff', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer' }}
-              >
+              <button onClick={dismiss} style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#7c3aed', border: 'none', color: '#fff', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer' }}>
                 Got it — start scanning
               </button>
             </div>
@@ -650,7 +729,6 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         );
       })()}
 
-      {/* Chevron hint to scroll tray */}
       {results.length > 3 && (
         <div style={{ position: 'absolute', bottom: `calc(${NAV_CLEARANCE} + 194px)`, right: '10px', zIndex: 4, pointerEvents: 'none' }}>
           <ChevronDown size={18} color="rgba(255,255,255,0.4)" />
