@@ -45,4 +45,5 @@ export const STORAGE_KEYS = {
   ROTATE_ENABLED:      "nexus_judge_rotate_enabled",      // "true" | "false", default true
   PROFILE_AVATAR:      "nexus_profile_avatar",            // art_crop URL chosen as profile picture
   PROFILE_NAME:        "nexus_profile_name",              // display name (profile-specific override)
+  FREE_SCANS_USED:     "nexus_free_scans_used",           // number of scans used on free tier
 } as const;

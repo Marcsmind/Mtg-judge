@@ -4,6 +4,9 @@ import { Capacitor } from '@capacitor/core';
 import { searchCardFuzzy, fetchCardPrints } from '../services/scryfall';
 import type { ScryfallCard } from '../services/scryfall';
 import type { CollectionCard } from '../types/collection';
+import { STORAGE_KEYS } from '../constants/storageKeys';
+import { ScannerPaywall } from '../components/ScannerPaywall';
+import type { SubscriptionTier } from '../types/subscription';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,7 +20,9 @@ interface ScanResult {
 
 interface CardScannerProps {
   defaultGroupId: string;
+  isPro: boolean;
   onAddCards: (cards: Omit<CollectionCard, 'id' | 'addedAt'>[]) => void;
+  onTierChange: (tier: SubscriptionTier) => void;
   onClose: () => void;
 }
 
@@ -36,6 +41,18 @@ const MOTION_SIZE       = 80;   // px — tiny canvas for fast pixel diff
 const STILL_THRESHOLD   = 14;   // avg diff per RGB channel (0–255)
 const STILL_FRAMES      = 4;    // consecutive still frames needed (~800ms at 200ms interval)
 const SCAN_COOLDOWN_MS  = 2200; // ms to wait before allowing next auto-scan after error
+
+// Free tier scan limit
+const FREE_SCAN_LIMIT = 5;
+
+function getScansUsed(): number {
+  return parseInt(localStorage.getItem(STORAGE_KEYS.FREE_SCANS_USED) ?? '0', 10);
+}
+function incrementScansUsed(): number {
+  const next = getScansUsed() + 1;
+  localStorage.setItem(STORAGE_KEYS.FREE_SCANS_USED, String(next));
+  return next;
+}
 
 function cardImage(card: ScryfallCard, size: 'small' | 'normal' = 'small'): string {
   return (
@@ -214,7 +231,7 @@ type ScanPhase =
   | 'pick-printing'
   | 'error';
 
-export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddCards, onClose }) => {
+export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, isPro, onAddCards, onTierChange, onClose }) => {
   const videoRef      = useRef<HTMLVideoElement>(null);
   const canvasRef     = useRef<HTMLCanvasElement>(null);
   const motionCanvas  = useRef<HTMLCanvasElement>(null);
@@ -225,13 +242,16 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
   const phaseRef      = useRef<ScanPhase>('viewfinder');
 
   const [phase,        setPhase]        = useState<ScanPhase>('viewfinder');
-  const [lockProgress, setLockProgress] = useState(0);  // 0–1 fill for viewfinder border
+  const [lockProgress, setLockProgress] = useState(0);
   const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
   const [cameraErr,    setCameraErr]    = useState<string | null>(null);
   const [globalFoil,   setGlobalFoil]   = useState(false);
   const [adding,       setAdding]       = useState(false);
   const [results,      setResults]      = useState<ScanResult[]>([]);
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem(TUTORIAL_KEY));
+  const [showPaywall,  setShowPaywall]  = useState(false);
+  const [scansUsed,    setScansUsed]    = useState(() => getScansUsed());
+  const scansLeft = isPro ? Infinity : Math.max(0, FREE_SCAN_LIMIT - scansUsed);
 
   const [pickerCard,      setPickerCard]      = useState<ScryfallCard | null>(null);
   const [pickerPrintings, setPickerPrintings] = useState<ScryfallCard[]>([]);
@@ -268,7 +288,16 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
       }
       return [{ scanId: crypto.randomUUID(), card, printing, quantity: 1, foil }, ...prev];
     });
-  }, []);
+
+    if (!isPro) {
+      const used = incrementScansUsed();
+      setScansUsed(used);
+      if (used >= FREE_SCAN_LIMIT) {
+        // Let the card appear in the tray for a beat, then show paywall
+        setTimeout(() => setShowPaywall(true), 900);
+      }
+    }
+  }, [isPro]);
 
   // ── Capture & identify ───────────────────────────────────────────────────────
 
@@ -507,6 +536,14 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
           {totalCount > 0 && (
             <div style={{ color: '#86efac', fontSize: '0.75rem', marginTop: '1px' }}>{totalCount} card{totalCount !== 1 ? 's' : ''} scanned</div>
           )}
+          {!isPro && scansLeft < FREE_SCAN_LIMIT && (
+            <div style={{
+              fontSize: '0.7rem', marginTop: '2px', fontWeight: 600,
+              color: scansLeft <= 1 ? '#f87171' : scansLeft <= 2 ? '#fbbf24' : 'rgba(255,255,255,0.55)',
+            }}>
+              {scansLeft === 0 ? 'No free scans left' : `${scansLeft} free scan${scansLeft !== 1 ? 's' : ''} left`}
+            </div>
+          )}
         </div>
 
         <button
@@ -733,6 +770,16 @@ export const CardScanner: React.FC<CardScannerProps> = ({ defaultGroupId, onAddC
         <div style={{ position: 'absolute', bottom: `calc(${NAV_CLEARANCE} + 194px)`, right: '10px', zIndex: 4, pointerEvents: 'none' }}>
           <ChevronDown size={18} color="rgba(255,255,255,0.4)" />
         </div>
+      )}
+
+      {/* Free scan limit paywall — appears after 5th successful scan */}
+      {showPaywall && (
+        <ScannerPaywall
+          variant="limit-reached"
+          onClose={() => setShowPaywall(false)}
+          onTierChange={onTierChange}
+          onUnlocked={() => setShowPaywall(false)}
+        />
       )}
     </div>
   );

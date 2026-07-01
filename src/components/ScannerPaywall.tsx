@@ -13,8 +13,9 @@ import type { SubscriptionTier } from "../types/subscription";
 
 interface ScannerPaywallProps {
   onClose: () => void;
-  onUnlocked: () => void;       // called after successful purchase → open scanner
+  onUnlocked: () => void;
   onTierChange: (t: SubscriptionTier) => void;
+  variant?: 'gate' | 'limit-reached';  // 'gate' = entry, 'limit-reached' = after 5th scan
 }
 
 const PERKS = [
@@ -24,7 +25,7 @@ const PERKS = [
   "Foil detection & printing picker included",
 ];
 
-export const ScannerPaywall: React.FC<ScannerPaywallProps> = ({ onClose, onUnlocked, onTierChange }) => {
+export const ScannerPaywall: React.FC<ScannerPaywallProps> = ({ onClose, onUnlocked, onTierChange, variant = 'gate' }) => {
   const [offering,  setOffering]  = useState<RCOffering | null>(null);
   const [selected,  setSelected]  = useState<"monthly" | "annual" | "lifetime">("annual");
   const [loading,   setLoading]   = useState(false);
@@ -110,10 +111,10 @@ export const ScannerPaywall: React.FC<ScannerPaywallProps> = ({ onClose, onUnloc
               </div>
               <div>
                 <div style={{ color: "#fff", fontWeight: 800, fontSize: "1.05rem", lineHeight: 1.2 }}>
-                  Card Scanner
+                  {variant === 'limit-reached' ? "Free scans used up" : "Card Scanner"}
                 </div>
                 <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.78rem", marginTop: "2px" }}>
-                  Pro feature
+                  {variant === 'limit-reached' ? "Upgrade to keep scanning" : "Pro feature"}
                 </div>
               </div>
             </div>

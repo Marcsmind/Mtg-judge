@@ -628,7 +628,9 @@ export const Collection: React.FC<CollectionProps> = ({ onTierChange }) => {
       {showScanner && (
         <CardScanner
           defaultGroupId={activeGroupId ?? groups[0]?.id ?? ""}
+          isPro={canScan}
           onAddCards={scannedCards => scannedCards.forEach(c => addCard(c))}
+          onTierChange={t => { onTierChange?.(t); }}
           onClose={() => setShowScanner(false)}
         />
       )}
