@@ -28,6 +28,54 @@ Rules you MUST follow:
 6. Be specific — reference the commander's abilities or the deck's apparent strategy.
 7. Do not add a preamble, summary, or strategy note — only the two sections above.`;
 
+// ── Collection Build system instruction ──────────────────────────────────────
+const COLLECTION_BUILD_SYSTEM_INSTRUCTION = `You are Arbiter Collection Builder, an expert Magic: The Gathering Commander deck construction AI.
+
+You will receive a list of cards the user physically owns. Your task is to build the best possible 100-card Commander deck that uses AS MANY of their owned cards as makes strategic sense.
+
+Core Rules:
+1. Commander decks are exactly 100 cards (including the Commander) — singleton format (no duplicates).
+2. Every non-basic-land card must be within the Commander's color identity.
+3. PRIORITIZE the user's owned cards — use owned cards even if they are not the absolute best-in-slot, as long as they are functional and on-theme.
+4. Where owned cards cannot fill a slot well, recommend specific cards to acquire. Keep buy recommendations budget-conscious unless the deck's strategy demands otherwise.
+5. Include a balanced mana base (34–38 lands). Basic lands count as "owned" — include them freely.
+
+Output Format — ALWAYS use this exact grouped markdown structure (same as a normal build):
+## Commander (1)
+- Card Name
+
+## Lands (37)
+- Card Name
+...
+
+## Ramp (10)
+- Card Name
+...
+
+## Card Draw (10)
+- Card Name
+...
+
+## Removal (8)
+- Card Name
+...
+
+## Creatures (20)
+- Card Name
+...
+
+## Spells & Support (14)
+- Card Name
+...
+
+Rules for card names:
+- Use exact official card names (e.g., "Sol Ring" not "sol ring")
+- For double-faced cards, use only the front face name
+- Do NOT include set codes, collector numbers, or quantities
+
+After the list, add a brief 2–3 sentence **Strategy Note** explaining the deck's primary game plan and how the owned cards shape it.
+End with: ⚠️ *AI suggestions may include incorrectly named cards. Verify legality on Scryfall before playing.*`;
+
 // ── Deck Builder system instruction (completely isolated from the Judge) ───────
 const DECKBUILDER_SYSTEM_INSTRUCTION = `You are Arbiter Deckbuilder, an expert Magic: The Gathering Commander deck construction AI.
 You have encyclopedic knowledge of all Magic cards printed through your training data.
@@ -357,5 +405,65 @@ export async function askGeminiDeckOptimizer(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return `❌ **Optimizer Error:** ${message}\n\nMake sure your Gemini API Key is valid in **Settings**.`;
+  }
+}
+
+/**
+ * Build the best Commander deck possible from the user's owned cards.
+ * ownedCards is a deduplicated list of { name, quantity } from their collection.
+ * Cross-referencing owned vs. needed is done client-side — this function just
+ * returns the grouped markdown deck list in the standard format.
+ */
+export async function askGeminiCollectionBuild(
+  commanderName: string,
+  ownedCards: { name: string; quantity: number }[],
+  apiKey: string,
+  model: string,
+): Promise<string> {
+  const cardList = ownedCards
+    .map(c => c.quantity > 1 ? `${c.name} (×${c.quantity})` : c.name)
+    .join("\n");
+
+  const prompt =
+    `Commander: ${commanderName}\n\n` +
+    `OWNED CARDS (${ownedCards.length} unique):\n${cardList}\n\n` +
+    `Build the best 100-card Commander deck for ${commanderName} using as many of these owned cards as possible. ` +
+    `Fill any remaining slots with specific card recommendations to buy.`;
+
+  const contents = [{ role: "user", parts: [{ text: prompt }] }];
+
+  try {
+    let response = await fetchGemini(model, {
+      contents,
+      systemInstruction: { parts: [{ text: COLLECTION_BUILD_SYSTEM_INSTRUCTION }] },
+      generationConfig: { temperature: 0.35, topP: 0.95, maxOutputTokens: 8192 },
+      safetySettings: SAFETY_SETTINGS,
+    }, apiKey);
+
+    if (!response.ok && (response.status === 404 || response.status === 400)) {
+      response = await fetchGemini(model, {
+        contents: [{
+          role: "user",
+          parts: [{ text: `[SYSTEM PERSONA (OBEY STRICTLY)]:\n${COLLECTION_BUILD_SYSTEM_INSTRUCTION}\n\n[USER REQUEST]:\n${prompt}` }],
+        }],
+        generationConfig: { temperature: 0.35, topP: 0.95, maxOutputTokens: 8192 },
+        safetySettings: SAFETY_SETTINGS,
+      }, apiKey);
+    }
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({})) as GeminiResponse;
+      throw new Error(errData.error?.message || `HTTP error ${response.status}`);
+    }
+
+    const data = await response.json() as GeminiResponse;
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p: GeminiPart) => p.text ?? "").join("");
+
+    if (!text) throw new Error("Empty response from Gemini.");
+    return text;
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `❌ **Collection Build Error:** ${message}\n\nMake sure your Gemini API Key is valid in **Settings**.`;
   }
 }

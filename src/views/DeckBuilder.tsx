@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   Wand2, Upload, Search, Copy, Check, Loader, AlertTriangle, X,
-  BookMarked, Trash2, Pencil, PlusCircle, ListOrdered, Sparkles, ClipboardPaste,
+  BookMarked, Trash2, Pencil, PlusCircle, ListOrdered, Sparkles, ClipboardPaste, Package,
 } from "lucide-react";
 import { loadDecks, addDeck, updateDeck, deleteDeck } from "../services/decks";
 import type { SavedDeck, DeckCard } from "../types/deck";
@@ -17,7 +17,9 @@ import {
   getCardImage,
 } from "../services/scryfall";
 import type { ScryfallCard } from "../services/scryfall";
-import { askGeminiDeckBuilder } from "../services/gemini";
+import { askGeminiDeckBuilder, askGeminiCollectionBuild } from "../services/gemini";
+import type { CollectionCard } from "../types/collection";
+import { STORAGE_KEYS } from "../constants/storageKeys";
 import { buildManaCurve, buildColorSpread, calcDeckCost, toMoxfieldFormat, COLOR_META } from "../utils/deckUtils";
 import { useToast } from "../components/Toast";
 import { track } from "../services/analytics";
@@ -28,7 +30,7 @@ interface DeckBuilderProps {
   openCodexWith: (name: string) => void;
 }
 
-type DeckMode = "generate" | "import" | "decks";
+type DeckMode = "generate" | "collection" | "import" | "decks";
 type BudgetTier = "any" | "budget" | "competitive";
 
 const BUDGET_LABELS: Record<BudgetTier, string> = {
@@ -109,6 +111,27 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   const [urlFetching, setUrlFetching] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
 
+  // ── Collection Build state ──
+  const [collCommander, setCollCommander] = useState("");
+  const [collCmdSugs, setCollCmdSugs] = useState<string[]>([]);
+  const [collGenerating, setCollGenerating] = useState(false);
+  const [collResult, setCollResult] = useState<string | null>(null);
+  const [collCopied, setCollCopied] = useState(false);
+  const collCmdAbortRef = useRef<AbortController | null>(null);
+
+  // Read collection cards from localStorage (snapshot on mount — enough for deck building)
+  const collectionCards = useMemo((): CollectionCard[] => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.COLLECTION_CARDS) ?? '[]'); }
+    catch { return []; }
+  }, []);
+
+  // Deduplicated owned card names (lowercased) for fast cross-reference
+  const ownedNamesSet = useMemo(() => {
+    const s = new Set<string>();
+    collectionCards.forEach(c => s.add(c.name.toLowerCase()));
+    return s;
+  }, [collectionCards]);
+
   // ── My Decks state ──
   const [savedDecks, setSavedDecks] = useState<SavedDeck[]>(() => loadDecks());
   const [deckThumbs, setDeckThumbs] = useState<Record<string, string>>({});
@@ -168,6 +191,41 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
     }, 300);
     return () => clearTimeout(delay);
   }, [newDeckPartner]);
+
+  // Collection Build autocomplete
+  useEffect(() => {
+    const delay = setTimeout(async () => {
+      if (collCommander.trim().length < 2) { setCollCmdSugs([]); return; }
+      collCmdAbortRef.current?.abort();
+      collCmdAbortRef.current = new AbortController();
+      const list = await autocompleteCard(collCommander, collCmdAbortRef.current.signal);
+      setCollCmdSugs(list.slice(0, 8));
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [collCommander]);
+
+  const handleCollectionBuild = useCallback(async () => {
+    if (!collCommander.trim() || collectionCards.length === 0) return;
+    setCollGenerating(true);
+    setCollResult(null);
+    setCollCmdSugs([]);
+    const owned = Array.from(
+      new Map(collectionCards.map(c => [c.name, c.quantity])).entries()
+    ).map(([name, qty]) => ({ name, quantity: qty }));
+    const result = await askGeminiCollectionBuild(collCommander.trim(), owned, apiKey, geminiModel);
+    setCollResult(result);
+    setCollGenerating(false);
+    if (result && !result.startsWith('❌')) {
+      track("deck_generated", { commander: collCommander.trim(), source: "collection" });
+    }
+  }, [collCommander, collectionCards, apiKey, geminiModel]);
+
+  const handleCollectionCopy = () => {
+    if (!collResult) return;
+    navigator.clipboard.writeText(extractCardNames(collResult).join('\n')).catch(() => undefined);
+    setCollCopied(true);
+    setTimeout(() => setCollCopied(false), 2000);
+  };
 
   const resetDeckForm = () => {
     setNewDeckName(""); setNewDeckCmd(""); setNewDeckPartner(""); setNewDeckNotes("");
@@ -401,34 +459,200 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
 
       {/* ── Mode Tab Bar ── */}
       <div style={{
-        display: "flex", gap: "4px",
+        display: "flex", gap: "3px",
         background: "rgba(255,255,255,0.03)",
         border: "1px solid var(--border-color)",
         borderRadius: "10px", padding: "3px", flexShrink: 0,
-        maxWidth: "480px",
       }}>
-        {(["generate", "import", "decks"] as DeckMode[]).map(m => (
+        {([
+          ["generate",   <Wand2 size={12} />,     "Generate"],
+          ["collection", <Package size={12} />,   "Collection"],
+          ["import",     <Upload size={12} />,    "Import"],
+          ["decks",      <BookMarked size={12} />, "My Decks"],
+        ] as [DeckMode, React.ReactNode, string][]).map(([m, icon, label]) => (
           <button
             key={m}
             onClick={() => setMode(m)}
             style={{
-              flex: 1, padding: "8px 0", borderRadius: "7px", border: "none",
+              flex: 1, padding: "7px 2px", borderRadius: "7px", border: "none",
               background: mode === m ? "var(--accent-purple)" : "transparent",
               color: mode === m ? "#fff" : "var(--text-secondary)",
               fontWeight: mode === m ? 700 : 500,
-              fontSize: "0.85rem", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-              transition: "all 0.15s ease",
+              fontSize: "0.72rem", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "4px",
+              transition: "all 0.15s ease", whiteSpace: "nowrap",
             }}
           >
-            {m === "generate" ? <Wand2 size={13} /> : m === "import" ? <Upload size={13} /> : <BookMarked size={13} />}
-            {m === "generate" ? "AI Generate" : m === "import" ? "Import List" : "My Decks"}
+            {icon}{label}
           </button>
         ))}
       </div>
 
       {/* ── Scrollable content area ── */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", background: "var(--bg-card)" }}>
+
+        {/* ════════════════════════════════════════
+            COLLECTION BUILD MODE
+        ════════════════════════════════════════ */}
+        {mode === "collection" && (
+          <>
+            {collectionCards.length === 0 ? (
+              <div className="glass-panel" style={{ padding: "32px 20px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                <Package size={36} color="var(--text-muted)" />
+                <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: 0 }}>
+                  Your collection is empty.
+                </p>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", margin: 0, maxWidth: "280px" }}>
+                  Add cards in the Collection tab first, then come back to build a deck from what you own.
+                </p>
+              </div>
+            ) : (
+              <div className="glass-panel" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Collection stats chip */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: "20px", padding: "4px 12px" }}>
+                    <Package size={12} color="var(--accent-purple)" />
+                    <span style={{ fontSize: "0.78rem", color: "var(--accent-purple)", fontWeight: 700 }}>
+                      {collectionCards.reduce((s, c) => s + c.quantity, 0)} cards in your collection
+                    </span>
+                  </div>
+                </div>
+
+                {/* Commander input */}
+                <div style={{ position: "relative" }}>
+                  <label style={{ display: "block", fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 600, marginBottom: "6px", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                    Commander *
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type="text"
+                      className="glass-input"
+                      placeholder="e.g. Atraxa, Praetors' Voice"
+                      value={collCommander}
+                      onChange={e => setCollCommander(e.target.value)}
+                      style={{ width: "100%", paddingRight: "36px" }}
+                    />
+                    <Search size={14} color="var(--text-muted)" style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)" }} />
+                  </div>
+                  {collCmdSugs.length > 0 && (
+                    <div style={{
+                      position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+                      background: "var(--bg-dark)", border: "1px solid var(--border-color)",
+                      borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                      zIndex: 50, maxHeight: "200px", overflowY: "auto",
+                    }}>
+                      {collCmdSugs.map((name, i) => (
+                        <div
+                          key={i}
+                          onClick={() => { setCollCommander(name); setCollCmdSugs([]); }}
+                          style={{ padding: "9px 14px", cursor: "pointer", fontSize: "0.88rem", color: "var(--text-secondary)", borderBottom: i < collCmdSugs.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.14)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+                        >
+                          {name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleCollectionBuild}
+                  disabled={!collCommander.trim() || collGenerating || !canGenerate}
+                  className="glass-button"
+                  style={{
+                    background: "linear-gradient(135deg, color-mix(in srgb, var(--accent-purple) 25%, transparent) 0%, rgba(6,182,212,0.15) 100%)",
+                    border: "1px solid color-mix(in srgb, var(--accent-purple) 40%, transparent)",
+                    padding: "10px 20px", fontSize: "0.9rem", fontWeight: 700,
+                    color: !collCommander.trim() ? "var(--text-muted)" : "var(--text-primary)",
+                    cursor: !collCommander.trim() || collGenerating || !canGenerate ? "not-allowed" : "pointer",
+                    justifyContent: "center", gap: "8px",
+                    opacity: !collCommander.trim() || !canGenerate ? 0.5 : 1,
+                  }}
+                >
+                  {collGenerating ? (
+                    <><Loader size={15} style={{ animation: "spinner 0.8s linear infinite" }} /> Analyzing your collection…</>
+                  ) : (
+                    <><Package size={15} /> Build from My Collection</>
+                  )}
+                </button>
+                {!canGenerate && <UpgradePrompt message="AI deck building requires Pro." compact />}
+              </div>
+            )}
+
+            {/* Result */}
+            {collResult && (() => {
+              const deckNames = extractCardNames(collResult);
+              const ownedCount  = deckNames.filter(n => ownedNamesSet.has(n.toLowerCase())).length;
+              const neededCount = deckNames.length - ownedCount;
+              return (
+                <div className="glass-panel" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {/* Header row */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px" }}>
+                    <div>
+                      <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--accent-purple)", margin: "0 0 4px" }}>
+                        Deck from Your Collection
+                      </h3>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.78rem", color: "#22c55e", fontWeight: 700 }}>✓ {ownedCount} owned</span>
+                        {neededCount > 0 && <span style={{ fontSize: "0.78rem", color: "#f59e0b", fontWeight: 700 }}>+ {neededCount} to buy</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button onClick={handleCollectionCopy} className="glass-button" style={{ padding: "6px 12px", fontSize: "0.78rem" }}>
+                        {collCopied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy</>}
+                      </button>
+                      <button onClick={() => handleCopyMoxfield(extractCardNames(collResult))} className="glass-button" style={{ padding: "6px 12px", fontSize: "0.78rem", background: "rgba(16,185,129,0.08)", borderColor: "rgba(16,185,129,0.25)", color: "var(--accent-emerald)" }}>
+                        <Copy size={12} /> Moxfield
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Legend */}
+                  <div style={{ display: "flex", gap: "16px", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                    <span><span style={{ color: "#22c55e", fontWeight: 700 }}>✓</span> You own this</span>
+                    <span><span style={{ color: "#f59e0b", fontWeight: 700 }}>+</span> Buy to complete</span>
+                  </div>
+
+                  <div className="chat-markdown" style={{ fontSize: "0.88rem" }}>
+                    <ReactMarkdown
+                      components={{
+                        li: ({ children }) => {
+                          // Extract plain card name from children
+                          let cardName = "";
+                          React.Children.forEach(children, child => {
+                            if (typeof child === "string") cardName += child;
+                            else if (React.isValidElement(child) && (child.props as { children?: string }).children) {
+                              const c = (child.props as { children?: unknown }).children;
+                              if (typeof c === "string") cardName += c;
+                            }
+                          });
+                          cardName = cardName.trim();
+                          const isOwned = cardName ? ownedNamesSet.has(cardName.toLowerCase()) : false;
+                          return (
+                            <li style={{ listStyle: "none", display: "flex", alignItems: "baseline", gap: "6px", padding: "1px 0" }}>
+                              <span style={{ color: isOwned ? "#22c55e" : "#f59e0b", fontWeight: 700, fontSize: "0.75rem", flexShrink: 0, width: "12px" }}>
+                                {isOwned ? "✓" : "+"}
+                              </span>
+                              <strong
+                                style={{ cursor: "pointer", color: "var(--accent-cyan)", fontWeight: 600 }}
+                                onClick={() => cardName && openCodexWith(cardName)}
+                              >
+                                {cardName}
+                              </strong>
+                            </li>
+                          );
+                        },
+                      }}
+                    >
+                      {collResult}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              );
+            })()}
+          </>
+        )}
 
         {/* ════════════════════════════════════════
             GENERATE MODE
